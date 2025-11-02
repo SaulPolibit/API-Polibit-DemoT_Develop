@@ -1,0 +1,4 @@
+.env
+mongo-data
+node_modules
+uploads/profiles.

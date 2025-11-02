@@ -1,0 +1,723 @@
+# API Polibit Demo - Node.js API
+
+Node.js API implementing FlutterFlow API calls for blockchain, payment processing, document management, and KYC services.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Available Scripts](#available-scripts)
+- [Environment Variables](#environment-variables)
+- [API Endpoints](#api-endpoints)
+  - [General Endpoints](#general-endpoints)
+  - [Portal HQ Endpoints](#portal-hq-endpoints)
+  - [Bridge Endpoints](#bridge-endpoints)
+  - [DocuSeal Endpoints](#docuseal-endpoints)
+  - [Vudy Endpoints](#vudy-endpoints)
+  - [Custom Endpoints](#custom-endpoints)
+
+## Installation
+
+```bash
+npm install
+```
+
+## Available Scripts
+
+### `npm start`
+Runs the server in production mode using Node.js.
+```bash
+npm start
+```
+Server starts at `http://localhost:3000` (or configured PORT)
+
+### `npm run dev`
+Runs the server in development mode with hot-reload using nodemon.
+```bash
+npm run dev
+```
+The server will automatically restart when you make changes to the code.
+
+### `npm test`
+Runs the test suite (currently not implemented).
+```bash
+npm test
+```
+
+## Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# CORS Configuration
+CORS_WHITELIST=*
+
+# API Keys
+PORTAL_API_KEY=your_portal_api_key
+VUDY_API_KEY=your_vudy_api_key
+DOCUSEAL_API_TOKEN=your_docuseal_token
+BRIDGE_API_KEY=your_bridge_api_key
+
+# Authentication
+JWT_SECRET=your_jwt_secret
+API_KEY=your_api_key
+
+# Database
+MONGODB_URI=your_mongodb_connection_string
+```
+
+## API Endpoints
+
+### General Endpoints
+
+#### Health Check
+```http
+GET /health
+```
+Returns server health status and uptime information.
+
+#### Root
+```http
+GET /
+```
+Returns API information and available service endpoints.
+
+#### API Documentation
+```http
+GET /api
+```
+Returns detailed API documentation with all available services.
+
+---
+
+## Portal HQ Endpoints
+
+Base URL: `/api/portal`
+
+Client management, wallet creation, and blockchain transaction endpoints.
+
+### Client Management
+
+#### Create New Client
+```http
+POST /api/portal/clients
+Headers: Authorization: Bearer {token}
+Body: {
+  "portalAPIKey": "optional_key"
+}
+```
+
+#### Get Single Client
+```http
+GET /api/portal/clients/:clientId
+Headers: Authorization: Bearer {token}
+Query: ?portalAPIKey=optional_key
+```
+
+### Assets & Balances
+
+#### Get Asset Balance by Chain
+```http
+GET /api/portal/clients/me/assets/:chainId
+Headers: Authorization: Bearer {token}
+Query: ?clientApiKey=required&includeNfts=false
+```
+Chain ID format: `eip155:137` (e.g., for Polygon)
+
+#### Get Assets Across All Chains
+```http
+GET /api/portal/clients/me/assets
+Headers: Authorization: Bearer {token}
+Query: ?clientApiKey=required
+```
+
+### Transactions
+
+#### Get Transaction History
+```http
+GET /api/portal/clients/me/transactions
+Headers: Authorization: Bearer {token}
+Query: ?clientApiKey=required&chainId=required&limit=50&offset=0
+```
+
+#### Get Recent Transactions
+```http
+GET /api/portal/clients/me/transactions/recent
+Headers: Authorization: Bearer {token}
+Query: ?clientApiKey=required
+```
+
+### Wallet Management
+
+#### Confirm Wallet Creation
+```http
+PATCH /api/portal/clients/me/signing-share-pairs
+Headers: Authorization: Bearer {token}
+Body: {
+  "clientApiKey": "required",
+  "secp256k1Id": "required",
+  "ed25519Id": "required"
+}
+```
+
+#### Generate Wallet
+```http
+POST /api/portal/wallets/generate
+Headers: Authorization: Bearer {token}
+Body: {
+  "clientApiKey": "required"
+}
+```
+
+#### Send Tokens
+```http
+POST /api/portal/wallets/send
+Headers: Authorization: Bearer {token}
+Body: {
+  "clientApiKey": "required",
+  "share": "required",
+  "chain": "POLYGON",
+  "to": "recipient_address",
+  "token": "token_address",
+  "amount": "amount",
+  "rpcUrl": "required"
+}
+```
+
+#### Estimate Gas
+```http
+POST /api/portal/wallets/send/estimate
+Headers: Authorization: Bearer {token}
+Body: {
+  "chain": "POLYGON",
+  "to": "address",
+  "token": "token_address",
+  "amount": "amount"
+}
+```
+
+### Supported Chains
+
+#### Get Supported Chains
+```http
+GET /api/portal/chains
+```
+
+#### Health Check
+```http
+GET /api/portal/health
+```
+
+---
+
+## Bridge Endpoints
+
+Base URL: `/api/bridge`
+
+Customer, wallet, virtual account, and transfer management.
+
+### Wallets
+
+#### Get All Wallets
+```http
+GET /api/bridge/wallets
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Wallet History
+```http
+GET /api/bridge/wallets/:walletId/history
+Headers: Authorization: Bearer {token}
+```
+
+### Customers
+
+#### Get All Customers
+```http
+GET /api/bridge/customers
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Single Customer
+```http
+GET /api/bridge/customers/:customerId
+Headers: Authorization: Bearer {token}
+```
+
+#### Delete Customer
+```http
+DELETE /api/bridge/customers/:customerId
+Headers: Authorization: Bearer {token}
+```
+
+#### Create KYC Link
+```http
+POST /api/bridge/customers/kyc-link
+Headers: Authorization: Bearer {token}
+Body: { customer data }
+```
+
+#### Create Full Customer
+```http
+POST /api/bridge/customers
+Headers: Authorization: Bearer {token}
+Body: { customer data }
+```
+
+#### Get ToS Acceptance URL
+```http
+GET /api/bridge/customers/:customerId/tos-link
+Headers: Authorization: Bearer {token}
+```
+
+#### Get KYC URL
+```http
+GET /api/bridge/customers/:customerId/kyc-link
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Customer Transfers
+```http
+GET /api/bridge/customers/:customerId/transfers
+Headers: Authorization: Bearer {token}
+```
+
+### Customer Wallets
+
+#### Get Specific Wallet for Customer
+```http
+GET /api/bridge/customers/:customerId/wallets/:walletId
+Headers: Authorization: Bearer {token}
+```
+
+#### Get All Wallets for Customer
+```http
+GET /api/bridge/customers/:customerId/wallets
+Headers: Authorization: Bearer {token}
+```
+
+#### Create Wallet for Customer
+```http
+POST /api/bridge/customers/:customerId/wallets
+Headers: Authorization: Bearer {token}
+Body: { wallet data }
+```
+
+### Virtual Accounts
+
+#### List Virtual Accounts
+```http
+GET /api/bridge/customers/:customerId/virtual-accounts
+Headers: Authorization: Bearer {token}
+```
+
+#### Create Virtual Account
+```http
+POST /api/bridge/customers/:customerId/virtual-accounts
+Headers: Authorization: Bearer {token}
+Body: { account data }
+```
+
+#### Update Virtual Account
+```http
+PUT /api/bridge/customers/:customerId/virtual-accounts/:accountId
+Headers: Authorization: Bearer {token}
+Body: { updated data }
+```
+
+#### Deactivate Virtual Account
+```http
+POST /api/bridge/customers/:customerId/virtual-accounts/:accountId/deactivate
+Headers: Authorization: Bearer {token}
+```
+
+#### Reactivate Virtual Account
+```http
+POST /api/bridge/customers/:customerId/virtual-accounts/:accountId/reactivate
+Headers: Authorization: Bearer {token}
+```
+
+### Transfers
+
+#### Get All Transfers
+```http
+GET /api/bridge/transfers
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Single Transfer
+```http
+GET /api/bridge/transfers/:transferId
+Headers: Authorization: Bearer {token}
+```
+
+#### Create Transfer
+```http
+POST /api/bridge/transfers
+Headers: Authorization: Bearer {token}
+Body: { transfer data }
+```
+
+#### Update Transfer
+```http
+PUT /api/bridge/transfers/:transferId
+Headers: Authorization: Bearer {token}
+Body: { updated data }
+```
+
+#### Delete Transfer
+```http
+DELETE /api/bridge/transfers/:transferId
+Headers: Authorization: Bearer {token}
+```
+
+---
+
+## DocuSeal Endpoints
+
+Base URL: `/api/docuseal`
+
+Document submission management endpoints.
+
+### Submissions
+
+#### Get Single Submission
+```http
+GET /api/docuseal/submissions/:submissionId
+Headers: Authorization: Bearer {token}
+Query: ?aPIToken=optional
+```
+
+#### Delete Submission
+```http
+DELETE /api/docuseal/submissions/:submissionId
+Headers: Authorization: Bearer {token}
+```
+
+#### Get All Submissions
+```http
+GET /api/docuseal/submissions
+Headers: Authorization: Bearer {token}
+Query: ?q=search&templateId=id&status=status&limit=50&offset=0
+```
+
+#### Search Submissions
+```http
+GET /api/docuseal/submissions/search
+Headers: Authorization: Bearer {token}
+Query: ?q=required&templateId=optional
+```
+
+#### Get Submissions by Template
+```http
+GET /api/docuseal/submissions/template/:templateId
+Headers: Authorization: Bearer {token}
+Query: ?limit=50&offset=0
+```
+
+#### Get Submission Status
+```http
+GET /api/docuseal/submissions/:submissionId/status
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Download URL
+```http
+GET /api/docuseal/submissions/:submissionId/download
+Headers: Authorization: Bearer {token}
+```
+
+#### Resend Notification
+```http
+POST /api/docuseal/submissions/:submissionId/resend
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Submission Statistics
+```http
+GET /api/docuseal/submissions/stats
+Headers: Authorization: Bearer {token}
+Query: ?templateId=optional
+```
+
+#### Health Check
+```http
+GET /api/docuseal/health
+```
+
+---
+
+## Vudy Endpoints
+
+Base URL: `/api/vudy`
+
+Payment request management endpoints.
+
+### Payment Requests
+
+#### Create Payment Request
+```http
+POST /api/vudy/requests
+Headers: Authorization: Bearer {token}
+Body: {
+  "amountInUsd": 100,
+  "note": "Payment description",
+  "receiverWalletAddress": "0x...",
+  "vendorId": "vendor_id",
+  "generatedId": "unique_id"
+}
+```
+
+#### Get Single Request
+```http
+GET /api/vudy/requests/:requestId
+Headers: Authorization: Bearer {token}
+Query: ?vudyApiKey=optional
+```
+
+#### Get Multiple Requests
+```http
+GET /api/vudy/requests
+Headers: Authorization: Bearer {token}
+Query: ?ids=id1,id2&vendorIDs=vendor1,vendor2
+```
+
+#### Get Requests by Vendor
+```http
+GET /api/vudy/requests/vendor/:vendorId
+Headers: Authorization: Bearer {token}
+```
+
+#### Batch Get Requests
+```http
+POST /api/vudy/requests/batch
+Headers: Authorization: Bearer {token}
+Body: {
+  "ids": ["id1", "id2", "id3"]
+}
+```
+
+#### Get Request Status
+```http
+GET /api/vudy/requests/:requestId/status
+Headers: Authorization: Bearer {token}
+```
+
+#### Health Check
+```http
+GET /api/vudy/health
+```
+
+---
+
+## Custom Endpoints
+
+Base URL: `/api/custom`
+
+PoliBit, DiDit KYC, authentication, and smart contract deployment.
+
+### Authentication
+
+#### Login
+```http
+POST /api/custom/login
+Body: {
+  "email": "user@example.com",
+  "password": "password"
+}
+```
+
+#### Register
+```http
+POST /api/custom/register
+Headers: Authorization: Bearer {token}
+Body: {
+  "email": "user@example.com",
+  "password": "password",
+  "name": "Full Name"
+}
+```
+
+### PoliBit
+
+#### Get PoliBit Entities (POST)
+```http
+POST /api/custom/polibit/entities
+Headers: Authorization: Bearer {token}
+Body: {
+  "totalInvestment": 1000
+}
+```
+
+#### Get PoliBit Entities (GET)
+```http
+GET /api/custom/polibit/entities
+Headers: Authorization: Bearer {token}
+```
+
+#### Get Specific Entity
+```http
+GET /api/custom/polibit/entities/:entityId
+Headers: Authorization: Bearer {token}
+```
+
+### DiDit KYC
+
+#### Get DiDit Token
+```http
+POST /api/custom/didit/token
+Headers: Authorization: Bearer {token}
+```
+
+#### Create DiDit Session
+```http
+POST /api/custom/didit/session
+Headers: Authorization: Bearer {token}
+Body: {
+  "token": "required",
+  "callback": "https://example.com",
+  "features": "OCR + FACE",
+  "vendorData": "VendorName"
+}
+```
+
+#### Get DiDit Session
+```http
+GET /api/custom/didit/session/:sessionId
+Headers: Authorization: Bearer {token}
+Query: ?token=required
+```
+
+#### Get DiDit Session PDF
+```http
+GET /api/custom/didit/session/:sessionId/pdf
+Headers: Authorization: Bearer {token}
+Query: ?token=required
+```
+
+#### Complete DiDit Verification
+```http
+POST /api/custom/didit/verify
+Headers: Authorization: Bearer {token}
+Body: {
+  "callback": "optional",
+  "features": "optional",
+  "vendorData": "optional"
+}
+```
+
+### Smart Contract Deployment
+
+#### Deploy ERC20 Contract (GET)
+```http
+GET /api/custom/deploy/erc20
+Headers: Authorization: Bearer {token}
+Query: ?authToken=required&contractTokenName=name&contractTokenSymbol=symbol
+       &contractTokenValue=100&contractMaxTokens=1000000&company=CompanyName
+       &currency=USD
+```
+
+#### Deploy ERC20 Contract (POST)
+```http
+POST /api/custom/deploy/erc20
+Headers: Authorization: Bearer {token}
+Body: {
+  "authToken": "required",
+  "contractTokenName": "Token Name",
+  "contractTokenSymbol": "TKN",
+  "contractTokenValue": 100,
+  "contractMaxTokens": 1000000,
+  "company": "Company Name",
+  "currency": "USD"
+}
+```
+
+#### Deploy ERC3643 Contract (GET)
+```http
+GET /api/custom/deploy/erc3643
+Headers: Authorization: Bearer {token}
+Query: ?authToken=required&contractTokenName=name&contractTokenSymbol=symbol
+       &contractTokenValue=100&contractMaxTokens=1000000&company=CompanyName
+       &currency=USD&projectName=ProjectName
+```
+
+#### Deploy ERC3643 Contract (POST)
+```http
+POST /api/custom/deploy/erc3643
+Headers: Authorization: Bearer {token}
+Body: {
+  "authToken": "required",
+  "contractTokenName": "Token Name",
+  "contractTokenSymbol": "TKN",
+  "contractTokenValue": 100,
+  "contractMaxTokens": 1000000,
+  "company": "Company Name",
+  "currency": "USD",
+  "projectName": "Project Name"
+}
+```
+
+#### Health Check
+```http
+GET /api/custom/health
+```
+
+---
+
+## Response Format
+
+### Success Response
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "data": { ... }
+}
+```
+
+### Error Response
+```json
+{
+  "error": "Error type",
+  "message": "Error description",
+  "details": { ... }
+}
+```
+
+## Authentication
+
+Most endpoints require authentication using JWT tokens. Include the token in the Authorization header:
+
+```
+Authorization: Bearer {your_jwt_token}
+```
+
+To obtain a token, use the `/api/custom/login` endpoint.
+
+## Rate Limiting
+
+Rate limiting is currently disabled but can be enabled by uncommenting the rate limiting middleware in `src/app.js`.
+
+## License
+
+ISC
+
+## Dependencies
+
+- Express 5.1.0
+- Mongoose 8.19.2
+- JWT (jsonwebtoken 9.0.2)
+- Bcrypt 6.0.0
+- CORS 2.8.5
+- Helmet 7.1.0
+- Morgan 1.10.0
+- Axios 1.6.0
+- And more (see package.json)
+
+## Development Dependencies
+
+- Nodemon 3.1.10
+- Jest 29.7.0
