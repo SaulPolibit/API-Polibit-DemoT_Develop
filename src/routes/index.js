@@ -6,6 +6,7 @@ const bridgeRoutes = require('./bridge.routes');
 const customRoutes = require('./custom.routes');
 const companyRoutes = require('./company.routes');
 const notificationsRoutes = require('./notifications.routes');
+const blockchainRoutes = require('./blockchain.routes');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.use('/bridge', bridgeRoutes);
 router.use('/custom', customRoutes);
 router.use('/company', companyRoutes);
 router.use('/notifications', notificationsRoutes);
+router.use('/blockchain', blockchainRoutes);
 
 // Root API endpoint
 router.get('/', (req, res) => {
@@ -31,6 +33,7 @@ router.get('/', (req, res) => {
       custom: '/api/custom',
       company: '/api/company',
       notifications: '/api/notifications',
+      blockchain: '/api/blockchain',
     },
   });
 });

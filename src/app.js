@@ -218,6 +218,10 @@ app.get('/api', (req, res) => {
         description: 'User notification settings management',
         endpoints: '/api/notifications',
       },
+      blockchain: {
+        description: 'Smart contract interactions and blockchain queries',
+        endpoints: '/api/blockchain',
+      },
     },
     documentation: {
       health: 'GET /health',
@@ -274,6 +278,7 @@ const server = app.listen(PORT, async () => {
   console.log(`   • Custom: http://localhost:${PORT}/api/custom`);
   console.log(`   • Company: http://localhost:${PORT}/api/company`);
   console.log(`   • Notifications: http://localhost:${PORT}/api/notifications`);
+  console.log(`   • Blockchain: http://localhost:${PORT}/api/blockchain`);
   console.log('=================================\n');
   
   await connectDB();
