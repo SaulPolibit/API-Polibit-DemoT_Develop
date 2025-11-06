@@ -5,6 +5,7 @@
 
 const express = require('express');
 const { Web3 } = require('web3');
+const apiManager = require('../services/apiManager');
 const { authenticate, requireApiKey, requireBearerToken } = require('../middleware/auth');
 const {
   catchAsync,
@@ -2820,6 +2821,51 @@ router.post('/contract/force-transfer-tokens', requireApiKey, requireBearerToken
       message: error.message || 'Failed to complete forced transfer'
     });
   }
+}));
+
+/**
+ * @route   POST /api/blockchain/deploy/erc3643
+ * @desc    Deploy an ERC3643 security token contract (POST method)
+ * @access  Private (requires API Key in x-api-key header AND Bearer token)
+ * @body    Same as GET query parameters
+ */
+router.post('/deploy/erc3643', requireApiKey, requireBearerToken, catchAsync(async (req, res) => {
+  const {
+    contractTokenName,
+    contractTokenSymbol,
+    contractTokenValue,
+    contractMaxTokens,
+    company,
+    currency,
+    projectName
+  } = req.body;
+
+  // Validate required fields
+  validate(contractTokenName, 'contractTokenName is required');
+  validate(contractTokenSymbol, 'contractTokenSymbol is required');
+  validate(contractTokenValue, 'contractTokenValue is required');
+  validate(contractMaxTokens, 'contractMaxTokens is required');
+  validate(company, 'company is required');
+  validate(currency, 'currency is required');
+  validate(projectName, 'projectName is required');
+
+  const context = { auth: req.auth };
+  const result = await apiManager.deployContractERC3643(context, req.body);
+
+  if (result.error) {
+    return res.status(result.statusCode || 500).json({
+      error: result.error,
+      message: 'Failed to deploy ERC3643 contract',
+      details: result.body,
+    });
+  }
+
+  res.status(result.statusCode || 200).json({
+    success: true,
+    message: 'ERC3643 contract deployment initiated',
+    contractType: 'ERC3643',
+    data: result.body,
+  });
 }));
 
 module.exports = router;
