@@ -2868,4 +2868,87 @@ router.post('/deploy/erc3643', requireApiKey, requireBearerToken, catchAsync(asy
   });
 }));
 
+/**
+ * @route   GET /api/blockchain/contract/total-supply
+ * @desc    Get the total supply of tokens for a contract
+ * @access  Private (requires Bearer token)
+ * @query   contractAddress - The contract address
+ */
+router.get('/contract/total-supply', requireBearerToken, catchAsync(async (req, res) => {
+  const { contractAddress } = req.query;
+
+  // Validate required fields
+  validate(contractAddress, 'Contract address is required');
+
+  // Get RPC URL from environment variables
+  const rpcURL = process.env.RPC_URL;
+
+  if (!rpcURL) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuration error',
+      message: 'RPC_URL not configured in environment variables'
+    });
+  }
+
+  // Initialize Web3 with the RPC URL
+  const web3 = new Web3(rpcURL);
+
+  // Validate contract address format
+  if (!web3.utils.isAddress(contractAddress)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid address',
+      message: 'Please provide a valid contract address'
+    });
+  }
+
+  // Contract ABI for the totalSupply function (ERC20 standard)
+  const contractAbi = [{
+    'inputs': [],
+    'name': 'totalSupply',
+    'outputs': [{
+      'name': '',
+      'type': 'uint256'
+    }],
+    'stateMutability': 'view',
+    'type': 'function'
+  }];
+
+  try {
+    // Create contract instance
+    const contract = new web3.eth.Contract(contractAbi, contractAddress);
+
+    // Call the totalSupply function (read-only, no transaction needed)
+    const totalSupply = await contract.methods.totalSupply().call();
+
+    res.status(200).json({
+      success: true,
+      message: 'Total supply retrieved successfully',
+      data: {
+        contractAddress: contractAddress.toLowerCase(),
+        totalSupply: totalSupply.toString(),
+        network: process.env.NETWORK_NAME || 'Polygon Amoy'
+      }
+    });
+
+  } catch (error) {
+    // Handle specific Web3 errors
+    if (error.message && error.message.includes('revert')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contract call reverted',
+        message: 'Contract call reverted. The contract may not support the totalSupply function.'
+      });
+    }
+
+    // Generic error handling
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get total supply',
+      message: error.message || 'Failed to retrieve total supply'
+    });
+  }
+}));
+
 module.exports = router;
