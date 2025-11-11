@@ -1,39 +1,57 @@
 // config/database.js
-const mongoose = require('mongoose');
+const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
+
+let supabase = null;
 
 const connectDB = async () => {
   try {
-    const MONGO_URL = process.env.MONGO_URL;
-    const conn = await mongoose.connect(MONGO_URL, {
-      // These options are now default in mongoose 6+
-      // No need to specify useNewUrlParser, useUnifiedTopology, etc.
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Missing Supabase credentials. Please check your .env file.');
+    }
+
+    // Create Supabase client
+    supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: false // Set to true if you need session persistence
+      }
     });
 
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+    // Test connection by querying the users table
+    // This will work once the schema is created
+    const { error } = await supabase.from('users').select('count').limit(0);
 
-    // Handle connection events
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ MongoDB connection error:', err);
-    });
+    // If the error is about the table not existing, user needs to run the schema
+    if (error && error.message.includes('does not exist')) {
+      console.log(`⚠️  Supabase connected, but tables not found.`);
+      console.log(`📋 Please run the SQL schema from docs/supabase-schema.sql in your Supabase dashboard.`);
+      console.log(`✅ Supabase client initialized: ${supabaseUrl}`);
+      return supabase;
+    }
 
-    mongoose.connection.on('disconnected', () => {
-      console.warn('⚠️ MongoDB disconnected');
-    });
+    if (error) {
+      throw error;
+    }
 
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('MongoDB connection closed due to app termination');
-      process.exit(0);
-    });
-
-    return conn;
+    console.log(`✅ Supabase Connected: ${supabaseUrl}`);
+    return supabase;
 
   } catch (error) {
-    console.error('❌ MongoDB connection failed:', error.message);
+    console.error('❌ Supabase connection failed:', error.message);
     process.exit(1);
   }
 };
 
-module.exports = connectDB;
+// Get the Supabase client instance
+const getSupabase = () => {
+  if (!supabase) {
+    throw new Error('Database not initialized. Call connectDB() first.');
+  }
+  return supabase;
+};
+
+module.exports = { connectDB, getSupabase };

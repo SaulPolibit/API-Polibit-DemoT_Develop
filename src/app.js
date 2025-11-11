@@ -18,7 +18,7 @@ const {
 const { isDevelopment } = require('./utils/helpers');
 
 
-const connectDB = require('./config/database');
+const { connectDB } = require('./config/database');
 
 // Initialize Express app
 const app = express();

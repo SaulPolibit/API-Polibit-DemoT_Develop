@@ -8,7 +8,7 @@ const {
   catchAsync,
   validate
 } = require('../middleware/errorHandler');
-const Company = require('../models/company');
+const { Company } = require('../models/supabase');
 const { uploadCompanyLogo, deleteOldCompanyLogo } = require('../middleware/upload');
 const { getFullImageUrl } = require('../utils/helpers');
 
@@ -98,17 +98,14 @@ router.put('/', authenticate, catchAsync(async (req, res) => {
   // Use findOneAndUpdate with upsert to create or update
   const company = await Company.findOneAndUpdate(
     { userId }, // Find by userId
-    { $set: updateData }, // Update these fields
+    updateData, // Update these fields
     {
-      new: true, // Return the updated document
-      upsert: true, // Create if doesn't exist
-      runValidators: true, // Run model validators
-      setDefaultsOnInsert: true // Set default values on insert
+      upsert: true // Create if doesn't exist
     }
   );
 
   // Transform company data to include full URL for firmLogo
-  const companyData = company.toObject();
+  const companyData = { ...company };
   companyData.firmLogo = getFullImageUrl(companyData.firmLogo, req);
 
   res.status(200).json({
@@ -141,7 +138,7 @@ router.post('/logo', authenticate, uploadCompanyLogo.single('firmLogo'), catchAs
 
   if (!company) {
     // Create new company with empty fields if doesn't exist
-    company = new Company({
+    company = await Company.create({
       userId,
       firmName: '',
       firmEmail: '',
@@ -159,15 +156,16 @@ router.post('/logo', authenticate, uploadCompanyLogo.single('firmLogo'), catchAs
 
   // Save new logo path (relative path)
   const logoPath = `/uploads/company-logos/${req.file.filename}`;
-  company.firmLogo = logoPath;
 
-  await company.save();
+  const updatedCompany = await Company.findByIdAndUpdate(company.id, {
+    firmLogo: logoPath
+  });
 
   res.status(200).json({
     success: true,
     message: 'Company logo uploaded successfully',
     data: {
-      firmLogo: getFullImageUrl(company.firmLogo, req),
+      firmLogo: getFullImageUrl(updatedCompany.firmLogo, req),
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype
@@ -205,8 +203,9 @@ router.delete('/logo', authenticate, catchAsync(async (req, res) => {
   deleteOldCompanyLogo(company.firmLogo);
 
   // Remove from database
-  company.firmLogo = null;
-  await company.save();
+  await Company.findByIdAndUpdate(company.id, {
+    firmLogo: null
+  });
 
   res.status(200).json({
     success: true,
@@ -229,7 +228,7 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
 
   if (!company) {
     // Create new company with empty fields
-    company = new Company({
+    company = await Company.create({
       userId,
       firmName: '',
       firmEmail: '',
@@ -238,11 +237,10 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
       address: '',
       description: ''
     });
-    await company.save();
   }
 
   // Transform company data to include full URL for firmLogo
-  const companyData = company.toObject();
+  const companyData = { ...company };
   companyData.firmLogo = getFullImageUrl(companyData.firmLogo, req);
 
   res.status(200).json({

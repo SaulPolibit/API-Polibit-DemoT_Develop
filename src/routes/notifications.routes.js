@@ -9,7 +9,7 @@ const {
   catchAsync,
   validate
 } = require('../middleware/errorHandler');
-const NotificationSettings = require('../models/notificationSettings');
+const { NotificationSettings } = require('../models/supabase');
 
 const router = express.Router();
 
@@ -20,7 +20,7 @@ const router = express.Router();
  */
 router.get('/settings', authenticate, catchAsync(async (req, res) => {
   // Get userId from bearer token
-  const userId = req.auth.userId || req.user.id || req.user._id;
+  const userId = req.auth.userId || req.user.id;
 
   validate(userId, 'User ID is required');
 
@@ -46,7 +46,7 @@ router.get('/settings', authenticate, catchAsync(async (req, res) => {
  */
 router.put('/settings', authenticate, catchAsync(async (req, res) => {
   // Get userId from bearer token
-  const userId = req.auth.userId || req.user.id || req.user._id;
+  const userId = req.auth.userId || req.user.id;
 
   validate(userId, 'User ID is required');
 
@@ -94,7 +94,7 @@ router.put('/settings', authenticate, catchAsync(async (req, res) => {
  */
 router.patch('/settings/enable-all', authenticate, catchAsync(async (req, res) => {
   // Get userId from bearer token
-  const userId = req.auth.userId || req.user.id || req.user._id;
+  const userId = req.auth.userId || req.user.id;
 
   validate(userId, 'User ID is required');
 
@@ -118,7 +118,7 @@ router.patch('/settings/enable-all', authenticate, catchAsync(async (req, res) =
  */
 router.patch('/settings/disable-all', authenticate, catchAsync(async (req, res) => {
   // Get userId from bearer token
-  const userId = req.auth.userId || req.user.id || req.user._id;
+  const userId = req.auth.userId || req.user.id;
 
   validate(userId, 'User ID is required');
 
@@ -142,7 +142,7 @@ router.patch('/settings/disable-all', authenticate, catchAsync(async (req, res) 
  */
 router.delete('/settings', authenticate, catchAsync(async (req, res) => {
   // Get userId from bearer token
-  const userId = req.auth.userId || req.user.id || req.user._id;
+  const userId = req.auth.userId || req.user.id;
 
   validate(userId, 'User ID is required');
 

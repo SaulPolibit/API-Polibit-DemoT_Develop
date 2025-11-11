@@ -10,7 +10,7 @@ const {
   validate,
   NotFoundError
 } = require('../middleware/errorHandler');
-const User = require('../models/user');
+const { User } = require('../models/supabase');
 const { uploadProfileImage, deleteOldProfileImage } = require('../middleware/upload');
 const { getFullImageUrl } = require('../utils/helpers');
 
@@ -42,7 +42,7 @@ router.post('/login', catchAsync(async (req, res) => {
   }
 
   // Verify password
-  const isPasswordValid = await user.comparePassword(password);
+  const isPasswordValid = await User.comparePassword(user.id, password);
   if (!isPasswordValid) {
     return res.status(401).json({
       success: false,
@@ -51,12 +51,13 @@ router.post('/login', catchAsync(async (req, res) => {
   }
 
   // Update last login
-  user.lastLogin = new Date();
-  await user.save();
+  const updatedUser = await User.findByIdAndUpdate(user.id, {
+    lastLogin: new Date()
+  });
 
   // Create token with user data (don't include password!)
   const token = createToken({
-    id: user._id,
+    id: user.id,
     email: user.email,
     role: user.role
   });
@@ -67,14 +68,14 @@ router.post('/login', catchAsync(async (req, res) => {
     token,
     expiresIn: '24h',
     user: {
-      id: user._id,
+      id: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
       appLanguage: user.appLanguage,
       profileImage: getFullImageUrl(user.profileImage, req),
       role: user.role,
-      lastLogin: user.lastLogin
+      lastLogin: updatedUser.lastLogin
     }
   });
 }));
@@ -102,7 +103,7 @@ router.post('/register', authenticate, catchAsync(async (req, res) => {
   // }
 
   // Create new user (password will be hashed automatically)
-  const user = new User({
+  const user = await User.create({
     email,
     password,
     firstName,
@@ -110,11 +111,9 @@ router.post('/register', authenticate, catchAsync(async (req, res) => {
     role: 'user'
   });
 
-  await user.save();
-
   // Create token
   const token = createToken({
-    id: user._id,
+    id: user.id,
     email: user.email,
     role: user.role
   });
@@ -125,7 +124,7 @@ router.post('/register', authenticate, catchAsync(async (req, res) => {
     token,
     expiresIn: '24h',
     user: {
-      id: user._id,
+      id: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -166,12 +165,15 @@ router.put('/user/profile', authenticate, catchAsync(async (req, res) => {
     });
   }
 
+  // Build update object
+  const updateData = {};
+
   // If newPassword is provided, validate oldPassword
   if (newPassword) {
     validate(oldPassword, 'oldPassword is required when updating password');
 
     // Verify old password
-    const isPasswordValid = await user.comparePassword(oldPassword);
+    const isPasswordValid = await User.comparePassword(userId, oldPassword);
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -187,18 +189,18 @@ router.put('/user/profile', authenticate, catchAsync(async (req, res) => {
       });
     }
 
-    // Update password (will be hashed by the pre-save hook)
-    user.password = newPassword;
+    // Add password to update (will be hashed by the model)
+    updateData.password = newPassword;
   }
 
   // Update other fields if provided
   if (firstName !== undefined) {
     validate(firstName.trim().length > 0, 'firstName cannot be empty');
-    user.firstName = firstName.trim();
+    updateData.firstName = firstName.trim();
   }
 
   if (lastName !== undefined) {
-    user.lastName = lastName.trim();
+    updateData.lastName = lastName.trim();
   }
 
   if (email !== undefined) {
@@ -208,36 +210,36 @@ router.put('/user/profile', authenticate, catchAsync(async (req, res) => {
 
     // Check if email is already taken by another user
     const existingUser = await User.findByEmail(email);
-    if (existingUser && existingUser._id.toString() !== userId) {
+    if (existingUser && existingUser.id !== userId) {
       return res.status(409).json({
         success: false,
         message: 'Email is already taken by another user'
       });
     }
 
-    user.email = email.toLowerCase().trim();
+    updateData.email = email.toLowerCase().trim();
   }
 
   if (appLanguage !== undefined) {
     const validLanguages = ['en', 'es', 'fr', 'de', 'pt', 'it'];
     validate(validLanguages.includes(appLanguage), `appLanguage must be one of: ${validLanguages.join(', ')}`);
-    user.appLanguage = appLanguage;
+    updateData.appLanguage = appLanguage;
   }
 
-  // Save updated user
-  await user.save();
+  // Update user in database
+  const updatedUser = await User.findByIdAndUpdate(userId, updateData);
 
   res.status(200).json({
     success: true,
     message: 'Profile updated successfully',
     user: {
-      id: user._id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      appLanguage: user.appLanguage,
-      profileImage: getFullImageUrl(user.profileImage, req),
-      role: user.role
+      id: updatedUser.id,
+      email: updatedUser.email,
+      firstName: updatedUser.firstName,
+      lastName: updatedUser.lastName,
+      appLanguage: updatedUser.appLanguage,
+      profileImage: getFullImageUrl(updatedUser.profileImage, req),
+      role: updatedUser.role
     }
   });
 }));
@@ -278,15 +280,16 @@ router.post('/user/profile-image', authenticate, uploadProfileImage.single('prof
 
   // Save new profile image path (relative path)
   const imagePath = `/uploads/profiles/${req.file.filename}`;
-  user.profileImage = imagePath;
 
-  await user.save();
+  const updatedUser = await User.findByIdAndUpdate(userId, {
+    profileImage: imagePath
+  });
 
   res.status(200).json({
     success: true,
     message: 'Profile image uploaded successfully',
     data: {
-      profileImage: getFullImageUrl(user.profileImage, req),
+      profileImage: getFullImageUrl(updatedUser.profileImage, req),
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype
@@ -323,8 +326,9 @@ router.delete('/user/profile-image', authenticate, catchAsync(async (req, res) =
   deleteOldProfileImage(user.profileImage);
 
   // Remove from database
-  user.profileImage = null;
-  await user.save();
+  await User.findByIdAndUpdate(userId, {
+    profileImage: null
+  });
 
   res.status(200).json({
     success: true,

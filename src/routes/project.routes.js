@@ -8,7 +8,7 @@ const {
   catchAsync,
   validate
 } = require('../middleware/errorHandler');
-const Project = require('../models/project');
+const { Project } = require('../models/supabase');
 const { uploadProjectImage, deleteOldProjectImage } = require('../middleware/upload');
 const { getFullImageUrl } = require('../utils/helpers');
 
@@ -72,11 +72,10 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
     userCreatorId: userId
   };
 
-  const project = new Project(projectData);
-  await project.save();
+  const project = await Project.create(projectData);
 
   // Transform project data to include full URL for image if needed
-  const responseData = project.toObject();
+  const responseData = { ...project };
   responseData.image = getFullImageUrl(responseData.image, req);
 
   res.status(201).json({
@@ -123,15 +122,16 @@ router.post('/:id/image', authenticate, uploadProjectImage.single('projectImage'
 
   // Save new image path (relative path)
   const imagePath = `/uploads/project-images/${req.file.filename}`;
-  project.image = imagePath;
 
-  await project.save();
+  const updatedProject = await Project.findByIdAndUpdate(id, {
+    image: imagePath
+  });
 
   res.status(200).json({
     success: true,
     message: 'Project image uploaded successfully',
     data: {
-      image: getFullImageUrl(project.image, req),
+      image: getFullImageUrl(updatedProject.image, req),
       filename: req.file.filename,
       size: req.file.size,
       mimetype: req.file.mimetype
@@ -169,8 +169,9 @@ router.delete('/:id/image', authenticate, catchAsync(async (req, res) => {
   deleteOldProjectImage(project.image);
 
   // Remove from database
-  project.image = null;
-  await project.save();
+  await Project.findByIdAndUpdate(id, {
+    image: null
+  });
 
   res.status(200).json({
     success: true,
@@ -225,7 +226,7 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
 
   // Transform image URLs
   const projectsData = projects.map(project => {
-    const projectData = project.toObject();
+    const projectData = { ...project };
     projectData.image = getFullImageUrl(projectData.image, req);
     return projectData;
   });
@@ -256,7 +257,7 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
   }
 
   // Transform project data
-  const projectData = project.toObject();
+  const projectData = { ...project };
   projectData.image = getFullImageUrl(projectData.image, req);
 
   res.status(200).json({
@@ -355,11 +356,10 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
   }
 
   // Update project
-  Object.assign(project, updateData);
-  await project.save();
+  const updatedProject = await Project.findByIdAndUpdate(id, updateData);
 
   // Transform response data
-  const projectData = project.toObject();
+  const projectData = { ...updatedProject };
   projectData.image = getFullImageUrl(projectData.image, req);
 
   res.status(200).json({
@@ -405,7 +405,7 @@ router.get('/available/list', authenticate, catchAsync(async (req, res) => {
 
   // Transform image URLs
   const projectsData = projects.map(project => {
-    const projectData = project.toObject();
+    const projectData = { ...project };
     projectData.image = getFullImageUrl(projectData.image, req);
     return projectData;
   });
