@@ -47,7 +47,7 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
   // Validate required fields
   validate(name, 'Structure name is required');
   validate(type, 'Structure type is required');
-  validate(['Fund', 'SA/LLC', 'Fideicomiso', 'Private Debt'].includes(type), 'Invalid structure type');
+  // validate(['Fund', 'SA/LLC', 'Fideicomiso', 'Private Debt'].includes(type), 'Invalid structure type');
 
   // Validate parent structure if provided
   if (parentStructureId) {
