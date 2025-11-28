@@ -7,36 +7,46 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directories exist
-const uploadDir = path.join(__dirname, '../../uploads');
+// Detect if running on Vercel (serverless environment)
+const isVercel = process.env.VERCEL === '1' || process.env.NOW_REGION;
+
+// Use /tmp directory for Vercel (only writable location in serverless)
+// Use local uploads directory for traditional hosting
+const uploadDir = isVercel
+  ? '/tmp/uploads'
+  : path.join(__dirname, '../../uploads');
+
 const profilesDir = path.join(uploadDir, 'profiles');
 const companyLogosDir = path.join(uploadDir, 'company-logos');
 const projectImagesDir = path.join(uploadDir, 'project-images');
 const documentsDir = path.join(uploadDir, 'documents');
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Helper function to ensure directory exists (lazy initialization)
+const ensureDir = (dir) => {
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (error) {
+    // In serverless environments, this might fail - use memory storage instead
+    console.warn(`Could not create directory ${dir}:`, error.message);
+  }
+};
 
-if (!fs.existsSync(profilesDir)) {
-  fs.mkdirSync(profilesDir, { recursive: true });
-}
-
-if (!fs.existsSync(companyLogosDir)) {
-  fs.mkdirSync(companyLogosDir, { recursive: true });
-}
-
-if (!fs.existsSync(projectImagesDir)) {
-  fs.mkdirSync(projectImagesDir, { recursive: true });
-}
-
-if (!fs.existsSync(documentsDir)) {
-  fs.mkdirSync(documentsDir, { recursive: true });
+// Only create directories if NOT in serverless environment
+// In serverless, directories will be created on-demand in /tmp
+if (!isVercel) {
+  ensureDir(uploadDir);
+  ensureDir(profilesDir);
+  ensureDir(companyLogosDir);
+  ensureDir(projectImagesDir);
+  ensureDir(documentsDir);
 }
 
 // Configure storage for profile images
 const profileStorage = multer.diskStorage({
   destination: function (req, file, cb) {
+    ensureDir(profilesDir);
     cb(null, profilesDir);
   },
   filename: function (req, file, cb) {
@@ -73,6 +83,7 @@ const uploadProfileImage = multer({
 // Configure storage for company logos
 const companyLogoStorage = multer.diskStorage({
   destination: function (req, file, cb) {
+    ensureDir(companyLogosDir);
     cb(null, companyLogosDir);
   },
   filename: function (req, file, cb) {
@@ -129,6 +140,7 @@ const deleteOldCompanyLogo = (logoPath) => {
 // Configure storage for project images
 const projectImageStorage = multer.diskStorage({
   destination: function (req, file, cb) {
+    ensureDir(projectImagesDir);
     cb(null, projectImagesDir);
   },
   filename: function (req, file, cb) {
