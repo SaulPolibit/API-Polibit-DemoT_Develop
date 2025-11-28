@@ -5,3 +5,7 @@ uploads/profiles.
 Flutterflow-Actions
 uploads
 docs/*
+
+# Vercel
+.vercel
+.vercel.env

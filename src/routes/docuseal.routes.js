@@ -563,7 +563,7 @@ router.get('/verify-submission', authenticate, catchAsync(async (req, res) => {
   });
 }));
 
-router.get('/health', (req, res) => {
+router.get('/health', (_req, res) => {
   res.json({
     service: 'DocuSeal API',
     status: 'operational',
