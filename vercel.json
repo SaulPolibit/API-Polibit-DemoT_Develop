@@ -4,6 +4,7 @@
   "buildCommand": null,
   "devCommand": null,
   "installCommand": "npm install",
+  "outputDirectory": null,
   "builds": [
     {
       "src": "api/index.js",
