@@ -466,34 +466,46 @@ router.post('/webhook', catchAsync(async (req, res) => {
   if (event_type === 'submission.created') {
     console.log('[DocuSeal Webhook] Processing submission.created event');
 
-    // Extract submission data from data.submission
-    const email = data.email;
-    const submission = data.submission;
+    // For submission.created, data is directly in the data object (no nested submission)
+    const submissionId = data.id;
+    const slug = data.slug;
+    const auditLogUrl = data.audit_log_url;
+    const status = data.status || 'created';
 
-    console.log('[DocuSeal Webhook] Extracted data:', { email, submission });
+    // Get email from first submitter
+    const submitters = data.submitters || [];
+    const email = submitters.length > 0 ? submitters[0].email : null;
+
+    // Construct submission URL from slug
+    const submissionURL = `https://docuseal.com/s/${slug}`;
+
+    console.log('[DocuSeal Webhook] Extracted data:', {
+      submissionId,
+      email,
+      slug,
+      submissionURL,
+      auditLogUrl,
+      status
+    });
 
     // Validate required fields
-    if (!email || !submission) {
-      console.log('[DocuSeal Webhook] Validation failed - missing email or submission');
+    if (!email || !submissionId) {
+      console.log('[DocuSeal Webhook] Validation failed - missing email or submissionId');
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: email or submission data'
+        message: 'Missing required fields: email or submissionId'
       });
     }
 
-    const submissionId = submission.id;
-    const submissionURL = submission.url || data.submission_url;
-    const auditLogUrl = submission.audit_log_url || data.audit_log_url;
+    console.log('[DocuSeal Webhook] Creating new submission:', { email, submissionId, submissionURL, auditLogUrl, status });
 
-    console.log('[DocuSeal Webhook] Creating new submission:', { email, submissionId, submissionURL, auditLogUrl });
-
-    // Create new submission record with status 'created'
+    // Create new submission record
     const newSubmission = await DocusealSubmission.create({
       email,
       submissionId,
       submissionURL,
       auditLogUrl,
-      status: 'created'
+      status
     });
 
     console.log('[DocuSeal Webhook] Submission created successfully:', newSubmission);
@@ -508,23 +520,37 @@ router.post('/webhook', catchAsync(async (req, res) => {
   if (event_type === 'submission.completed') {
     console.log('[DocuSeal Webhook] Processing submission.completed event');
 
-    // Extract submission data from data.submission
-    const email = data.email;
-    const submission = data.submission;
+    // Handle both structures: nested submission or direct data
+    const submission = data.submission || data;
+    const submissionId = submission.id;
+    const slug = submission.slug || data.slug;
+    const auditLogUrl = submission.audit_log_url || data.audit_log_url;
+    const status = submission.status || 'completed';
 
-    console.log('[DocuSeal Webhook] Extracted data:', { email, submission });
+    // Get email from submitters or top-level email
+    const submitters = data.submitters || [];
+    const email = data.email || (submitters.length > 0 ? submitters[0].email : null);
+
+    // Construct submission URL
+    const submissionURL = submission.url || (slug ? `https://docuseal.com/s/${slug}` : null);
+
+    console.log('[DocuSeal Webhook] Extracted data:', {
+      submissionId,
+      email,
+      slug,
+      submissionURL,
+      auditLogUrl,
+      status
+    });
 
     // Validate required fields
-    if (!email || !submission) {
-      console.log('[DocuSeal Webhook] Validation failed - missing email or submission');
+    if (!email || !submissionId) {
+      console.log('[DocuSeal Webhook] Validation failed - missing email or submissionId');
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: email or submission data'
+        message: 'Missing required fields: email or submissionId'
       });
     }
-
-    const submissionId = submission.id;
-    const status = submission.status || 'completed';
 
     console.log('[DocuSeal Webhook] Looking for existing submission:', submissionId);
 
@@ -538,6 +564,8 @@ router.post('/webhook', catchAsync(async (req, res) => {
       const newSubmission = await DocusealSubmission.create({
         email,
         submissionId,
+        submissionURL,
+        auditLogUrl,
         status
       });
 
@@ -556,7 +584,9 @@ router.post('/webhook', catchAsync(async (req, res) => {
     const updatedSubmission = await DocusealSubmission.findByIdAndUpdate(
       existingSubmission.id,
       {
-        status
+        status,
+        submissionURL,
+        auditLogUrl
       }
     );
 
