@@ -7,7 +7,8 @@ let supabase = null;
 const connectDB = async () => {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    // Use service role key for backend operations to bypass RLS
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
       throw new Error('Missing Supabase credentials. Please check your .env file.');
@@ -52,10 +53,11 @@ const getSupabase = () => {
   if (!supabase) {
     // Auto-initialize for serverless environments
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    // Use service role key for backend operations to bypass RLS
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase credentials. Please check SUPABASE_URL and SUPABASE_ANON_KEY environment variables.');
+      throw new Error('Missing Supabase credentials. Please check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.');
     }
 
     console.log('🔄 Auto-initializing Supabase client for serverless environment...');
