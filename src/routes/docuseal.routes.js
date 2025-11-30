@@ -12,7 +12,7 @@ const {
   NotFoundError,
   AuthorizationError
 } = require('../middleware/errorHandler');
-const { User, DocusealSubmission } = require('../models/supabase');
+const { User, DocusealSubmission, Payment } = require('../models/supabase');
 
 const router = express.Router();
 
@@ -611,9 +611,9 @@ router.post('/webhook', catchAsync(async (req, res) => {
 
 /**
  * @route   GET /api/docuseal/verifyUserSignature
- * @desc    Verify if the logged-in user has recent DocuSeal submissions (within last 30 minutes)
+ * @desc    Verify if the logged-in user has unused DocuSeal submissions
  * @access  Private (requires authentication)
- * @returns {boolean} validation - true if user has recent submissions, false otherwise
+ * @returns {boolean} validation - true if user has unused submissions, false otherwise
  */
 router.get('/verifyUserSignature', authenticate, catchAsync(async (req, res) => {
   // Get user ID from authenticated token
@@ -628,31 +628,36 @@ router.get('/verifyUserSignature', authenticate, catchAsync(async (req, res) => 
     });
   }
 
-  // Calculate timestamp for 30 minutes ago
-  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-
   // Get all submissions for this user's email
-  const allSubmissions = await DocusealSubmission.findByEmail(user.email);
+  const userSubmissions = await DocusealSubmission.findByEmail(user.email);
 
-  // Filter submissions updated within the last 30 minutes
-  const recentSubmissions = allSubmissions.filter(submission => {
-    const updatedAt = new Date(submission.updatedAt);
-    return updatedAt >= thirtyMinutesAgo;
-  });
+  // Get all payments for this user's email
+  const userPayments = await Payment.findByEmail(user.email);
 
-  const hasRecentSignature = recentSubmissions.length > 0;
+  // Extract submission IDs that are already used in payments
+  const usedSubmissionIds = userPayments.map(payment => payment.submissionId);
+
+  // Find submissions that are NOT already used in payments
+  const freeSubmissions = userSubmissions.filter(submission =>
+    !usedSubmissionIds.includes(submission.submissionId)
+  );
+
+  const hasFreeSubmission = freeSubmissions.length > 0;
 
   res.status(200).json({
     success: true,
-    validation: hasRecentSignature,
-    passed: hasRecentSignature,
-    count: recentSubmissions.length,
+    validation: hasFreeSubmission,
+    passed: hasFreeSubmission,
     email: user.email,
-    recentSubmissions: recentSubmissions.map(sub => ({
+    totalSubmissions: userSubmissions.length,
+    usedSubmissions: usedSubmissionIds.length,
+    freeSubmissions: freeSubmissions.length,
+    availableSubmissions: freeSubmissions.map(sub => ({
       id: sub.id,
       submissionId: sub.submissionId,
       status: sub.status,
-      updatedAt: sub.updatedAt
+      submissionURL: sub.submissionURL,
+      createdAt: sub.createdAt
     }))
   });
 }));
