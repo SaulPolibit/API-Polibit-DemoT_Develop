@@ -192,6 +192,76 @@ CREATE TRIGGER update_subscriptions_updated_at BEFORE UPDATE ON subscriptions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================
+-- INVESTMENT SUBSCRIPTIONS TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS investment_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  investment_id UUID NOT NULL,
+  investor_id UUID NOT NULL,
+  fund_id UUID NOT NULL,
+  requested_amount DECIMAL(15,2) NOT NULL,
+  currency VARCHAR(10) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'pending',
+  approval_reason TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  submitted_at TIMESTAMP,
+  approved_at TIMESTAMP,
+  rejected_at TIMESTAMP,
+  admin_notes TEXT,
+  linked_fund_ownership_created BOOLEAN DEFAULT false
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_investment_subscriptions_investment_id ON investment_subscriptions(investment_id);
+CREATE INDEX IF NOT EXISTS idx_investment_subscriptions_investor_id ON investment_subscriptions(investor_id);
+CREATE INDEX IF NOT EXISTS idx_investment_subscriptions_fund_id ON investment_subscriptions(fund_id);
+CREATE INDEX IF NOT EXISTS idx_investment_subscriptions_status ON investment_subscriptions(status);
+
+-- =============================================
+-- KYC SESSIONS TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS kyc_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  session_id VARCHAR(255) UNIQUE NOT NULL,
+  provider VARCHAR(100) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'pending',
+  verification_data JSONB DEFAULT '{}',
+  pdf_url TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  completed_at TIMESTAMP,
+  expires_at TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_user_id ON kyc_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_session_id ON kyc_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_status ON kyc_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_provider ON kyc_sessions(provider);
+
+-- =============================================
+-- FIRM SETTINGS TABLE
+-- =============================================
+CREATE TABLE IF NOT EXISTS firm_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  firm_name VARCHAR(255) NOT NULL,
+  firm_logo TEXT,
+  firm_description TEXT,
+  firm_website VARCHAR(255),
+  firm_address TEXT,
+  firm_phone VARCHAR(50),
+  firm_email VARCHAR(255),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Add triggers for new tables
+CREATE TRIGGER update_investment_subscriptions_updated_at BEFORE UPDATE ON investment_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_firm_settings_updated_at BEFORE UPDATE ON firm_settings
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =============================================
 -- ROW LEVEL SECURITY (RLS) - Optional but recommended
 -- =============================================
 -- Enable RLS on tables (uncomment if using Supabase Auth)

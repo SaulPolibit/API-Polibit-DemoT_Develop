@@ -32,6 +32,15 @@ const paymentRoutes = require('./payment.routes');
 // Subscription routes
 const subscriptionRoutes = require('./subscription.routes');
 
+// Investment Subscription routes
+const investmentSubscriptionRoutes = require('./investmentSubscription.routes');
+
+// KYC Session routes
+const kycSessionRoutes = require('./kycSession.routes');
+
+// Firm Settings routes
+const firmSettingsRoutes = require('./firmSettings.routes');
+
 const router = express.Router();
 
 // Mount route modules
@@ -69,6 +78,15 @@ router.use('/payments', paymentRoutes);
 // Mount Subscription routes
 router.use('/subscriptions', subscriptionRoutes);
 
+// Mount Investment Subscription routes
+router.use('/investment-subscriptions', investmentSubscriptionRoutes);
+
+// Mount KYC Session routes
+router.use('/kyc-sessions', kycSessionRoutes);
+
+// Mount Firm Settings routes
+router.use('/firm-settings', firmSettingsRoutes);
+
 // Root API endpoint
 router.get('/', (_req, res) => {
   res.json({
@@ -104,6 +122,12 @@ router.get('/', (_req, res) => {
       payments: '/api/payments',
       // Subscription endpoints
       subscriptions: '/api/subscriptions',
+      // Investment Subscription endpoints
+      investmentSubscriptions: '/api/investment-subscriptions',
+      // KYC Session endpoints
+      kycSessions: '/api/kyc-sessions',
+      // Firm Settings endpoints
+      firmSettings: '/api/firm-settings',
     },
   });
 });

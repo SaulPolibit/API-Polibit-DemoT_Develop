@@ -39,6 +39,15 @@ const DocusealSubmission = require('./docusealSubmission');
 const Payment = require('./payment');
 const Subscription = require('./subscription');
 
+// Investment Subscription models
+const InvestmentSubscription = require('./investmentSubscription');
+
+// KYC System models
+const KycSession = require('./kycSession');
+
+// Firm Settings models
+const FirmSettings = require('./firmSettings');
+
 module.exports = {
   // Core models
   User,
@@ -77,4 +86,13 @@ module.exports = {
   // Payment System models
   Payment,
   Subscription,
+
+  // Investment Subscription models
+  InvestmentSubscription,
+
+  // KYC System models
+  KycSession,
+
+  // Firm Settings models
+  FirmSettings,
 };
