@@ -161,10 +161,11 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 /**
  * @route   GET /api/investors/search
  * @desc    Search investors by name or email (role-based filtering applied)
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, all roles)
  */
-router.get('/search', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
+router.get('/search', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const userRole = req.auth?.role ?? req.user?.role;
   const { q } = req.query;
 
   validate(q, 'Search query is required');
@@ -175,8 +176,12 @@ router.get('/search', authenticate, requireInvestmentManagerAccess, catchAsync(a
   if (userRole === ROLES.ROOT) {
     // Root can search all investors (pass null as userId)
     investors = await Investor.search(q, null);
-  } else {
+  } else if (userRole === ROLES.ADMIN) {
     // Admin can only search their own investors
+    investors = await Investor.search(q, userId);
+  } else {
+    // Other roles (Support, etc.) can search investors they have access to
+    // For now, limiting to their own created investors
     investors = await Investor.search(q, userId);
   }
 
