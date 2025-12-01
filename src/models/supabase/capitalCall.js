@@ -156,6 +156,31 @@ class CapitalCall {
   }
 
   /**
+   * Find capital calls by investor ID
+   * Gets all capital calls that have allocations for the specified investor
+   */
+  static async findByInvestorId(investorId) {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from('capital_calls')
+      .select(`
+        *,
+        capital_call_allocations!inner (
+          investor_id
+        )
+      `)
+      .eq('capital_call_allocations.investor_id', investorId)
+      .order('call_date', { ascending: false });
+
+    if (error) {
+      throw new Error(`Error finding capital calls by investor: ${error.message}`);
+    }
+
+    return data.map(item => this._toModel(item));
+  }
+
+  /**
    * Update capital call by ID
    */
   static async findByIdAndUpdate(id, updateData) {

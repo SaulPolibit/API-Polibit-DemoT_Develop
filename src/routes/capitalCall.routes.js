@@ -178,6 +178,35 @@ router.get('/structure/:structureId/summary', authenticate, requireInvestmentMan
 }));
 
 /**
+ * @route   GET /api/capital-calls/investor/:investorId
+ * @desc    Get all capital calls for a specific investor
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.get('/investor/:investorId', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { userId, userRole } = getUserContext(req);
+  const { investorId } = req.params;
+
+  validate(investorId, 'Investor ID is required');
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  validate(uuidRegex.test(investorId), 'Invalid investor ID format');
+
+  const capitalCalls = await CapitalCall.findByInvestorId(investorId);
+
+  // Role-based filtering: Root sees all, Admin sees only their own
+  const userCapitalCalls = userRole === ROLES.ROOT
+    ? capitalCalls
+    : capitalCalls.filter(call => call.createdBy === userId);
+
+  res.status(200).json({
+    success: true,
+    count: userCapitalCalls.length,
+    data: userCapitalCalls
+  });
+}));
+
+/**
  * @route   PUT /api/capital-calls/:id
  * @desc    Update a capital call
  * @access  Private (requires authentication, Root/Admin only)
