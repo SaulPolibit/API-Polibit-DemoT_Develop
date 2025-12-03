@@ -44,10 +44,12 @@ All authenticated requests must include:
 The API uses authentication middleware that checks for user credentials. Most endpoints require the `authenticate` middleware. Root (role 0) and Admin (role 1) users have different access levels.
 
 ### Role Levels
-- **Root (0)**: Full access to all resources 
+- **Root (0)**: Full access to all resources
 - **Admin (1)**: Access to own resources only
 - **Support (2)**: Read-only access to assigned structures
-- **Customer (3)**: Access to lp-portal sections
+- **Investor (3)**: Investor role with access to investor-specific endpoints and lp-portal sections
+
+**Note:** The Investor role (3) was previously labeled as "Customer" but now specifically represents investors. Users with role=3 have investor-specific fields in the users table.
 
 ---
 
@@ -243,6 +245,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Returns a structure with all investors (users with role=3) associated via the structure_investors junction table.
+
 **Success Response (200):**
 ```json
 {
@@ -253,15 +257,19 @@ The API uses authentication middleware that checks for user credentials. Most en
     "structure_investors": [
       {
         "investor": {
-          "id": "investor-id",
+          "id": "user-id",
+          "role": 3,
           "email": "investor@example.com",
-          "fullName": "John Doe"
+          "fullName": "John Doe",
+          "investorType": "Individual"
         }
       }
     ]
   }
 }
 ```
+
+**Note:** The `investor_id` field in the `structure_investors` junction table now references `users.id` where `role=3` (INVESTOR).
 
 ### 7. Update Structure
 
@@ -427,11 +435,15 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 ## Investors API
 
+> **Note:** Investors are now managed as Users with role=3 (INVESTOR). All investor data is stored in the users table with investor-specific fields. The endpoints below create and manage users with the INVESTOR role.
+
 ### 1. Create Investor
 
 **Endpoint:** `POST /api/investors`
 
 **Access:** Private (Root/Admin only)
+
+**Description:** Creates a new user with the INVESTOR role (role=3) and investor-specific fields.
 
 **Request Body:**
 ```json
@@ -479,7 +491,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Validation Rules:**
 - `investorType`: Required, must be one of: Individual, Institution, Fund of Funds, Family Office
-- `email`: Required, valid email format, unique
+- `email`: Required, valid email format, unique across all users
+- Automatically sets `role` to 3 (INVESTOR)
 - Type-specific required fields:
   - Individual: `fullName`
   - Institution: `institutionName`
@@ -492,13 +505,14 @@ The API uses authentication middleware that checks for user credentials. Most en
   "success": true,
   "message": "Investor created successfully",
   "data": {
-    "id": "investor-id",
+    "id": "user-id",
+    "role": 3,
     "investorType": "Individual",
     "email": "john.doe@example.com",
     "fullName": "John Doe",
     "kycStatus": "Pending",
     "accreditedInvestor": true,
-    "createdBy": "user-id",
+    "isActive": true,
     "createdAt": "2024-01-15T10:30:00.000Z"
   }
 }
@@ -514,7 +528,7 @@ The API uses authentication middleware that checks for user credentials. Most en
 ```json
 {
   "success": false,
-  "message": "Investor with this email already exists"
+  "message": "User with this email already exists"
 }
 ```
 ```json
@@ -530,12 +544,12 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Returns all users with role=3 (INVESTOR). Filters by investor-specific criteria.
+
 **Query Parameters:**
-- `investorType`: Filter by type
+- `investorType`: Filter by type (Individual, Institution, Fund of Funds, Family Office)
 - `kycStatus`: Filter by KYC status
 - `accreditedInvestor`: Filter by accredited status (true/false)
-
-**Description:** Root users see all investors, Admin users see only their own.
 
 **Success Response (200):**
 ```json
@@ -544,11 +558,13 @@ The API uses authentication middleware that checks for user credentials. Most en
   "count": 5,
   "data": [
     {
-      "id": "investor-id",
+      "id": "user-id",
+      "role": 3,
       "investorType": "Individual",
       "email": "john.doe@example.com",
       "fullName": "John Doe",
-      "kycStatus": "Approved"
+      "kycStatus": "Approved",
+      "isActive": true
       // ... other fields based on type
     }
   ]
@@ -559,12 +575,12 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Endpoint:** `GET /api/investors/search?q=searchTerm`
 
-**Access:** Private (Root/Admin only)
+**Access:** Private (all authenticated users)
 
 **Query Parameters:**
 - `q`: Search query (minimum 2 characters)
 
-**Description:** Searches across email, fullName, institutionName, fundName, and officeName fields.
+**Description:** Searches across email, fullName, institutionName, fundName, and officeName fields for users with role=3 (INVESTOR).
 
 **Success Response (200):**
 ```json
@@ -573,7 +589,8 @@ The API uses authentication middleware that checks for user credentials. Most en
   "count": 3,
   "data": [
     {
-      "id": "investor-id",
+      "id": "user-id",
+      "role": 3,
       "investorType": "Individual",
       "email": "john.doe@example.com",
       "fullName": "John Doe"
@@ -594,22 +611,31 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Endpoint:** `GET /api/investors/:id`
 
-**Access:** Private (Root/Admin only)
+**Access:** Private (Root/Admin can access any, Investors can access their own)
+
+**Description:** Returns a user with role=3 (INVESTOR) by their user ID. Verifies the user is an investor.
+
+**Access Control:**
+- Root (role=0): Can access any investor's data
+- Admin (role=1): Can access any investor's data
+- Investor (role=3): Can only access their own data (when `:id` matches their user ID)
 
 **Success Response (200):**
 ```json
 {
   "success": true,
   "data": {
-    "id": "investor-id",
+    "id": "user-id",
+    "role": 3,
     "investorType": "Individual",
     "email": "john.doe@example.com",
     "fullName": "John Doe",
     "phoneNumber": "+1-555-0123",
     "country": "United States",
     "kycStatus": "Approved",
-    "accreditedInvestor": true
-    // ... all investor fields
+    "accreditedInvestor": true,
+    "isActive": true
+    // ... all investor and user fields
   }
 }
 ```
@@ -621,19 +647,45 @@ The API uses authentication middleware that checks for user credentials. Most en
   "message": "Invalid investor ID format"
 }
 ```
+```json
+{
+  "success": false,
+  "message": "Investor not found"
+}
+```
+```json
+{
+  "success": false,
+  "message": "User is not an investor"
+}
+```
+```json
+{
+  "success": false,
+  "message": "Unauthorized access to investor data"
+}
+```
 
 ### 5. Get Investor with Structures
 
 **Endpoint:** `GET /api/investors/:id/with-structures`
 
-**Access:** Private (Root/Admin only)
+**Access:** Private (Root/Admin can access any, Investors can access their own)
+
+**Description:** Returns an investor (user with role=3) along with all structures they're invested in via the structure_investors junction table.
+
+**Access Control:**
+- Root (role=0): Can access any investor's data
+- Admin (role=1): Can access any investor's data
+- Investor (role=3): Can only access their own data (when `:id` matches their user ID)
 
 **Success Response (200):**
 ```json
 {
   "success": true,
   "data": {
-    "id": "investor-id",
+    "id": "user-id",
+    "role": 3,
     "email": "john.doe@example.com",
     "fullName": "John Doe",
     "structure_investors": [
@@ -649,11 +701,26 @@ The API uses authentication middleware that checks for user credentials. Most en
 }
 ```
 
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Unauthorized access to investor data"
+}
+```
+
 ### 6. Get Investor Portfolio Summary
 
 **Endpoint:** `GET /api/investors/:id/portfolio`
 
-**Access:** Private (Root/Admin only)
+**Access:** Private (Root/Admin can access any, Investors can access their own)
+
+**Description:** Returns portfolio summary for an investor (user with role=3) by calling the database function `get_investor_portfolio_summary`.
+
+**Access Control:**
+- Root (role=0): Can access any investor's portfolio
+- Admin (role=1): Can access any investor's portfolio
+- Investor (role=3): Can only access their own portfolio (when `:id` matches their user ID)
 
 **Success Response (200):**
 ```json
@@ -670,11 +737,21 @@ The API uses authentication middleware that checks for user credentials. Most en
 }
 ```
 
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Unauthorized access to investor data"
+}
+```
+
 ### 7. Update Investor
 
 **Endpoint:** `PUT /api/investors/:id`
 
 **Access:** Private (Root/Admin only)
+
+**Description:** Updates an investor user's information. Verifies the user has role=3 (INVESTOR) before updating.
 
 **Request Body:** (All fields optional)
 ```json
@@ -683,7 +760,8 @@ The API uses authentication middleware that checks for user credentials. Most en
   "phoneNumber": "+1-555-9999",
   "kycStatus": "Approved",
   "accreditedInvestor": true,
-  "fullName": "John Updated Doe"
+  "fullName": "John Updated Doe",
+  "isActive": true
   // ... any other updateable fields
 }
 ```
@@ -694,6 +772,7 @@ The API uses authentication middleware that checks for user credentials. Most en
 - Institution: `institutionName`, `institutionType`, `registrationNumber`, `legalRepresentative`
 - Fund of Funds: `fundName`, `fundManager`, `aum`
 - Family Office: `officeName`, `familyName`, `principalContact`, `assetsUnderManagement`
+- User fields: `isActive`, `firstName`, `lastName`
 
 **Success Response (200):**
 ```json
@@ -701,8 +780,10 @@ The API uses authentication middleware that checks for user credentials. Most en
   "success": true,
   "message": "Investor updated successfully",
   "data": {
-    "id": "investor-id",
-    "email": "newemail@example.com"
+    "id": "user-id",
+    "role": 3,
+    "email": "newemail@example.com",
+    "isActive": true
     // ... updated fields
   }
 }
@@ -714,6 +795,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Deletes an investor user. Verifies the user has role=3 (INVESTOR) before deletion. This will delete the user record from the users table.
+
 **Success Response (200):**
 ```json
 {
@@ -721,6 +804,48 @@ The API uses authentication middleware that checks for user credentials. Most en
   "message": "Investor deleted successfully"
 }
 ```
+
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "User is not an investor"
+}
+```
+
+---
+
+### Database Migration Notes
+
+The Investor model has been merged into the User model. To complete this migration in your database:
+
+1. **Add investor columns to `users` table:**
+   - `investor_type` (text)
+   - `phone_number` (text)
+   - `tax_id` (text)
+   - `accredited_investor` (boolean)
+   - `risk_tolerance` (text)
+   - `investment_preferences` (jsonb)
+   - Individual fields: `full_name`, `date_of_birth`, `nationality`, `passport_number`, `address_line1`, `address_line2`, `city`, `state`, `postal_code`
+   - Institution fields: `institution_name`, `institution_type`, `registration_number`, `legal_representative`
+   - Fund of Funds fields: `fund_name`, `fund_manager`, `aum`
+   - Family Office fields: `office_name`, `family_name`, `principal_contact`, `assets_under_management`
+
+2. **Update foreign key references:**
+   - `structure_investors.investor_id` → references `users.id` (where role=3)
+   - `capital_call_allocations.investor_id` → references `users.id` (where role=3)
+   - `distribution_allocations.investor_id` → references `users.id` (where role=3)
+   - Any other tables referencing `investors.id` should now reference `users.id`
+
+3. **Migrate existing data:**
+   - If you have existing data in an `investors` table, migrate it to the `users` table with `role=3`
+   - Update all foreign key references to point to the new user IDs
+
+4. **Drop deprecated table:**
+   - After confirming all data is migrated and foreign keys are updated, drop the `investors` table
+
+5. **Database function updates:**
+   - Update `get_investor_portfolio_summary` function to work with `users` table where `role=3`
 
 ---
 
@@ -1160,6 +1285,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Returns a capital call with all allocations. The `investorId` in allocations references users with role=3 (INVESTOR).
+
 **Success Response (200):**
 ```json
 {
@@ -1170,7 +1297,7 @@ The API uses authentication middleware that checks for user credentials. Most en
     "totalCallAmount": 5000000,
     "allocations": [
       {
-        "investorId": "investor-id",
+        "investorId": "user-id",
         "amount": 1000000,
         "paidAmount": 1000000,
         "status": "Paid"
@@ -1307,7 +1434,7 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
-**Description:** Automatically creates allocations for all investors in the structure
+**Description:** Automatically creates allocations for all investors (users with role=3) in the structure. The `investorId` in allocations will be the user ID.
 
 **Success Response (201):**
 ```json
@@ -1317,13 +1444,13 @@ The API uses authentication middleware that checks for user credentials. Most en
   "data": [
     {
       "capitalCallId": "capital-call-id",
-      "investorId": "investor-id-1",
+      "investorId": "user-id-1",
       "amount": 2000000,
       "status": "Pending"
     },
     {
       "capitalCallId": "capital-call-id",
-      "investorId": "investor-id-2",
+      "investorId": "user-id-2",
       "amount": 3000000,
       "status": "Pending"
     }
@@ -1463,6 +1590,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Returns a distribution with all allocations. The `investorId` in allocations references users with role=3 (INVESTOR).
+
 **Success Response (200):**
 ```json
 {
@@ -1473,7 +1602,7 @@ The API uses authentication middleware that checks for user credentials. Most en
     "totalAmount": 2000000,
     "allocations": [
       {
-        "investorId": "investor-id",
+        "investorId": "user-id",
         "amount": 400000,
         "status": "Paid"
       }
@@ -1593,6 +1722,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Automatically creates allocations for all investors (users with role=3) in the structure. The `investorId` in allocations will be the user ID.
+
 **Success Response (201):**
 ```json
 {
@@ -1601,7 +1732,7 @@ The API uses authentication middleware that checks for user credentials. Most en
   "data": [
     {
       "distributionId": "distribution-id",
-      "investorId": "investor-id",
+      "investorId": "user-id",
       "amount": 400000,
       "status": "Pending"
     }
@@ -1615,6 +1746,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private (Root/Admin only)
 
+**Description:** Returns total distributions for an investor (user with role=3) in a specific structure. The `investorId` parameter should be the user ID.
+
 **Query Parameters:**
 - `structureId`: Required
 
@@ -1623,7 +1756,7 @@ The API uses authentication middleware that checks for user credentials. Most en
 {
   "success": true,
   "data": {
-    "investorId": "investor-id",
+    "investorId": "user-id",
     "structureId": "structure-id",
     "totalDistributed": 5000000,
     "distributionCount": 12
@@ -1918,17 +2051,21 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 ## Investment Subscriptions API
 
+> **Note:** The `investorId` field in Investment Subscriptions now references `users.id` where `role=3` (INVESTOR), not a separate investors table.
+
 ### 1. Create Investment Subscription
 
 **Endpoint:** `POST /api/investment-subscriptions`
 
 **Access:** Private
 
+**Description:** Creates a subscription linking an investment to an investor (user with role=3).
+
 **Request Body:**
 ```json
 {
   "investmentId": "investment-id",      // Required
-  "investorId": "investor-id",          // Required
+  "investorId": "user-id",              // Required (must be user with role=3)
   "fundId": "fund-id",                  // Required
   "requestedAmount": "500000",          // Required
   "currency": "USD",                    // Required
@@ -1938,6 +2075,7 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Validation Rules:**
 - All required fields must be provided
+- `investorId` must reference a valid user with role=3 (INVESTOR)
 - Fields are trimmed before saving
 - Status defaults to "pending"
 - linkedFundOwnershipCreated defaults to false
@@ -1950,7 +2088,7 @@ The API uses authentication middleware that checks for user credentials. Most en
   "data": {
     "id": "subscription-id",
     "investmentId": "investment-id",
-    "investorId": "investor-id",
+    "investorId": "user-id",
     "fundId": "fund-id",
     "requestedAmount": "500000",
     "currency": "USD",
@@ -2041,6 +2179,8 @@ The API uses authentication middleware that checks for user credentials. Most en
 
 **Access:** Private
 
+**Description:** Returns all subscriptions for an investor. The `investorId` parameter should be the user ID of a user with role=3 (INVESTOR).
+
 **Success Response (200):**
 ```json
 {
@@ -2050,6 +2190,7 @@ The API uses authentication middleware that checks for user credentials. Most en
     {
       "id": "subscription-id",
       "investmentId": "investment-id",
+      "investorId": "user-id",
       "requestedAmount": "500000",
       "status": "pending"
     }

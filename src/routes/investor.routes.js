@@ -5,8 +5,8 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { Investor } = require('../models/supabase');
-const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
+const User = require('../models/supabase/user');
+const { requireInvestmentManagerAccess, ROLES } = require('../middleware/rbac');
 
 const router = express.Router();
 
@@ -16,7 +16,6 @@ const router = express.Router();
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
 
   const {
     investorType,
@@ -64,8 +63,8 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   validate(emailRegex.test(email), 'Invalid email format');
 
   // Check if email already exists
-  const existingInvestor = await Investor.findByEmail(email);
-  validate(!existingInvestor, 'Investor with this email already exists');
+  const existingUser = await User.findByEmail(email);
+  validate(!existingUser, 'User with this email already exists');
 
   // Validate type-specific required fields
   if (investorType === 'Individual') {
@@ -78,8 +77,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     validate(officeName, 'Office name is required');
   }
 
-  // Create investor
+  // Create investor user
   const investorData = {
+    role: ROLES.INVESTOR,
     investorType,
     email: email.toLowerCase(),
     phoneNumber: phoneNumber?.trim() || '',
@@ -89,7 +89,8 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     accreditedInvestor: accreditedInvestor || false,
     riskTolerance: riskTolerance?.trim() || '',
     investmentPreferences: investmentPreferences || {},
-    createdBy: userId
+    firstName: '', // Required by User model
+    isActive: true
   };
 
   // Add type-specific fields
@@ -119,12 +120,12 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     investorData.assetsUnderManagement = assetsUnderManagement || null;
   }
 
-  const investor = await Investor.create(investorData);
+  const user = await User.create(investorData);
 
   res.status(201).json({
     success: true,
     message: 'Investor created successfully',
-    data: investor
+    data: user
   });
 }));
 
@@ -134,22 +135,17 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
   const { investorType, kycStatus, accreditedInvestor } = req.query;
 
-  let filter = {};
-
-  // Role-based filtering: Root sees all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.createdBy = userId;
-  }
-  // Root (role 0) sees all investors, so no userId filter
+  let filter = {
+    role: ROLES.INVESTOR
+  };
 
   if (investorType) filter.investorType = investorType;
   if (kycStatus) filter.kycStatus = kycStatus;
   if (accreditedInvestor !== undefined) filter.accreditedInvestor = accreditedInvestor === 'true';
 
-  const investors = await Investor.find(filter);
+  const investors = await User.find(filter);
 
   res.status(200).json({
     success: true,
@@ -164,26 +160,12 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
  * @access  Private (requires authentication, all roles)
  */
 router.get('/search', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth?.userId || req.user?.id;
-  const userRole = req.auth?.role ?? req.user?.role;
   const { q } = req.query;
 
   validate(q, 'Search query is required');
   validate(q.length >= 2, 'Search query must be at least 2 characters');
 
-  let investors;
-
-  if (userRole === ROLES.ROOT) {
-    // Root can search all investors (pass null as userId)
-    investors = await Investor.search(q, null);
-  } else if (userRole === ROLES.ADMIN) {
-    // Admin can only search their own investors
-    investors = await Investor.search(q, userId);
-  } else {
-    // Other roles (Support, etc.) can search investors they have access to
-    // For now, limiting to their own created investors
-    investors = await Investor.search(q, userId);
-  }
+  const investors = await User.searchInvestors(q);
 
   res.status(200).json({
     success: true,
@@ -195,82 +177,97 @@ router.get('/search', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/:id
  * @desc    Get a single investor by ID
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, Root/Admin/Own investor)
  */
-router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
+router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
+  const requestingUserId = req.auth?.userId || req.user?.id;
+  const requestingUserRole = req.auth?.role ?? req.user?.role;
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  const investor = await Investor.findById(id);
+  const user = await User.findById(id);
 
-  validate(investor, 'Investor not found');
+  validate(user, 'Investor not found');
+  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
 
-  // Root can access any investor, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investor.createdBy === userId, 'Unauthorized access to investor');
-  }
+  // Check access: Root/Admin can access any, Investors can only access their own
+  const hasAccess =
+    requestingUserRole === ROLES.ROOT ||
+    requestingUserRole === ROLES.ADMIN ||
+    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
+
+  validate(hasAccess, 'Unauthorized access to investor data');
 
   res.status(200).json({
     success: true,
-    data: investor
+    data: user
   });
 }));
 
 /**
  * @route   GET /api/investors/:id/with-structures
  * @desc    Get investor with all structures
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, Root/Admin/Own investor)
  */
-router.get('/:id/with-structures', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
+router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
+  const requestingUserId = req.auth?.userId || req.user?.id;
+  const requestingUserRole = req.auth?.role ?? req.user?.role;
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  const investor = await Investor.findById(id);
-  validate(investor, 'Investor not found');
+  const user = await User.findById(id);
+  validate(user, 'Investor not found');
+  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
 
-  // Root can access any investor, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investor.createdBy === userId, 'Unauthorized access to investor');
-  }
+  // Check access: Root/Admin can access any, Investors can only access their own
+  const hasAccess =
+    requestingUserRole === ROLES.ROOT ||
+    requestingUserRole === ROLES.ADMIN ||
+    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
 
-  const investorWithStructures = await Investor.findWithStructures(id);
+  validate(hasAccess, 'Unauthorized access to investor data');
+
+  const userWithStructures = await User.findWithStructures(id);
 
   res.status(200).json({
     success: true,
-    data: investorWithStructures
+    data: userWithStructures
   });
 }));
 
 /**
  * @route   GET /api/investors/:id/portfolio
  * @desc    Get investor portfolio summary
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, Root/Admin/Own investor)
  */
-router.get('/:id/portfolio', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
+router.get('/:id/portfolio', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
+  const requestingUserId = req.auth?.userId || req.user?.id;
+  const requestingUserRole = req.auth?.role ?? req.user?.role;
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  const investor = await Investor.findById(id);
-  validate(investor, 'Investor not found');
+  const user = await User.findById(id);
+  validate(user, 'Investor not found');
+  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
 
-  // Root can access any investor, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investor.createdBy === userId, 'Unauthorized access to investor');
-  }
+  // Check access: Root/Admin can access any, Investors can only access their own
+  const hasAccess =
+    requestingUserRole === ROLES.ROOT ||
+    requestingUserRole === ROLES.ADMIN ||
+    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
 
-  const portfolio = await Investor.getPortfolioSummary(id);
+  validate(hasAccess, 'Unauthorized access to investor data');
+
+  const portfolio = await User.getPortfolioSummary(id);
 
   res.status(200).json({
     success: true,
@@ -284,30 +281,25 @@ router.get('/:id/portfolio', authenticate, requireInvestmentManagerAccess, catch
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  const investor = await Investor.findById(id);
-  validate(investor, 'Investor not found');
-
-  // Root can edit any investor, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investor.createdBy === userId, 'Unauthorized access to investor');
-  }
+  const user = await User.findById(id);
+  validate(user, 'Investor not found');
+  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
 
   // Check if email is being updated
-  if (req.body.email && req.body.email !== investor.email) {
+  if (req.body.email && req.body.email !== user.email) {
     // Validate email format
     const emailRegex = /^\S+@\S+\.\S+$/;
     validate(emailRegex.test(req.body.email), 'Invalid email format');
 
-    // Check if email is already used by another investor
-    const existingInvestor = await Investor.findByEmail(req.body.email);
-    validate(!existingInvestor || existingInvestor.id === id, 'Email already in use by another investor');
+    // Check if email is already used by another user
+    const existingUser = await User.findByEmail(req.body.email);
+    validate(!existingUser || existingUser.id === id, 'Email already in use by another user');
   }
 
   const updateData = {};
@@ -364,12 +356,12 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   validate(Object.keys(updateData).length > 0, 'No valid fields provided for update');
 
-  const updatedInvestor = await Investor.findByIdAndUpdate(id, updateData);
+  const updatedUser = await User.findByIdAndUpdate(id, updateData);
 
   res.status(200).json({
     success: true,
     message: 'Investor updated successfully',
-    data: updatedInvestor
+    data: updatedUser
   });
 }));
 
@@ -379,22 +371,17 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  const investor = await Investor.findById(id);
-  validate(investor, 'Investor not found');
+  const user = await User.findById(id);
+  validate(user, 'Investor not found');
+  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
 
-  // Root can delete any investor, Admin can only delete their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investor.createdBy === userId, 'Unauthorized access to investor');
-  }
-
-  await Investor.findByIdAndDelete(id);
+  await User.findByIdAndDelete(id);
 
   res.status(200).json({
     success: true,

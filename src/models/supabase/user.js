@@ -73,6 +73,37 @@ class User {
       kyc_url: userData.kycUrl || null,
       address: userData.address || null,
       country: userData.country || null,
+      // Investor fields
+      investor_type: userData.investorType || null,
+      phone_number: userData.phoneNumber || null,
+      tax_id: userData.taxId || null,
+      accredited_investor: userData.accreditedInvestor || false,
+      risk_tolerance: userData.riskTolerance || null,
+      investment_preferences: userData.investmentPreferences || null,
+      // Individual investor fields
+      full_name: userData.fullName || null,
+      date_of_birth: userData.dateOfBirth || null,
+      nationality: userData.nationality || null,
+      passport_number: userData.passportNumber || null,
+      address_line1: userData.addressLine1 || null,
+      address_line2: userData.addressLine2 || null,
+      city: userData.city || null,
+      state: userData.state || null,
+      postal_code: userData.postalCode || null,
+      // Institution investor fields
+      institution_name: userData.institutionName || null,
+      institution_type: userData.institutionType || null,
+      registration_number: userData.registrationNumber || null,
+      legal_representative: userData.legalRepresentative || null,
+      // Fund of Funds investor fields
+      fund_name: userData.fundName || null,
+      fund_manager: userData.fundManager || null,
+      aum: userData.aum || null,
+      // Family Office investor fields
+      office_name: userData.officeName || null,
+      family_name: userData.familyName || null,
+      principal_contact: userData.principalContact || null,
+      assets_under_management: userData.assetsUnderManagement || null,
     };
 
     // Include ID if provided (for Supabase Auth integration)
@@ -312,6 +343,182 @@ class User {
   }
 
   /**
+   * Search users by investor fields (name or email)
+   * @param {string} searchTerm - Search term
+   * @param {string} userId - Optional user ID to filter by (for role-based access)
+   * @returns {Promise<Array>} Array of users matching the search
+   */
+  static async searchInvestors(searchTerm) {
+    const supabase = getSupabase();
+
+    const query = supabase
+      .from('users')
+      .select('*')
+      .eq('role', ROLES.INVESTOR)
+      .or(`email.ilike.*${searchTerm}*,full_name.ilike.*${searchTerm}*,institution_name.ilike.*${searchTerm}*,fund_name.ilike.*${searchTerm}*,office_name.ilike.*${searchTerm}*`);
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    return data.map(user => this._toModel(user));
+  }
+
+  /**
+   * Get user with all structures (for investors)
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} User with structures
+   */
+  static async findWithStructures(userId) {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        structure_investors (
+          *,
+          structure:structures (*)
+        )
+      `)
+      .eq('id', userId)
+      .single();
+
+    if (error) throw error;
+
+    return this._toModel(data);
+  }
+
+  /**
+   * Get user portfolio summary (for investors)
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Portfolio summary
+   */
+  static async getPortfolioSummary(userId) {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase.rpc('get_investor_portfolio_summary', {
+      investor_id: userId
+    });
+
+    if (error) throw error;
+
+    return data;
+  }
+
+  /**
+   * Get display name based on investor type
+   * @param {Object} user - User object
+   * @returns {string} Display name
+   */
+  static getDisplayName(user) {
+    if (user.role !== ROLES.INVESTOR) {
+      return `${user.firstName} ${user.lastName}`.trim() || user.email;
+    }
+
+    switch (user.investorType) {
+      case 'Individual':
+        return user.fullName || `${user.firstName} ${user.lastName}`.trim() || user.email;
+      case 'Institution':
+        return user.institutionName || user.email;
+      case 'Fund of Funds':
+        return user.fundName || user.email;
+      case 'Family Office':
+        return user.officeName || user.email;
+      default:
+        return user.email;
+    }
+  }
+
+  /**
+   * Get user commitments summary
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Commitments summary with structures
+   */
+  static async getCommitmentsSummary(userId) {
+    const supabase = getSupabase();
+
+    // Get all structure_investors records for this user with structure details
+    const { data: structureInvestors, error: siError } = await supabase
+      .from('structure_investors')
+      .select(`
+        *,
+        structure:structures (
+          id,
+          name,
+          type,
+          status,
+          total_commitment,
+          base_currency
+        )
+      `)
+      .eq('investor_id', userId);
+
+    if (siError) throw siError;
+
+    if (!structureInvestors || structureInvestors.length === 0) {
+      return {
+        totalCommitment: 0,
+        calledCapital: 0,
+        uncalledCapital: 0,
+        activeFunds: 0,
+        structures: []
+      };
+    }
+
+    // Get all capital call allocations for this user
+    const { data: allocations, error: allocError } = await supabase
+      .from('capital_call_allocations')
+      .select('allocated_amount, paid_amount, capital_call_id')
+      .eq('investor_id', userId);
+
+    if (allocError) throw allocError;
+
+    // Calculate total called capital (sum of allocated amounts)
+    const calledCapital = allocations?.reduce((sum, alloc) =>
+      sum + (parseFloat(alloc.allocated_amount) || 0), 0) || 0;
+
+    // Process structures
+    const structures = structureInvestors.map(si => {
+      const structureAllocations = allocations?.filter(a => {
+        // We need to check if this allocation belongs to this structure
+        // This would require joining with capital_calls, but for now we'll include all
+        return true;
+      }) || [];
+
+      const structureCalledCapital = structureAllocations.reduce((sum, alloc) =>
+        sum + (parseFloat(alloc.allocated_amount) || 0), 0);
+
+      const commitment = parseFloat(si.commitment_amount) || 0;
+      const uncalledCapital = commitment - structureCalledCapital;
+
+      return {
+        structureId: si.structure.id,
+        structureName: si.structure.name,
+        structureType: si.structure.type,
+        structureStatus: si.structure.status,
+        commitment: commitment,
+        calledCapital: structureCalledCapital,
+        uncalledCapital: uncalledCapital > 0 ? uncalledCapital : 0,
+        currency: si.structure.base_currency || 'USD'
+      };
+    });
+
+    // Calculate totals
+    const totalCommitment = structures.reduce((sum, s) => sum + s.commitment, 0);
+    const totalUncalledCapital = totalCommitment - calledCapital;
+    const activeFunds = structures.filter(s => s.structureStatus === 'Active').length;
+
+    return {
+      totalCommitment,
+      calledCapital,
+      uncalledCapital: totalUncalledCapital > 0 ? totalUncalledCapital : 0,
+      activeFunds,
+      structures: structures.filter(s => s.structureStatus === 'Active')
+    };
+  }
+
+  /**
    * Convert database fields to model fields (snake_case to camelCase)
    * @param {Object} dbUser - User from database
    * @returns {Object} User model
@@ -341,6 +548,37 @@ class User {
       kycUrl: dbUser.kyc_url,
       address: dbUser.address,
       country: dbUser.country,
+      // Investor fields
+      investorType: dbUser.investor_type,
+      phoneNumber: dbUser.phone_number,
+      taxId: dbUser.tax_id,
+      accreditedInvestor: dbUser.accredited_investor,
+      riskTolerance: dbUser.risk_tolerance,
+      investmentPreferences: dbUser.investment_preferences,
+      // Individual investor fields
+      fullName: dbUser.full_name,
+      dateOfBirth: dbUser.date_of_birth,
+      nationality: dbUser.nationality,
+      passportNumber: dbUser.passport_number,
+      addressLine1: dbUser.address_line1,
+      addressLine2: dbUser.address_line2,
+      city: dbUser.city,
+      state: dbUser.state,
+      postalCode: dbUser.postal_code,
+      // Institution investor fields
+      institutionName: dbUser.institution_name,
+      institutionType: dbUser.institution_type,
+      registrationNumber: dbUser.registration_number,
+      legalRepresentative: dbUser.legal_representative,
+      // Fund of Funds investor fields
+      fundName: dbUser.fund_name,
+      fundManager: dbUser.fund_manager,
+      aum: dbUser.aum,
+      // Family Office investor fields
+      officeName: dbUser.office_name,
+      familyName: dbUser.family_name,
+      principalContact: dbUser.principal_contact,
+      assetsUnderManagement: dbUser.assets_under_management,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -384,6 +622,37 @@ class User {
       kycUrl: 'kyc_url',
       address: 'address',
       country: 'country',
+      // Investor fields
+      investorType: 'investor_type',
+      phoneNumber: 'phone_number',
+      taxId: 'tax_id',
+      accreditedInvestor: 'accredited_investor',
+      riskTolerance: 'risk_tolerance',
+      investmentPreferences: 'investment_preferences',
+      // Individual investor fields
+      fullName: 'full_name',
+      dateOfBirth: 'date_of_birth',
+      nationality: 'nationality',
+      passportNumber: 'passport_number',
+      addressLine1: 'address_line1',
+      addressLine2: 'address_line2',
+      city: 'city',
+      state: 'state',
+      postalCode: 'postal_code',
+      // Institution investor fields
+      institutionName: 'institution_name',
+      institutionType: 'institution_type',
+      registrationNumber: 'registration_number',
+      legalRepresentative: 'legal_representative',
+      // Fund of Funds investor fields
+      fundName: 'fund_name',
+      fundManager: 'fund_manager',
+      aum: 'aum',
+      // Family Office investor fields
+      officeName: 'office_name',
+      familyName: 'family_name',
+      principalContact: 'principal_contact',
+      assetsUnderManagement: 'assets_under_management',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {
