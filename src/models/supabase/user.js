@@ -355,7 +355,7 @@ class User {
       .from('users')
       .select('*')
       .eq('role', ROLES.INVESTOR)
-      .or(`email.ilike.*${searchTerm}*,full_name.ilike.*${searchTerm}*,institution_name.ilike.*${searchTerm}*,fund_name.ilike.*${searchTerm}*,office_name.ilike.*${searchTerm}*`);
+      .or(`email.ilike.*${searchTerm}*,first_name.ilike.*${searchTerm}*,last_name.ilike.*${searchTerm}*`);
 
     const { data, error } = await query;
 
