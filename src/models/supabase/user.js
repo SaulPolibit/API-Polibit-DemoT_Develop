@@ -372,8 +372,18 @@ class User {
   static async findWithStructures(userId) {
     const supabase = getSupabase();
 
-    const { data, error } = await supabase
+    // Get the user first
+    const { data: user, error: userError } = await supabase
       .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (userError) throw userError;
+
+    // Find investor record by email (investors table is separate from users)
+    const { data: investor, error: investorError } = await supabase
+      .from('investors')
       .select(`
         *,
         structure_investors (
@@ -381,12 +391,22 @@ class User {
           structure:structures (*)
         )
       `)
-      .eq('id', userId)
+      .eq('email', user.email)
       .single();
 
-    if (error) throw error;
+    // If investor not found, return user without structures
+    if (investorError || !investor) {
+      return {
+        ...this._toModel(user),
+        structure_investors: []
+      };
+    }
 
-    return this._toModel(data);
+    // Merge user data with investor's structure_investors
+    return {
+      ...this._toModel(user),
+      structure_investors: investor.structure_investors
+    };
   }
 
   /**
@@ -397,8 +417,29 @@ class User {
   static async getPortfolioSummary(userId) {
     const supabase = getSupabase();
 
+    // Get the user first
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (userError) throw userError;
+
+    // Find investor record by email (investors table is separate from users)
+    const { data: investor, error: investorError } = await supabase
+      .from('investors')
+      .select('id')
+      .eq('email', user.email)
+      .single();
+
+    // If investor not found, return empty portfolio
+    if (investorError || !investor) {
+      return null;
+    }
+
     const { data, error } = await supabase.rpc('get_investor_portfolio_summary', {
-      investor_id: userId
+      investor_id: investor.id
     });
 
     if (error) throw error;
@@ -438,7 +479,34 @@ class User {
   static async getCommitmentsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all structure_investors records for this user with structure details
+    // Get the user first
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (userError) throw userError;
+
+    // Find investor record by email (investors table is separate from users)
+    const { data: investor, error: investorError } = await supabase
+      .from('investors')
+      .select('id')
+      .eq('email', user.email)
+      .single();
+
+    // If investor not found, return empty commitments
+    if (investorError || !investor) {
+      return {
+        totalCommitment: 0,
+        calledCapital: 0,
+        uncalledCapital: 0,
+        activeFunds: 0,
+        structures: []
+      };
+    }
+
+    // Get all structure_investors records for this investor with structure details
     const { data: structureInvestors, error: siError } = await supabase
       .from('structure_investors')
       .select(`
@@ -452,7 +520,7 @@ class User {
           base_currency
         )
       `)
-      .eq('investor_id', userId);
+      .eq('investor_id', investor.id);
 
     if (siError) throw siError;
 
@@ -466,7 +534,7 @@ class User {
       };
     }
 
-    // Get all capital call allocations for this user with structure info
+    // Get all capital call allocations for this investor with structure info
     const { data: allocations, error: allocError } = await supabase
       .from('capital_call_allocations')
       .select(`
@@ -476,7 +544,7 @@ class User {
           structure_id
         )
       `)
-      .eq('investor_id', userId);
+      .eq('investor_id', investor.id);
 
     if (allocError) throw allocError;
 
