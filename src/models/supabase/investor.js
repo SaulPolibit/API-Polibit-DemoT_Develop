@@ -1,5 +1,13 @@
 /**
- * Investor Supabase Model
+ * @deprecated This model is deprecated. Investor data has been merged into the User model.
+ * Use the User model (src/models/supabase/user.js) instead for all investor-related operations.
+ *
+ * IMPORTANT: This file is kept for backward compatibility only and may be removed in a future version.
+ * All investor fields are now part of the users table, and all investor_id references have been
+ * changed to user_id in related tables (structure_investors, capital_call_allocations,
+ * distribution_allocations, investment_subscriptions).
+ *
+ * Investor Supabase Model (DEPRECATED)
  * Handles Individual, Institution, Fund of Funds, and Family Office investors
  */
 

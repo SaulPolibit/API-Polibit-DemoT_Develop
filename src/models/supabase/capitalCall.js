@@ -156,10 +156,10 @@ class CapitalCall {
   }
 
   /**
-   * Find capital calls by investor ID
-   * Gets all capital calls that have allocations for the specified investor
+   * Find capital calls by user ID (investor)
+   * Gets all capital calls that have allocations for the specified user
    */
-  static async findByInvestorId(investorId) {
+  static async findByInvestorId(userId) {
     const supabase = getSupabase();
 
     const { data, error } = await supabase
@@ -167,14 +167,14 @@ class CapitalCall {
       .select(`
         *,
         capital_call_allocations!inner (
-          investor_id
+          user_id
         )
       `)
-      .eq('capital_call_allocations.investor_id', investorId)
+      .eq('capital_call_allocations.user_id', userId)
       .order('call_date', { ascending: false });
 
     if (error) {
-      throw new Error(`Error finding capital calls by investor: ${error.message}`);
+      throw new Error(`Error finding capital calls by user: ${error.message}`);
     }
 
     return data.map(item => this._toModel(item));
@@ -233,7 +233,7 @@ class CapitalCall {
         *,
         capital_call_allocations (
           *,
-          investor:investors (*)
+          user:users (*)
         )
       `)
       .eq('id', capitalCallId)
@@ -339,7 +339,7 @@ class CapitalCall {
 
       return {
         capital_call_id: capitalCallId,
-        investor_id: si.investor_id,
+        user_id: si.user_id,
         allocated_amount: allocationAmount,
         paid_amount: 0,
         remaining_amount: allocationAmount,

@@ -14,7 +14,8 @@ class InvestmentSubscription {
     const fieldMap = {
       id: 'id',
       investmentId: 'investment_id',
-      investorId: 'investor_id',
+      investorId: 'user_id',
+      userId: 'user_id',
       fundId: 'fund_id',
       requestedAmount: 'requested_amount',
       currency: 'currency',
@@ -46,7 +47,8 @@ class InvestmentSubscription {
     return {
       id: dbData.id,
       investmentId: dbData.investment_id,
-      investorId: dbData.investor_id,
+      userId: dbData.user_id,
+      investorId: dbData.user_id, // Keep for backward compatibility
       fundId: dbData.fund_id,
       requestedAmount: dbData.requested_amount,
       currency: dbData.currency,
@@ -117,20 +119,27 @@ class InvestmentSubscription {
   }
 
   /**
-   * Find subscriptions by investor ID
+   * Find subscriptions by user ID (investor)
    */
-  static async findByInvestorId(investorId) {
+  static async findByInvestorId(userId) {
     const supabase = getSupabase();
 
     const { data, error } = await supabase
       .from('investment_subscriptions')
       .select('*')
-      .eq('investor_id', investorId)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
     return data.map(item => this._toModel(item));
+  }
+
+  /**
+   * Alias for findByInvestorId
+   */
+  static async findByUserId(userId) {
+    return this.findByInvestorId(userId);
   }
 
   /**

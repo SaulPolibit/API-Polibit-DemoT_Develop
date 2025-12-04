@@ -275,7 +275,7 @@ class Structure {
         *,
         structure_investors (
           *,
-          investor:investors (*)
+          user:users (*)
         )
       `)
       .eq('id', structureId)

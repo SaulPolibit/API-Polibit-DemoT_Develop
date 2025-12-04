@@ -230,7 +230,7 @@ class Distribution {
         *,
         distribution_allocations (
           *,
-          investor:investors (*)
+          user:users (*)
         )
       `)
       .eq('id', distributionId)
@@ -347,7 +347,7 @@ class Distribution {
 
         return {
           distribution_id: distributionId,
-          investor_id: si.investor_id,
+          user_id: si.user_id,
           allocated_amount: allocationAmount,
           paid_amount: 0,
           status: 'Pending',
@@ -372,11 +372,11 @@ class Distribution {
   /**
    * Calculate total distributions for investors
    */
-  static async getInvestorDistributionTotal(investorId, structureId) {
+  static async getInvestorDistributionTotal(userId, structureId) {
     const supabase = getSupabase();
 
     const { data, error } = await supabase.rpc('get_investor_distribution_total', {
-      p_investor_id: investorId,
+      p_user_id: userId,
       p_structure_id: structureId
     });
 

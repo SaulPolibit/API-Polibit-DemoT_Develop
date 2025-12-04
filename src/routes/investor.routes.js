@@ -310,10 +310,75 @@ router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
   res.status(200).json({
     success: true,
     data: {
-      investorId: user.id,
-      investorName: investorName,
-      investorEmail: user.email,
+      userId: user.id,
+      userName: investorName,
+      userEmail: user.email,
       ...commitments
+    }
+  });
+}));
+
+/**
+ * @route   GET /api/investors/me/capital-calls-summary
+ * @desc    Get authenticated user's capital calls summary (Total Called, Total Paid, Outstanding, Total Calls)
+ * @access  Private (requires authentication, Investor role)
+ */
+router.get('/me/capital-calls-summary', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const userRole = req.auth?.role ?? req.user?.role;
+
+  // Verify user is an investor
+  validate(userRole === ROLES.INVESTOR, 'This endpoint is only accessible to investors');
+
+  const capitalCallsData = await User.getCapitalCallsSummary(userId);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalCalled: capitalCallsData.summary.totalCalled,
+      totalPaid: capitalCallsData.summary.totalPaid,
+      outstanding: capitalCallsData.summary.outstanding,
+      totalCalls: capitalCallsData.summary.totalCalls
+    }
+  });
+}));
+
+/**
+ * @route   GET /api/investors/:id/capital-calls/summary
+ * @desc    Get investor capital calls summary (Total Called, Total Paid, Outstanding, Total Calls)
+ * @access  Private (requires authentication, Root/Admin/Support/Own investor)
+ */
+router.get('/:id/capital-calls/summary', authenticate, catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const requestingUserId = req.auth?.userId || req.user?.id;
+  const requestingUserRole = req.auth?.role ?? req.user?.role;
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  validate(uuidRegex.test(id), 'Invalid investor ID format');
+
+  const user = await User.findById(id);
+  validate(user, 'Investor not found');
+  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
+
+  // Check access: Root/Admin/Support can access any, Investors can only access their own
+  const hasAccess =
+    requestingUserRole === ROLES.ROOT ||
+    requestingUserRole === ROLES.ADMIN ||
+    requestingUserRole === ROLES.SUPPORT ||
+    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
+
+  validate(hasAccess, 'Unauthorized access to investor data');
+
+  const capitalCallsData = await User.getCapitalCallsSummary(id);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalCalled: capitalCallsData.summary.totalCalled,
+      totalPaid: capitalCallsData.summary.totalPaid,
+      outstanding: capitalCallsData.summary.outstanding,
+      totalCalls: capitalCallsData.summary.totalCalls
     }
   });
 }));
@@ -353,9 +418,9 @@ router.get('/:id/capital-calls', authenticate, catchAsync(async (req, res) => {
   res.status(200).json({
     success: true,
     data: {
-      investorId: user.id,
-      investorName: investorName,
-      investorEmail: user.email,
+      userId: user.id,
+      userName: investorName,
+      userEmail: user.email,
       ...capitalCallsData
     }
   });

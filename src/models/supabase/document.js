@@ -208,10 +208,10 @@ class Document {
   }
 
   /**
-   * Find documents by investor
+   * Find documents by investor (user with investor role)
    */
-  static async findByInvestor(investorId) {
-    return this.findByEntity('Investor', investorId);
+  static async findByInvestor(userId) {
+    return this.findByEntity('Investor', userId);
   }
 
   /**
