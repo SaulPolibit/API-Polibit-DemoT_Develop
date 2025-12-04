@@ -583,14 +583,18 @@ class User {
           purpose
         )
       `)
-      .eq('user_id', userId)
-      .order('capital_call.call_date', { ascending: false });
+      .eq('user_id', userId);
 
     if (allocError) throw allocError;
 
-    // Process capital calls
+    // Process capital calls and sort by call_date
     const capitalCalls = (allocations || [])
       .filter(alloc => alloc.capital_call)
+      .sort((a, b) => {
+        const dateA = new Date(a.capital_call.call_date);
+        const dateB = new Date(b.capital_call.call_date);
+        return dateB - dateA; // Sort descending (newest first)
+      })
       .map(alloc => {
         const structure = structures.find(s => s.id === alloc.capital_call.structure_id);
         return {
