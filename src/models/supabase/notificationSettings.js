@@ -218,6 +218,32 @@ class NotificationSettings {
   }
 
   /**
+   * Find one and delete by criteria
+   * @param {Object} criteria - Search criteria
+   * @returns {Promise<Object|null>} Deleted settings or null
+   */
+  static async findOneAndDelete(criteria) {
+    const supabase = getSupabase();
+
+    const dbCriteria = this._toDbFields(criteria);
+
+    let query = supabase.from('notification_settings').delete().select();
+
+    Object.entries(dbCriteria).forEach(([key, value]) => {
+      query = query.eq(key, value);
+    });
+
+    const { data, error } = await query.single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw error;
+    }
+
+    return this._toModel(data);
+  }
+
+  /**
    * Convert database fields to model fields
    * @param {Object} dbSettings - Settings from database
    * @returns {Object} Settings model

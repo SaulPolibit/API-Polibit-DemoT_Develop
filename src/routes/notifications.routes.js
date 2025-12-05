@@ -59,7 +59,10 @@ router.put('/settings', authenticate, catchAsync(async (req, res) => {
     'systemUpdateNotifications',
     'marketingEmailNotifications',
     'pushNotifications',
-    'smsNotifications'
+    'smsNotifications',
+    'notificationFrequency',
+    'preferredContactMethod',
+    'reportDeliveryFormat'
   ];
 
   const updates = {};
