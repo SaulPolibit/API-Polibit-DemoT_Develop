@@ -74,6 +74,9 @@ class User {
       address: userData.addressLine1 || userData.address || null,
       country: userData.country || null,
       address_line2: userData.addressLine2 || null,
+      city: userData.city || null,
+      state: userData.state || null,
+      postal_code: userData.postalCode || null,
       // Investor fields
       investor_type: userData.investorType || null,
       phone_number: userData.phoneNumber || null,
@@ -656,6 +659,9 @@ class User {
       kycUrl: dbUser.kyc_url,
       addressLine1: dbUser.address,
       addressLine2: dbUser.address_line2,
+      city: dbUser.city,
+      state: dbUser.state,
+      postalCode: dbUser.postal_code,
       country: dbUser.country,
       // Investor fields
       investorType: dbUser.investor_type,
@@ -726,6 +732,9 @@ class User {
       kycUrl: 'kyc_url',
       addressLine1: 'address',
       addressLine2: 'address_line2',
+      city: 'city',
+      state: 'state',
+      postalCode: 'postal_code',
       country: 'country',
       // Investor fields
       investorType: 'investor_type',
