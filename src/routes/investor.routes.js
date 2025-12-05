@@ -34,9 +34,6 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     passportNumber,
     addressLine1,
     addressLine2,
-    city,
-    state,
-    postalCode,
     // Institution fields
     institutionName,
     institutionType,
@@ -101,9 +98,6 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     investorData.passportNumber = passportNumber?.trim() || '';
     investorData.addressLine1 = addressLine1?.trim() || '';
     investorData.addressLine2 = addressLine2?.trim() || '';
-    investorData.city = city?.trim() || '';
-    investorData.state = state?.trim() || '';
-    investorData.postalCode = postalCode?.trim() || '';
   } else if (investorType === 'Institution') {
     investorData.institutionName = institutionName.trim();
     investorData.institutionType = institutionType?.trim() || '';
@@ -351,7 +345,7 @@ router.put('/me', authenticate, catchAsync(async (req, res) => {
     'riskTolerance', 'investmentPreferences',
     // Individual fields
     'fullName', 'dateOfBirth', 'nationality', 'passportNumber',
-    'addressLine1', 'addressLine2', 'city', 'state', 'postalCode',
+    'addressLine1', 'addressLine2',
     // Institution fields
     'institutionName', 'institutionType', 'registrationNumber', 'legalRepresentative',
     // Fund of Funds fields
@@ -589,7 +583,7 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
     'riskTolerance', 'investmentPreferences', 'investorType',
     // Individual fields
     'fullName', 'dateOfBirth', 'nationality', 'passportNumber',
-    'addressLine1', 'addressLine2', 'city', 'state', 'postalCode',
+    'addressLine1', 'addressLine2',
     // Institution fields
     'institutionName', 'institutionType', 'registrationNumber', 'legalRepresentative',
     // Fund of Funds fields
