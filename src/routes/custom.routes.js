@@ -670,18 +670,16 @@ router.put('/user/profile', authenticate, catchAsync(async (req, res) => {
     updateData.password = newPassword;
   }
 
-  // Update other fields if provided
-  if (firstName !== undefined) {
-    validate(firstName.trim().length > 0, 'firstName cannot be empty');
+  // Update other fields if provided and not empty
+  if (firstName !== undefined && firstName !== null && firstName.trim().length > 0) {
     updateData.firstName = firstName.trim();
   }
 
-  if (lastName !== undefined) {
+  if (lastName !== undefined && lastName !== null && lastName.trim().length > 0) {
     updateData.lastName = lastName.trim();
   }
 
-  if (email !== undefined) {
-    validate(email.trim().length > 0, 'email cannot be empty');
+  if (email !== undefined && email !== null && email.trim().length > 0) {
     const emailRegex = /^\S+@\S+\.\S+$/;
     validate(emailRegex.test(email), 'Please provide a valid email');
 
@@ -715,24 +713,24 @@ router.put('/user/profile', authenticate, catchAsync(async (req, res) => {
     updateData.appLanguage = appLanguage;
   }
 
-  // Update KYC and location fields if provided (all optional)
-  if (kycId !== undefined) {
+  // Update KYC and location fields if provided (all optional, skip empty strings)
+  if (kycId !== undefined && kycId !== null && kycId !== '') {
     updateData.kycId = kycId;
   }
 
-  if (kycStatus !== undefined) {
+  if (kycStatus !== undefined && kycStatus !== null && kycStatus !== '') {
     updateData.kycStatus = kycStatus;
   }
 
-  if (kycUrl !== undefined) {
+  if (kycUrl !== undefined && kycUrl !== null && kycUrl !== '') {
     updateData.kycUrl = kycUrl;
   }
 
-  if (address !== undefined) {
+  if (address !== undefined && address !== null && address !== '') {
     updateData.address = address;
   }
 
-  if (country !== undefined) {
+  if (country !== undefined && country !== null && country !== '') {
     updateData.country = country;
   }
 
