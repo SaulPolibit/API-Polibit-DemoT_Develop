@@ -168,6 +168,95 @@ router.get('/all', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 }));
 
 /**
+ * @route   GET /api/documents/combined
+ * @desc    Get both user documents and structure documents in a single request
+ * @access  Private (requires authentication)
+ *
+ * @query {string} [documentType] - Filter by document type (optional)
+ * @query {boolean} [isActive] - Filter by active status (optional)
+ *
+ * @success {200} Success Response
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "userDocuments": [
+ *       {
+ *         "id": "doc-uuid",
+ *         "entityType": "Investor",
+ *         "entityId": "entity-uuid",
+ *         "documentType": "ID",
+ *         "documentName": "Passport",
+ *         "filePath": "https://storage.url/file.pdf",
+ *         "fileSize": 1024567,
+ *         "mimeType": "application/pdf",
+ *         "uploadedBy": "user-uuid",
+ *         "version": 1,
+ *         "isActive": true,
+ *         "createdAt": "2025-12-05T10:30:00Z"
+ *       }
+ *     ],
+ *     "structureDocuments": [
+ *       {
+ *         "id": "doc-uuid-2",
+ *         "entityType": "Structure",
+ *         "entityId": "structure-uuid",
+ *         "documentType": "Agreement",
+ *         "documentName": "Partnership Agreement",
+ *         "filePath": "https://storage.url/agreement.pdf",
+ *         "fileSize": 2048567,
+ *         "mimeType": "application/pdf",
+ *         "uploadedBy": "user-uuid",
+ *         "version": 1,
+ *         "isActive": true,
+ *         "createdAt": "2025-12-05T11:30:00Z"
+ *       }
+ *     ]
+ *   },
+ *   "counts": {
+ *     "userDocuments": 1,
+ *     "structureDocuments": 1,
+ *     "total": 2
+ *   }
+ * }
+ *
+ * @error {401} Unauthorized - No authentication token
+ * {
+ *   "success": false,
+ *   "message": "Authentication required"
+ * }
+ */
+router.get('/combined', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth.userId || req.user.id;
+  const { documentType, isActive } = req.query;
+
+  // Build base filter
+  let baseFilter = { userId };
+  if (documentType) baseFilter.documentType = documentType;
+  if (isActive !== undefined) baseFilter.isActive = isActive === 'true';
+
+  // Get all user documents (excluding structures)
+  const userFilter = { ...baseFilter };
+  const userDocuments = await Document.find(userFilter);
+
+  // Separate user documents from structure documents
+  const structureDocuments = userDocuments.filter(doc => doc.entityType === 'Structure');
+  const otherUserDocuments = userDocuments.filter(doc => doc.entityType !== 'Structure');
+
+  res.status(200).json({
+    success: true,
+    data: {
+      userDocuments: otherUserDocuments,
+      structureDocuments: structureDocuments
+    },
+    counts: {
+      userDocuments: otherUserDocuments.length,
+      structureDocuments: structureDocuments.length,
+      total: userDocuments.length
+    }
+  });
+}));
+
+/**
  * @route   GET /api/documents
  * @desc    Get all documents for authenticated user
  * @access  Private (requires authentication)
