@@ -43,21 +43,8 @@ if (!isVercel) {
   ensureDir(documentsDir);
 }
 
-// Configure storage for profile images
-const profileStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    ensureDir(profilesDir);
-    cb(null, profilesDir);
-  },
-  filename: function (req, file, cb) {
-    // Generate unique filename: userId_timestamp.extension
-    const userId = req.auth?.userId || req.user?.id || 'unknown';
-    const timestamp = Date.now();
-    const ext = path.extname(file.originalname);
-    const filename = `profile_${userId}_${timestamp}${ext}`;
-    cb(null, filename);
-  }
-});
+// Configure storage for profile images (use memory storage for Supabase)
+const profileStorage = multer.memoryStorage();
 
 // File filter to accept only images
 const imageFilter = (req, file, cb) => {

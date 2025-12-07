@@ -11,8 +11,8 @@ const {
   NotFoundError
 } = require('../middleware/errorHandler');
 const { User, MFAFactor } = require('../models/supabase');
-const { uploadProfileImage, deleteOldProfileImage } = require('../middleware/upload');
-const { getFullImageUrl } = require('../utils/helpers');
+const { uploadProfileImage } = require('../middleware/upload');
+const { uploadToSupabase, deleteFromSupabase } = require('../utils/fileUpload');
 const { getSupabase } = require('../config/database');
 
 const router = express.Router();
@@ -100,7 +100,7 @@ router.post('/login', catchAsync(async (req, res) => {
       lastName: user.lastName,
       phoneNumber: user.phoneNumber,
       appLanguage: user.appLanguage,
-      profileImage: getFullImageUrl(user.profileImage, req),
+      profileImage: user.profileImage,
       role: user.role,
       lastLogin: updatedUser.lastLogin,
       kycId: user.kycId,
@@ -596,7 +596,7 @@ router.post('/register', authenticate, catchAsync(async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       appLanguage: user.appLanguage,
-      profileImage: getFullImageUrl(user.profileImage, req),
+      profileImage: user.profileImage,
       role: user.role,
       kycId: user.kycId,
       kycStatus: user.kycStatus,
@@ -657,7 +657,7 @@ router.get('/user/profile', authenticate, catchAsync(async (req, res) => {
     success: true,
     user: {
       id: user.id,
-      profileImage: getFullImageUrl(user.profileImage, req),
+      profileImage: user.profileImage || null,
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       email: user.email || '',
@@ -851,7 +851,7 @@ router.put('/user/profile', authenticate, catchAsync(async (req, res) => {
       firstName: updatedUser.firstName,
       lastName: updatedUser.lastName,
       appLanguage: updatedUser.appLanguage,
-      profileImage: getFullImageUrl(updatedUser.profileImage, req),
+      profileImage: updatedUser.profileImage,
       role: updatedUser.role,
       kycId: updatedUser.kycId,
       kycStatus: updatedUser.kycStatus,
@@ -891,25 +891,42 @@ router.post('/user/profile-image', authenticate, uploadProfileImage.single('prof
     });
   }
 
-  // Delete old profile image if exists
+  // Delete old profile image from Supabase Storage if exists
   if (user.profileImage) {
-    deleteOldProfileImage(user.profileImage);
+    try {
+      // Extract path from Supabase URL if it's a full URL
+      if (user.profileImage.includes('supabase')) {
+        const urlParts = user.profileImage.split('/documents/');
+        if (urlParts[1]) {
+          await deleteFromSupabase(urlParts[1]);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting old profile image:', error);
+      // Continue with upload even if delete fails
+    }
   }
 
-  // Save new profile image path (relative path)
-  const imagePath = `/uploads/profiles/${req.file.filename}`;
+  // Upload to Supabase Storage
+  const uploadResult = await uploadToSupabase(
+    req.file.buffer,
+    req.file.originalname,
+    req.file.mimetype,
+    'profiles'
+  );
 
+  // Save Supabase public URL to database
   const updatedUser = await User.findByIdAndUpdate(userId, {
-    profileImage: imagePath
+    profileImage: uploadResult.publicUrl
   });
 
   res.status(200).json({
     success: true,
     message: 'Profile image uploaded successfully',
     data: {
-      profileImage: getFullImageUrl(updatedUser.profileImage, req),
-      filename: req.file.filename,
-      size: req.file.size,
+      profileImage: updatedUser.profileImage,
+      filename: uploadResult.fileName,
+      size: uploadResult.size,
       mimetype: req.file.mimetype
     }
   });
@@ -940,8 +957,19 @@ router.delete('/user/profile-image', authenticate, catchAsync(async (req, res) =
     });
   }
 
-  // Delete the image file
-  deleteOldProfileImage(user.profileImage);
+  // Delete the image from Supabase Storage
+  try {
+    // Extract path from Supabase URL if it's a full URL
+    if (user.profileImage.includes('supabase')) {
+      const urlParts = user.profileImage.split('/documents/');
+      if (urlParts[1]) {
+        await deleteFromSupabase(urlParts[1]);
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting profile image from storage:', error);
+    // Continue to remove from database even if storage delete fails
+  }
 
   // Remove from database
   await User.findByIdAndUpdate(userId, {
