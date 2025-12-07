@@ -3,8 +3,26 @@
  * Handles file uploads to Supabase Storage
  */
 
-const { getSupabase } = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+require('dotenv').config();
+
+// Create admin client for storage operations (bypasses RLS)
+const getStorageClient = () => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase credentials for storage operations');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+};
 
 /**
  * Upload file to Supabase Storage
@@ -15,7 +33,7 @@ const path = require('path');
  * @returns {Object} - Upload result with public URL
  */
 async function uploadToSupabase(fileBuffer, originalName, mimeType, folder = 'documents') {
-  const supabase = getSupabase();
+  const supabase = getStorageClient();
 
   // Generate unique filename with timestamp
   const timestamp = Date.now();
@@ -56,7 +74,7 @@ async function uploadToSupabase(fileBuffer, originalName, mimeType, folder = 'do
  * @returns {boolean} - Success status
  */
 async function deleteFromSupabase(filePath) {
-  const supabase = getSupabase();
+  const supabase = getStorageClient();
 
   const { error } = await supabase.storage
     .from('documents')
@@ -75,7 +93,7 @@ async function deleteFromSupabase(filePath) {
  * @returns {string} - Public URL
  */
 function getFilePublicUrl(filePath) {
-  const supabase = getSupabase();
+  const supabase = getStorageClient();
 
   const { data: { publicUrl } } = supabase.storage
     .from('documents')
