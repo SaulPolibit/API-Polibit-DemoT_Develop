@@ -266,10 +266,10 @@ router.get('/:id/with-investors', authenticate, requireInvestmentManagerAccess, 
 
 /**
  * @route   PUT /api/structures/:id
- * @desc    Update a structure
+ * @desc    Update a structure (with optional banner image)
  * @access  Private (Root/Admin only - Support cannot edit structures)
  */
-router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructureBannerUpload, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
@@ -280,6 +280,18 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
   const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
   validate(canEdit, 'Unauthorized: Only admins can edit structures');
 
+  // Handle banner image upload if provided
+  let bannerImageUrl = null;
+  if (req.file) {
+    try {
+      const fileName = `structure-banner-${userId}-${Date.now()}.${req.file.mimetype.split('/')[1]}`;
+      bannerImageUrl = await uploadToSupabase(req.file.buffer, fileName, 'structure-banners', req.file.mimetype);
+      console.log('Banner image uploaded to Supabase:', bannerImageUrl);
+    } catch (error) {
+      console.error('Error uploading banner image:', error);
+      // Continue without banner image if upload fails
+    }
+  }
 
   const updateData = {};
   const allowedFields = [
@@ -296,6 +308,11 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
     if (req.body[field] !== undefined) {
       updateData[field] = req.body[field];
     }
+  }
+
+  // If a new banner image was uploaded, override the bannerImage field
+  if (bannerImageUrl) {
+    updateData.bannerImage = bannerImageUrl;
   }
 
   validate(Object.keys(updateData).length > 0, 'No valid fields provided for update');
