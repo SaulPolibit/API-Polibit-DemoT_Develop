@@ -6,7 +6,6 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
 const { getSupabase } = require('../config/database');
-const { emitNewConversation, emitConversationDeleted } = require('../config/socket');
 const {
   Conversation,
   ConversationParticipant,
@@ -202,9 +201,6 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
     participants: participantDetails.filter(p => p !== null)
   };
 
-  // Emit socket notification to all participants (including creator)
-  emitNewConversation(allParticipantIds, conversationData);
-
   res.status(201).json({
     success: true,
     message: 'Conversation created successfully',
@@ -272,9 +268,6 @@ router.delete('/:id', authenticate, catchAsync(async (req, res) => {
 
   // Delete the conversation (cascade will delete participants and messages)
   await Conversation.findByIdAndDelete(id);
-
-  // Emit socket notification to all participants
-  emitConversationDeleted(participantIds, id);
 
   res.status(200).json({
     success: true,

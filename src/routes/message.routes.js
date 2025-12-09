@@ -14,11 +14,6 @@ const {
   Conversation,
   ConversationParticipant
 } = require('../models/supabase');
-const {
-  emitNewMessage,
-  emitMessageRead,
-  emitMessageDeleted
-} = require('../config/socket');
 
 const router = express.Router();
 const { ROLES } = require('../models/supabase/user');
@@ -245,9 +240,6 @@ router.post('/:conversationId/messages', authenticate, handleChatAttachmentUploa
     updatedAt: new Date().toISOString()
   });
 
-  // Emit Socket.IO event to notify other participants
-  emitNewMessage(conversationId, message);
-
   res.status(201).json({
     success: true,
     message: 'Message sent successfully',
@@ -364,9 +356,6 @@ router.post('/:conversationId/messages/file', authenticate, handleChatAttachment
 
   // Refetch message with attachments
   const enrichedMessage = await Message.findById(message.id);
-
-  // Emit Socket.IO event to notify other participants
-  emitNewMessage(conversationId, enrichedMessage);
 
   res.status(201).json({
     success: true,

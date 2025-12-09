@@ -5,13 +5,11 @@
 
 require('dotenv').config();
 const express = require('express');
-const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const routes = require('./routes');
-const { initializeSocket } = require('./config/socket');
 const {
   errorHandler,
   notFoundHandler,
@@ -24,11 +22,7 @@ const { connectDB } = require('./config/database');
 
 // Initialize Express app
 const app = express();
-const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
-
-// Initialize Socket.IO
-initializeSocket(server);
 
 // ===== GLOBAL ERROR HANDLERS =====
 // Setup handlers for unhandled rejections and uncaught exceptions
@@ -271,26 +265,16 @@ app.use(errorHandler);
 // ===== GRACEFUL SHUTDOWN =====
 const gracefulShutdown = (signal) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
-  
-  server.close(() => {
-    console.log('HTTP server closed.');
-    
-    // Close database connections, clean up resources, etc.
-    // Example: await db.close();
-    
-    console.log('Graceful shutdown completed.');
-    process.exit(0);
-  });
-  
-  // Force shutdown after 10 seconds
-  setTimeout(() => {
-    console.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 10000);
+
+  // Close database connections, clean up resources, etc.
+  // Example: await db.close();
+
+  console.log('Graceful shutdown completed.');
+  process.exit(0);
 };
 
 // ===== START SERVER =====
-server.listen(PORT, async () => {
+app.listen(PORT, async () => {
   
   console.log('\n=================================');
   console.log('🚀 Server Started Successfully!');
@@ -309,7 +293,6 @@ server.listen(PORT, async () => {
   console.log(`   • Company: http://localhost:${PORT}/api/company`);
   console.log(`   • Notifications: http://localhost:${PORT}/api/notifications`);
   console.log(`   • Blockchain: http://localhost:${PORT}/api/blockchain`);
-  console.log(`   • WebSocket: ws://localhost:${PORT} (Socket.IO)`);
   console.log('=================================\n');
   
   await connectDB();
