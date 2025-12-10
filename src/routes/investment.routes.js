@@ -89,7 +89,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     geography: geography?.trim() || '',
     currency: currency || 'USD',
     notes: notes?.trim() || '',
-    createdBy: userId
+    userId: userId
   };
 
   const investment = await Investment.create(investmentData);
@@ -114,7 +114,7 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 
   // Role-based filtering: Root sees all, Admin sees only their own
   if (userRole === ROLES.ADMIN) {
-    filter.createdBy = userId;
+    filter.userId = userId;
   }
   // Root (role 0) sees all investments, so no userId filter
 
@@ -146,7 +146,7 @@ router.get('/active', authenticate, requireInvestmentManagerAccess, catchAsync(a
   // Role-based filtering: Root sees all, Admin sees only their own
   const userInvestments = userRole === ROLES.ROOT
     ? investments
-    : investments.filter(inv => inv.createdBy === userId);
+    : investments.filter(inv => inv.userId === userId);
 
   res.status(200).json({
     success: true,
@@ -170,7 +170,7 @@ router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   // Root can access any investment, Admin can only access their own
   if (userRole === ROLES.ADMIN) {
-    validate(investment.createdBy === userId, 'Unauthorized access to investment');
+    validate(investment.userId === userId, 'Unauthorized access to investment');
   }
 
   res.status(200).json({
@@ -193,7 +193,7 @@ router.get('/:id/with-structure', authenticate, requireInvestmentManagerAccess, 
 
   // Root can access any investment, Admin can only access their own
   if (userRole === ROLES.ADMIN) {
-    validate(investment.createdBy === userId, 'Unauthorized access to investment');
+    validate(investment.userId === userId, 'Unauthorized access to investment');
   }
 
   const investmentWithStructure = await Investment.findWithStructure(id);
@@ -218,7 +218,7 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   // Root can edit any investment, Admin can only edit their own
   if (userRole === ROLES.ADMIN) {
-    validate(investment.createdBy === userId, 'Unauthorized access to investment');
+    validate(investment.userId === userId, 'Unauthorized access to investment');
   }
 
   const updateData = {};
@@ -261,7 +261,7 @@ router.patch('/:id/performance', authenticate, requireInvestmentManagerAccess, c
 
   // Root can edit any investment, Admin can only edit their own
   if (userRole === ROLES.ADMIN) {
-    validate(investment.createdBy === userId, 'Unauthorized access to investment');
+    validate(investment.userId === userId, 'Unauthorized access to investment');
   }
 
   const metrics = {};
@@ -297,7 +297,7 @@ router.patch('/:id/exit', authenticate, requireInvestmentManagerAccess, catchAsy
 
   // Root can edit any investment, Admin can only edit their own
   if (userRole === ROLES.ADMIN) {
-    validate(investment.createdBy === userId, 'Unauthorized access to investment');
+    validate(investment.userId === userId, 'Unauthorized access to investment');
   }
 
   const exitData = {
@@ -356,7 +356,7 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
 
   // Root can delete any investment, Admin can only delete their own
   if (userRole === ROLES.ADMIN) {
-    validate(investment.createdBy === userId, 'Unauthorized access to investment');
+    validate(investment.userId === userId, 'Unauthorized access to investment');
   }
 
   await Investment.findByIdAndDelete(id);

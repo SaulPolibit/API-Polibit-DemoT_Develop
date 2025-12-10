@@ -136,14 +136,15 @@ class Structure {
   }
 
   /**
-   * Get actual investor count for a structure
+   * Get actual investor count for a structure (count unique users from investments)
    */
   static async getInvestorCount(structureId) {
     const supabase = getSupabase();
 
-    const { count, error } = await supabase
-      .from('structure_investors')
-      .select('*', { count: 'exact', head: true })
+    // Get all investments for this structure
+    const { data, error } = await supabase
+      .from('investments')
+      .select('user_id')
       .eq('structure_id', structureId);
 
     if (error) {
@@ -151,7 +152,9 @@ class Structure {
       return 0;
     }
 
-    return count || 0;
+    // Count unique user IDs (investors)
+    const uniqueInvestors = new Set(data.map(inv => inv.user_id).filter(id => id !== null));
+    return uniqueInvestors.size;
   }
 
   /**
@@ -339,9 +342,9 @@ class Structure {
       .from('structures')
       .select(`
         *,
-        structure_investors (
+        investments (
           *,
-          user:users (*)
+          user:users!investments_user_id_fkey (*)
         )
       `)
       .eq('id', structureId)
@@ -353,8 +356,13 @@ class Structure {
 
     const structure = this._toModel(data);
 
-    // Count investors from the joined data
-    structure.investors = data.structure_investors?.length || 0;
+    // Count unique investors from investments
+    const uniqueInvestors = new Set(
+      data.investments
+        ?.map(inv => inv.user_id)
+        .filter(id => id !== null) || []
+    );
+    structure.investors = uniqueInvestors.size;
 
     return structure;
   }
