@@ -371,16 +371,10 @@ class User {
   static async findWithStructures(userId) {
     const supabase = getSupabase();
 
-    // Get the user with structures directly
+    // Get the user
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select(`
-        *,
-        structure_investors (
-          *,
-          structure:structures (*)
-        )
-      `)
+      .select('*')
       .eq('id', userId)
       .single();
 
@@ -391,6 +385,38 @@ class User {
       }
       throw userError;
     }
+
+    // Get all investments for this user with structure details
+    const { data: investments, error: invError } = await supabase
+      .from('investments')
+      .select(`
+        structure_id,
+        ownership_percentage,
+        equity_ownership_percent,
+        structures:structure_id (*)
+      `)
+      .eq('user_id', userId);
+
+    if (invError) {
+      throw new Error(`Error finding user structures: ${invError.message}`);
+    }
+
+    // Get unique structures from investments
+    const uniqueStructures = new Map();
+    investments?.forEach(inv => {
+      if (inv.structures && !uniqueStructures.has(inv.structure_id)) {
+        const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
+        uniqueStructures.set(inv.structure_id, {
+          structure_id: inv.structure_id,
+          user_id: userId,
+          ownership_percent: ownershipPercent,
+          structure: inv.structures
+        });
+      }
+    });
+
+    // Attach structures to user
+    user.structure_investors = Array.from(uniqueStructures.values());
 
     return this._toModel(user);
   }
@@ -444,12 +470,14 @@ class User {
   static async getCommitmentsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all structure_investors records for this user with structure details
-    const { data: structureInvestors, error: siError } = await supabase
-      .from('structure_investors')
+    // Get all investments for this user with structure details
+    const { data: investments, error: invError } = await supabase
+      .from('investments')
       .select(`
-        *,
-        structure:structures (
+        structure_id,
+        ownership_percentage,
+        equity_ownership_percent,
+        structures:structure_id (
           id,
           name,
           type,
@@ -460,7 +488,23 @@ class User {
       `)
       .eq('user_id', userId);
 
-    if (siError) throw siError;
+    if (invError) throw invError;
+
+    // Get unique structures from investments
+    const uniqueStructures = new Map();
+    investments?.forEach(inv => {
+      if (inv.structures && !uniqueStructures.has(inv.structure_id)) {
+        const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
+        uniqueStructures.set(inv.structure_id, {
+          structure_id: inv.structure_id,
+          user_id: userId,
+          ownership_percent: ownershipPercent,
+          structure: inv.structures
+        });
+      }
+    });
+
+    const structureInvestors = Array.from(uniqueStructures.values());
 
     if (!structureInvestors || structureInvestors.length === 0) {
       return {
@@ -540,11 +584,12 @@ class User {
   static async getCapitalCallsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all structures for this user
-    const { data: structureInvestors, error: siError } = await supabase
-      .from('structure_investors')
+    // Get all structures for this user from investments
+    const { data: investments, error: invError } = await supabase
+      .from('investments')
       .select(`
-        structure:structures (
+        structure_id,
+        structures:structure_id (
           id,
           name,
           type,
@@ -553,16 +598,22 @@ class User {
       `)
       .eq('user_id', userId);
 
-    if (siError) throw siError;
+    if (invError) throw invError;
 
-    const structures = (structureInvestors || [])
-      .filter(si => si.structure)
-      .map(si => ({
-        id: si.structure.id,
-        name: si.structure.name,
-        type: si.structure.type,
-        status: si.structure.status
-      }));
+    // Get unique structures from investments
+    const uniqueStructuresMap = new Map();
+    (investments || []).forEach(inv => {
+      if (inv.structures && !uniqueStructuresMap.has(inv.structure_id)) {
+        uniqueStructuresMap.set(inv.structure_id, inv.structures);
+      }
+    });
+
+    const structures = Array.from(uniqueStructuresMap.values()).map(structure => ({
+      id: structure.id,
+      name: structure.name,
+      type: structure.type,
+      status: structure.status
+    }));
 
     // Get all capital call allocations for this user with capital call details
     const { data: allocations, error: allocError } = await supabase

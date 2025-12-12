@@ -762,12 +762,12 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
   // Optional: Validate user is an investor (role 3)
   // validate(user.role === ROLES.INVESTOR, 'Access denied. Investor role required.');
 
-  // Get all structure_investors records for this user
-  const { data: structureInvestors, error: siError } = await supabase
-    .from('structure_investors')
+  // Get all structures this user has invested in (from investments table)
+  const { data: investments, error: invError } = await supabase
+    .from('investments')
     .select(`
-      *,
-      structure:structures (
+      structure_id,
+      structures:structure_id (
         id,
         name,
         type,
@@ -778,9 +778,22 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
     `)
     .eq('user_id', userId);
 
-  if (siError) {
-    throw new Error(`Error fetching structures: ${siError.message}`);
+  if (invError) {
+    throw new Error(`Error fetching structures: ${invError.message}`);
   }
+
+  // Get unique structures from investments
+  const uniqueStructures = new Map();
+  investments?.forEach(inv => {
+    if (inv.structures && !uniqueStructures.has(inv.structure_id)) {
+      uniqueStructures.set(inv.structure_id, {
+        structure_id: inv.structure_id,
+        user_id: userId,
+        structure: inv.structures
+      });
+    }
+  });
+  const structureInvestors = Array.from(uniqueStructures.values());
 
   // Get all capital call allocations for this user
   const { data: capitalCallAllocations, error: ccError } = await supabase

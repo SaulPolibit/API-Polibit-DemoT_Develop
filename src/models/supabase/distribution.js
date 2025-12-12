@@ -292,15 +292,35 @@ class Distribution {
   static async createAllocationsForStructure(distributionId, structureId) {
     const supabase = getSupabase();
 
-    // Get all structure_investors for this structure
-    const { data: structureInvestors, error: siError } = await supabase
-      .from('structure_investors')
-      .select('*')
+    // Get all investors for this structure (from investments table)
+    const { data: investments, error: invError } = await supabase
+      .from('investments')
+      .select('user_id, ownership_percentage, equity_ownership_percent')
       .eq('structure_id', structureId);
 
-    if (siError) {
-      throw new Error(`Error fetching structure investors: ${siError.message}`);
+    if (invError) {
+      throw new Error(`Error fetching structure investors: ${invError.message}`);
     }
+
+    // Get unique investors with their ownership percentages
+    const investorMap = new Map();
+    investments?.forEach(inv => {
+      const userId = inv.user_id;
+      const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
+
+      if (!investorMap.has(userId)) {
+        investorMap.set(userId, ownershipPercent);
+      } else {
+        // Sum up ownership if multiple investments
+        investorMap.set(userId, investorMap.get(userId) + ownershipPercent);
+      }
+    });
+
+    const structureInvestors = Array.from(investorMap.entries()).map(([userId, ownershipPercent]) => ({
+      user_id: userId,
+      structure_id: structureId,
+      ownership_percent: ownershipPercent
+    }));
 
     // Get distribution details
     const distribution = await this.findById(distributionId);
