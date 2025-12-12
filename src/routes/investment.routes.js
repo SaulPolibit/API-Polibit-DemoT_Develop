@@ -16,7 +16,7 @@ const router = express.Router();
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
 
   const {
     structureId,
@@ -67,7 +67,11 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   // Validate structure exists and belongs to user
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.createdBy === userId, 'Structure does not belong to user');
+
+  // Root can create investments for any structure, Admin can only create for their own
+  if (userRole === ROLES.ADMIN) {
+    validate(structure.createdBy === userId, 'Structure does not belong to user');
+  }
 
   // Validate type-specific fields
   if (investmentType === 'EQUITY' || investmentType === 'MIXED') {
