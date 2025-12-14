@@ -495,8 +495,8 @@ router.put('/messages/:messageId/read', authenticate, catchAsync(async (req, res
   // Mark as read
   await MessageRead.markAsRead(messageId, userId);
 
-  // Emit Socket.IO event to notify other participants
-  emitMessageRead(message.conversationId, messageId, userId);
+  // TODO: Emit Socket.IO event to notify other participants when Socket.IO is implemented
+  // emitMessageRead(message.conversationId, messageId, userId);
 
   res.status(200).json({
     success: true,
@@ -572,8 +572,8 @@ router.delete('/messages/:messageId', authenticate, catchAsync(async (req, res) 
   // Soft delete message
   await Message.softDelete(messageId);
 
-  // Emit Socket.IO event to notify other participants
-  emitMessageDeleted(message.conversationId, messageId);
+  // TODO: Emit Socket.IO event to notify other participants when Socket.IO is implemented
+  // emitMessageDeleted(message.conversationId, messageId);
 
   res.status(200).json({
     success: true,
