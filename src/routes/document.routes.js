@@ -643,14 +643,22 @@ router.delete('/:id/soft', authenticate, catchAsync(async (req, res) => {
  * @route   DELETE /api/documents/:id
  * @desc    Hard delete a document
  * @access  Private (requires authentication)
+ * @note    Root/Admin/Support can delete any document, Investors can only delete their own
  */
 router.delete('/:id', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
+
+  // Role-based authorization:
+  // - Root (0), Admin (1), Support (2) can delete any document
+  // - Investor (3) can only delete their own documents
+  if (userRole === ROLES.INVESTOR) {
+    validate(document.uploadedBy === userId, 'Unauthorized access to document');
+  }
+  // Root/Admin/Support can delete without ownership validation
 
   await Document.findByIdAndDelete(id);
 
