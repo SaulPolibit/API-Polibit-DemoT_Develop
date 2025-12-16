@@ -228,11 +228,15 @@ class SmartContract {
 
     const model = {
       id: dbContract.id,
-      projectId: dbContract.project_id,
+      structureId: dbContract.structure_id,
+      contractType: dbContract.contract_type,
+      deploymentStatus: dbContract.deployment_status,
       complianceRegistryAddress: dbContract.compliance_registry_address,
       contractAddress: dbContract.contract_address,
       factoryAddress: dbContract.factory_address,
       identityRegistryAddress: dbContract.identity_registry_address,
+      transactionHash: dbContract.transaction_hash,
+      network: dbContract.network,
       company: dbContract.company,
       currency: dbContract.currency,
       maxTokens: parseInt(dbContract.max_tokens, 10),
@@ -241,6 +245,9 @@ class SmartContract {
       tokenName: dbContract.token_name,
       tokenSymbol: dbContract.token_symbol,
       tokenValue: dbContract.token_value,
+      deployedBy: dbContract.deployed_by,
+      deploymentError: dbContract.deployment_error,
+      deploymentResponse: dbContract.deployment_response,
       createdAt: dbContract.created_at,
       updatedAt: dbContract.updated_at,
 
@@ -309,17 +316,24 @@ class SmartContract {
     const dbData = {};
 
     const fieldMap = {
-      projectId: 'project_id',
+      structureId: 'structure_id',
+      contractType: 'contract_type',
+      deploymentStatus: 'deployment_status',
       complianceRegistryAddress: 'compliance_registry_address',
       contractAddress: 'contract_address',
       factoryAddress: 'factory_address',
       identityRegistryAddress: 'identity_registry_address',
+      transactionHash: 'transaction_hash',
+      network: 'network',
       maxTokens: 'max_tokens',
       mintedTokens: 'minted_tokens',
       projectName: 'project_name',
       tokenName: 'token_name',
       tokenSymbol: 'token_symbol',
       tokenValue: 'token_value',
+      deployedBy: 'deployed_by',
+      deploymentError: 'deployment_error',
+      deploymentResponse: 'deployment_response',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {
@@ -332,6 +346,45 @@ class SmartContract {
     });
 
     return dbData;
+  }
+
+  /**
+   * Mark contract as deployed
+   */
+  static async markAsDeployed(id, deploymentData) {
+    const updateData = {
+      deploymentStatus: 'deployed'
+    };
+
+    if (deploymentData) {
+      if (deploymentData.contractAddress) updateData.contractAddress = deploymentData.contractAddress;
+      if (deploymentData.transactionHash) updateData.transactionHash = deploymentData.transactionHash;
+      if (deploymentData.complianceRegistryAddress) updateData.complianceRegistryAddress = deploymentData.complianceRegistryAddress;
+      if (deploymentData.factoryAddress) updateData.factoryAddress = deploymentData.factoryAddress;
+      if (deploymentData.identityRegistryAddress) updateData.identityRegistryAddress = deploymentData.identityRegistryAddress;
+      updateData.deploymentResponse = deploymentData;
+    }
+
+    return this.findByIdAndUpdate(id, updateData);
+  }
+
+  /**
+   * Mark contract as failed
+   */
+  static async markAsFailed(id, error) {
+    return this.findByIdAndUpdate(id, {
+      deploymentStatus: 'failed',
+      deploymentError: error
+    });
+  }
+
+  /**
+   * Mark contract as deploying
+   */
+  static async markAsDeploying(id) {
+    return this.findByIdAndUpdate(id, {
+      deploymentStatus: 'deploying'
+    });
   }
 }
 

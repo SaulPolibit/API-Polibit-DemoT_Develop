@@ -11,7 +11,7 @@ const {
   catchAsync,
   validate
 } = require('../middleware/errorHandler');
-const SmartContract = require('../models/smartContract');
+const { SmartContract } = require('../models/supabase');
 
 const router = express.Router();
 
@@ -2853,7 +2853,7 @@ router.post('/deploy/erc3643', requireApiKey, requireBearerToken, catchAsync(asy
   validate(projectName, 'projectName is required');
 
   // Create smart contract record in database
-  const smartContract = new SmartContract({
+  const contractData = {
     structureId,
     contractType: 'ERC3643',
     deploymentStatus: 'deploying',
@@ -2866,11 +2866,11 @@ router.post('/deploy/erc3643', requireApiKey, requireBearerToken, catchAsync(asy
     tokenValue: contractTokenValue,
     deployedBy: req.auth?.userId || req.auth?.sub,
     network: network || 'polygon'
-  });
+  };
 
   try {
     // Save initial record
-    await smartContract.save();
+    const smartContract = await SmartContract.create(contractData);
 
     // Deploy contract
     const context = { auth: req.auth };
@@ -2878,31 +2878,29 @@ router.post('/deploy/erc3643', requireApiKey, requireBearerToken, catchAsync(asy
 
     if (result.error) {
       // Mark as failed
-      await smartContract.markAsFailed(result.error);
+      await SmartContract.markAsFailed(smartContract.id, result.error);
 
       return res.status(result.statusCode || 500).json({
         error: result.error,
         message: 'Failed to deploy ERC3643 contract',
         details: result.body,
-        contractId: smartContract._id
+        contractId: smartContract.id
       });
     }
 
     // Update with deployment result
-    await smartContract.markAsDeployed(result.body);
+    await SmartContract.markAsDeployed(smartContract.id, result.body);
 
     res.status(result.statusCode || 200).json({
       success: true,
       message: 'ERC3643 contract deployment initiated',
       contractType: 'ERC3643',
-      contractId: smartContract._id,
+      contractId: smartContract.id,
       data: result.body,
     });
   } catch (error) {
-    // If we have a smart contract ID, mark it as failed
-    if (smartContract._id) {
-      await smartContract.markAsFailed(error.message);
-    }
+    // Error occurred during creation or deployment - no need to mark as failed
+    // since the record may not have been created yet
     throw error;
   }
 }));
