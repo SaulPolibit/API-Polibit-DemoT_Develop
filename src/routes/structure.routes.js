@@ -103,7 +103,19 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     blockchainNetwork,
     walletAddress,
     debtGrossInterestRate,
-    debtInterestRate
+    debtInterestRate,
+    parentStructureOwnershipPercentage,
+    capitalCallNoticePeriod,
+    capitalCallPaymentDeadline,
+    distributionFrequency,
+    witholdingDividendTaxRateNaturalPersons,
+    witholdingDividendTaxRateLegalEntities,
+    incomeDebtTaxRateNaturalPersons,
+    incomeEquityTaxRateNaturalPersons,
+    incomeDebtTaxRateLegalEntities,
+    incomeEquityTaxRateLegalEntities,
+    walletOwnerAddress,
+    operatingAgreementHash
   } = req.body;
 
   // Validate required fields
@@ -229,6 +241,18 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     walletAddress: walletAddress?.trim() || '',
     debtGrossInterestRate: debtGrossInterestRate?.trim() || '',
     debtInterestRate: debtInterestRate?.trim() || '',
+    parentStructureOwnershipPercentage: sanitizeNumber(parentStructureOwnershipPercentage, null),
+    capitalCallNoticePeriod: sanitizeNumber(capitalCallNoticePeriod, null),
+    capitalCallPaymentDeadline: sanitizeNumber(capitalCallPaymentDeadline, null),
+    distributionFrequency: distributionFrequency?.trim() || '',
+    witholdingDividendTaxRateNaturalPersons: sanitizeNumber(witholdingDividendTaxRateNaturalPersons, null),
+    witholdingDividendTaxRateLegalEntities: sanitizeNumber(witholdingDividendTaxRateLegalEntities, null),
+    incomeDebtTaxRateNaturalPersons: sanitizeNumber(incomeDebtTaxRateNaturalPersons, null),
+    incomeEquityTaxRateNaturalPersons: sanitizeNumber(incomeEquityTaxRateNaturalPersons, null),
+    incomeDebtTaxRateLegalEntities: sanitizeNumber(incomeDebtTaxRateLegalEntities, null),
+    incomeEquityTaxRateLegalEntities: sanitizeNumber(incomeEquityTaxRateLegalEntities, null),
+    walletOwnerAddress: walletOwnerAddress?.trim() || '',
+    operatingAgreementHash: operatingAgreementHash?.trim() || '',
     createdBy: userId
   };
 
@@ -416,7 +440,12 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'localAccountHolder', 'localBankAddress', 'internationalBankName',
     'internationalAccountBank', 'internationalSwift', 'internationalHolderName',
     'internationalBankAddress', 'blockchainNetwork', 'walletAddress',
-    'debtGrossInterestRate', 'debtInterestRate'
+    'debtGrossInterestRate', 'debtInterestRate', 'parentStructureOwnershipPercentage',
+    'capitalCallNoticePeriod', 'capitalCallPaymentDeadline', 'distributionFrequency',
+    'witholdingDividendTaxRateNaturalPersons', 'witholdingDividendTaxRateLegalEntities',
+    'incomeDebtTaxRateNaturalPersons', 'incomeEquityTaxRateNaturalPersons',
+    'incomeDebtTaxRateLegalEntities', 'incomeEquityTaxRateLegalEntities',
+    'walletOwnerAddress', 'operatingAgreementHash'
   ];
 
   for (const field of allowedFields) {
