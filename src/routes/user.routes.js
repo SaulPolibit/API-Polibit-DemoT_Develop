@@ -6,7 +6,7 @@ const express = require('express');
 const { authenticate, createToken } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
 const { User } = require('../models/supabase');
-const { requireInvestmentManagerAccess, ROLES } = require('../middleware/rbac');
+const { requireInvestmentManagerAccess, requireRootAccess, ROLES } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
 const { uploadProfileImage } = require('../middleware/upload');
 const { uploadToSupabase, deleteFromSupabase } = require('../utils/fileUpload');
@@ -542,6 +542,41 @@ router.get('/filter', authenticate, requireInvestmentManagerAccess, catchAsync(a
     count: usersList.length,
     roles: roles,
     data: usersList
+  });
+}));
+
+/**
+ * @route   DELETE /api/users/:id
+ * @desc    Delete user by ID
+ * @access  Private (requires authentication, Root only)
+ * @params  id - User UUID to delete
+ */
+router.delete('/:id', authenticate, requireRootAccess, catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  validate(id, 'User ID is required');
+
+  // Check if user exists
+  const user = await User.findById(id);
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  // Delete the user
+  await User.findByIdAndDelete(id);
+
+  res.status(200).json({
+    success: true,
+    message: 'User deleted successfully',
+    data: {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName
+    }
   });
 }));
 
