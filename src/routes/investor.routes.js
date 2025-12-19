@@ -343,7 +343,7 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
 
 /**
  * @route   GET /api/investors/:id/with-structures
- * @desc    Get investor with all structures
+ * @desc    Get investor record with user and structure data
  * @access  Private (requires authentication, Root/Admin/Own investor)
  */
 router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => {
@@ -355,23 +355,50 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  const user = await User.findById(id);
-  validate(user, 'Investor not found');
-  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
+  // Find investor record by ID
+  const investor = await Investor.findById(id);
+  validate(investor, 'Investor not found');
+
+  // Fetch associated user data
+  const user = investor.userId ? await User.findById(investor.userId) : null;
+  validate(user, 'Associated user not found');
 
   // Check access: Root/Admin can access any, Investors can only access their own
   const hasAccess =
     requestingUserRole === ROLES.ROOT ||
     requestingUserRole === ROLES.ADMIN ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
+    (requestingUserRole === ROLES.INVESTOR && requestingUserId === investor.userId);
 
   validate(hasAccess, 'Unauthorized access to investor data');
 
-  const userWithStructures = await User.findWithStructures(id);
+  // Fetch associated structure data
+  const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
+
+  // Build response with investor, user, and structure data
+  const investorWithData = {
+    ...investor,
+    user: user ? {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive
+    } : null,
+    structure: structure ? {
+      id: structure.id,
+      name: structure.name,
+      type: structure.type,
+      status: structure.status,
+      baseCurrency: structure.baseCurrency,
+      totalInvested: structure.totalInvested,
+      description: structure.description
+    } : null
+  };
 
   res.status(200).json({
     success: true,
-    data: userWithStructures
+    data: investorWithData
   });
 }));
 
