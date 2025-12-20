@@ -55,7 +55,8 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     sector,
     geography,
     currency,
-    notes
+    notes,
+    visibilityType
   } = req.body;
 
   // Validate required fields
@@ -146,6 +147,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     geography: geography?.trim() || '',
     currency: currency || 'USD',
     notes: notes?.trim() || '',
+    visibilityType: visibilityType?.trim() || 'public',
     userId: userId
   };
 
@@ -294,7 +296,7 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
     // Property specific
     'totalPropertyValue',
     // Additional info
-    'sector', 'geography', 'currency', 'notes'
+    'sector', 'geography', 'currency', 'notes', 'visibilityType'
   ];
 
   for (const field of allowedFields) {

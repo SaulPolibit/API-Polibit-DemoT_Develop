@@ -61,6 +61,7 @@ class Investment {
       geography: 'geography',
       currency: 'currency',
       notes: 'notes',
+      visibilityType: 'visibility_type',
       userId: 'user_id',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -131,6 +132,7 @@ class Investment {
       geography: dbData.geography,
       currency: dbData.currency,
       notes: dbData.notes,
+      visibilityType: dbData.visibility_type,
       userId: dbData.user_id,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
