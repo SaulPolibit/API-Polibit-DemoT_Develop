@@ -161,9 +161,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
 /**
  * @route   GET /api/investments
  * @desc    Get all investments (role-based filtering applied)
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, all roles including GUEST)
  */
-router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/', authenticate, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { structureId, projectId, investmentType, status } = req.query;
 
@@ -192,9 +192,9 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 /**
  * @route   GET /api/investments/active
  * @desc    Get all active investments (role-based filtering applied)
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, all roles including GUEST)
  */
-router.get('/active', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/active', authenticate, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { structureId } = req.query;
 
@@ -215,9 +215,9 @@ router.get('/active', authenticate, requireInvestmentManagerAccess, catchAsync(a
 /**
  * @route   GET /api/investments/:id
  * @desc    Get a single investment by ID
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, all roles including GUEST)
  */
-router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
@@ -239,9 +239,9 @@ router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 /**
  * @route   GET /api/investments/:id/with-structure
  * @desc    Get investment with structure details
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, all roles including GUEST)
  */
-router.get('/:id/with-structure', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/:id/with-structure', authenticate, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
@@ -401,9 +401,9 @@ router.patch('/:id/exit', authenticate, requireInvestmentManagerAccess, catchAsy
 /**
  * @route   GET /api/investments/structure/:structureId/portfolio
  * @desc    Get portfolio summary for a structure
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, all roles including GUEST)
  */
-router.get('/structure/:structureId/portfolio', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/structure/:structureId/portfolio', authenticate, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { structureId } = req.params;
 
