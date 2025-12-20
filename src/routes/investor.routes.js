@@ -8,6 +8,8 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const User = require('../models/supabase/user');
 const Investor = require('../models/supabase/investor');
 const Structure = require('../models/supabase/structure');
+const DocusealSubmission = require('../models/supabase/docusealSubmission');
+const Payment = require('../models/supabase/payment');
 const { requireInvestmentManagerAccess, ROLES } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
 
@@ -165,7 +167,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
 
 /**
  * @route   GET /api/investors
- * @desc    Get all investors from Investor model with associated user and structure data
+ * @desc    Get all investors from Investor model with associated user, structure, and payment data
+ * @desc    Includes hasFreeDocusealSubmission field indicating if investor has any DocusealSubmission not in Payments
+ * @desc    Includes payments array with all payment records for the investor's userId
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
@@ -183,11 +187,37 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
   // Get investors from Investor model
   const investors = await Investor.find(filter);
 
+  // Get all payment submission IDs once for efficiency
+  const payments = await Payment.find({});
+  const paymentSubmissionIds = new Set(
+    payments.map(p => p.submissionId).filter(id => id !== null && id !== undefined)
+  );
+
   // Fetch associated user and structure data for each investor
   const investorsWithData = await Promise.all(
     investors.map(async (investor) => {
       const user = investor.userId ? await User.findById(investor.userId) : null;
       const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
+
+      // Get user payments
+      let userPayments = [];
+      if (investor.userId) {
+        userPayments = await Payment.find({ userId: investor.userId });
+      }
+
+      // Check for free DocusealSubmissions (submissions not in payments)
+      let hasFreeDocusealSubmission = false;
+      if (investor.userId) {
+        // Get all DocusealSubmissions for this userId
+        const docusealSubmissions = await DocusealSubmission.find({ userId: investor.userId });
+
+        if (docusealSubmissions && docusealSubmissions.length > 0) {
+          // Check if any DocusealSubmission is not in payments
+          hasFreeDocusealSubmission = docusealSubmissions.some(
+            submission => !paymentSubmissionIds.has(submission.submissionId)
+          );
+        }
+      }
 
       return {
         ...investor,
@@ -205,7 +235,9 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
           type: structure.type,
           status: structure.status,
           baseCurrency: structure.baseCurrency
-        } : null
+        } : null,
+        payments: userPayments,
+        hasFreeDocusealSubmission
       };
     })
   );

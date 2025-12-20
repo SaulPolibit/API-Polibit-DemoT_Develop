@@ -22,6 +22,7 @@ class Payment {
       contractId: 'contract_id',
       status: 'status',
       tokenId: 'token_id',
+      userId: 'user_id',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
     };
@@ -52,6 +53,7 @@ class Payment {
       contractId: dbData.contract_id,
       status: dbData.status,
       tokenId: dbData.token_id,
+      userId: dbData.user_id,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
     };

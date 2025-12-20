@@ -62,6 +62,9 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     paymentImageUrl = uploadResult.publicUrl;
   }
 
+  // Get authenticated user ID
+  const userId = req.auth?.userId || req.user?.id;
+
   // Create payment data
   const paymentData = {
     email: email.trim().toLowerCase(),
@@ -72,7 +75,8 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     structureId: structureId.trim(),
     contractId: contractId.trim(),
     status: status?.trim() || 'pending',
-    tokenId: tokenId?.trim() || null
+    tokenId: tokenId?.trim() || null,
+    userId: userId
   };
 
   const payment = await Payment.create(paymentData);
