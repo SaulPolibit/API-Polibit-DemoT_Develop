@@ -310,8 +310,8 @@ class Structure {
 
     const structure = this._toModel(data);
 
-    // Get actual investor count
-    structure.investors = await this.getInvestorCount(id);
+    // Get current investor count from investments table
+    structure.currentInvestors = await this.getInvestorCount(id);
 
     return structure;
   }
@@ -338,11 +338,11 @@ class Structure {
       throw new Error(`Error finding structures: ${error.message}`);
     }
 
-    // Get actual investor counts for all structures
+    // Get current investor counts for all structures
     const structures = await Promise.all(
       data.map(async (item) => {
         const structure = this._toModel(item);
-        structure.investors = await this.getInvestorCount(item.id);
+        structure.currentInvestors = await this.getInvestorCount(item.id);
         return structure;
       })
     );
@@ -379,11 +379,11 @@ class Structure {
       throw new Error(`Error fetching structure tree: ${error.message}`);
     }
 
-    // Get actual investor counts for all structures
+    // Get current investor counts for all structures
     const structures = await Promise.all(
       data.map(async (item) => {
         const structure = this._toModel(item);
-        structure.investors = await this.getInvestorCount(item.id);
+        structure.currentInvestors = await this.getInvestorCount(item.id);
         return structure;
       })
     );
@@ -408,11 +408,11 @@ class Structure {
       throw new Error(`Error finding root structures: ${error.message}`);
     }
 
-    // Get actual investor counts for all structures
+    // Get current investor counts for all structures
     const structures = await Promise.all(
       data.map(async (item) => {
         const structure = this._toModel(item);
-        structure.investors = await this.getInvestorCount(item.id);
+        structure.currentInvestors = await this.getInvestorCount(item.id);
         return structure;
       })
     );
@@ -440,8 +440,8 @@ class Structure {
 
     const structure = this._toModel(data);
 
-    // Get actual investor count
-    structure.investors = await this.getInvestorCount(id);
+    // Get current investor count from investments table
+    structure.currentInvestors = await this.getInvestorCount(id);
 
     return structure;
   }
@@ -495,13 +495,13 @@ class Structure {
 
     const structure = this._toModel(structureData);
 
-    // Count unique investors from investments
+    // Count unique investors from investments (current investors)
     const uniqueInvestors = new Set(
       investments
         ?.map(inv => inv.user_id || inv.created_by) // Support both old and new column names
         .filter(id => id !== null) || []
     );
-    structure.investors = uniqueInvestors.size;
+    structure.currentInvestors = uniqueInvestors.size;
 
     // Attach investments data
     structure.investments = investments;
