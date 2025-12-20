@@ -670,7 +670,16 @@ router.get('/filter', authenticate, catchAsync(async (req, res) => {
  * @params  id - User UUID to delete
  */
 router.delete('/:id', authenticate, requireRootAccess, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
   const { id } = req.params;
+
+  // Only ROOT role can delete users
+  if (userRole !== ROLES.ROOT) {
+    return res.status(403).json({
+      success: false,
+      message: 'Unauthorized: Only ROOT users can delete users'
+    });
+  }
 
   validate(id, 'User ID is required');
 
