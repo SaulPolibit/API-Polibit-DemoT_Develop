@@ -63,14 +63,25 @@ async function createTransporter(userId) {
     auth: {
       user: settings.smtpUsername,
       pass: password
-    },
-    // TLS options for better compatibility
-    tls: {
-      // Do not fail on invalid certs (useful for self-signed certificates)
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2'
     }
   };
+
+  // Debug logging
+  console.log('[EmailSender] Creating transporter with config:', {
+    host: settings.smtpHost,
+    port: settings.smtpPort,
+    secure: settings.smtpSecure,
+    username: settings.smtpUsername
+  });
+
+  // Only add TLS options for secure connections (port 465) or specific hosts
+  // For port 587 (STARTTLS), let nodemailer handle TLS upgrade automatically
+  if (settings.smtpSecure) {
+    // Port 465 with implicit SSL
+    transportConfig.tls = {
+      rejectUnauthorized: false
+    };
+  }
 
   const transporter = nodemailer.createTransport(transportConfig);
 
