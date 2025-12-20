@@ -10,6 +10,7 @@ const {
   validate
 } = require('../middleware/errorHandler');
 const { NotificationSettings } = require('../models/supabase');
+const { canCreate, getUserContext } = require('../middleware/rbac');
 
 const router = express.Router();
 
@@ -57,9 +58,19 @@ router.get('/settings', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   PUT /api/notifications/settings
  * @desc    Update user notification settings
- * @access  Private (requires Bearer token)
+ * @access  Private (Root, Admin only)
  */
 router.put('/settings', authenticate, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block GUEST, SUPPORT, and INVESTOR from updating
+  if (!canCreate(userRole)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Only Root and Admin users can update notification settings.'
+    });
+  }
+
   // Get userId from bearer token
   const userId = req.auth.userId || req.user.id;
 

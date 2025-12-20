@@ -8,6 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const FirmSettings = require('../models/supabase/firmSettings');
 const { handleFirmLogoUpload } = require('../middleware/upload');
 const { uploadToSupabase } = require('../utils/fileUpload');
+const { ROLES, canCreate, getUserContext } = require('../middleware/rbac');
 
 const router = express.Router();
 
@@ -59,9 +60,19 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   POST /api/firm-settings
  * @desc    Create firm settings for logged-in user
- * @access  Private
+ * @access  Private (Root, Admin only)
  */
 router.post('/', authenticate, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block GUEST, SUPPORT, and INVESTOR from creating
+  if (!canCreate(userRole)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Only Root and Admin users can create firm settings.'
+    });
+  }
+
   const userId = req.auth.userId || req.user.id;
 
   const {
@@ -106,10 +117,20 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   PUT /api/firm-settings
  * @desc    Update firm settings for logged-in user
- * @access  Private
+ * @access  Private (Root, Admin only)
  * @body    FormData with optional 'firmLogo' file field and other fields
  */
 router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block GUEST, SUPPORT, and INVESTOR from updating
+  if (!canCreate(userRole)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Only Root and Admin users can update firm settings.'
+    });
+  }
+
   const userId = req.auth.userId || req.user.id;
 
   // Get user's existing settings
@@ -191,10 +212,20 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
 /**
  * @route   PUT /api/firm-settings/:id
  * @desc    Update firm settings by ID (only if user owns it)
- * @access  Private
+ * @access  Private (Root, Admin only)
  * @body    FormData with optional 'firmLogo' file field and other fields
  */
 router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block GUEST, SUPPORT, and INVESTOR from updating
+  if (!canCreate(userRole)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Only Root and Admin users can update firm settings.'
+    });
+  }
+
   const userId = req.auth.userId || req.user.id;
   const { id } = req.params;
 
@@ -264,9 +295,19 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
 /**
  * @route   DELETE /api/firm-settings
  * @desc    Delete firm settings for logged-in user
- * @access  Private
+ * @access  Private (Root, Admin only)
  */
 router.delete('/', authenticate, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block GUEST, SUPPORT, and INVESTOR from deleting
+  if (!canCreate(userRole)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Only Root and Admin users can delete firm settings.'
+    });
+  }
+
   const userId = req.auth.userId || req.user.id;
 
   // Get user's settings
