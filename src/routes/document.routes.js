@@ -51,11 +51,14 @@ async function validateEntity(entityType, entityId, userId, userRole) {
 /**
  * @route   POST /api/documents
  * @desc    Create a new document with file upload
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
   const userRole = req.auth?.role ?? req.user?.role;
+
+  // Block GUEST and INVESTOR roles from creating documents
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot create documents.');
 
   // Validate file upload
   validate(req.file, 'File is required');
@@ -504,11 +507,15 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   POST /api/documents/:id/new-version
  * @desc    Create a new version of a document with file upload
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.post('/:id/new-version', authenticate, handleDocumentUpload, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
+  const userRole = req.auth?.role ?? req.user?.role;
   const { id } = req.params;
+
+  // Block GUEST and INVESTOR roles from creating document versions
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot create document versions.');
 
   // Validate file upload
   validate(req.file, 'File is required');
@@ -545,12 +552,16 @@ router.post('/:id/new-version', authenticate, handleDocumentUpload, catchAsync(a
 /**
  * @route   PATCH /api/documents/:id/tags
  * @desc    Add tags to a document
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.patch('/:id/tags', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
+  const userRole = req.auth?.role ?? req.user?.role;
   const { id } = req.params;
   const { tags } = req.body;
+
+  // Block GUEST and INVESTOR roles from modifying document tags
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot modify document tags.');
 
   validate(Array.isArray(tags), 'Tags must be an array');
   validate(tags.length > 0, 'At least one tag must be provided');
@@ -571,12 +582,16 @@ router.patch('/:id/tags', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   DELETE /api/documents/:id/tags
  * @desc    Remove tags from a document
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.delete('/:id/tags', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
+  const userRole = req.auth?.role ?? req.user?.role;
   const { id } = req.params;
   const { tags } = req.body;
+
+  // Block GUEST and INVESTOR roles from removing document tags
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot remove document tags.');
 
   validate(Array.isArray(tags), 'Tags must be an array');
   validate(tags.length > 0, 'At least one tag must be provided');
@@ -597,12 +612,16 @@ router.delete('/:id/tags', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   PATCH /api/documents/:id/metadata
  * @desc    Update document metadata
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.patch('/:id/metadata', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
+  const userRole = req.auth?.role ?? req.user?.role;
   const { id } = req.params;
   const { metadata } = req.body;
+
+  // Block GUEST and INVESTOR roles from updating document metadata
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot update document metadata.');
 
   validate(metadata && typeof metadata === 'object', 'Metadata must be an object');
 
@@ -622,11 +641,15 @@ router.patch('/:id/metadata', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   DELETE /api/documents/:id/soft
  * @desc    Soft delete a document (mark as inactive)
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.delete('/:id/soft', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
+  const userRole = req.auth?.role ?? req.user?.role;
   const { id } = req.params;
+
+  // Block GUEST and INVESTOR roles from soft deleting documents
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot delete documents.');
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
@@ -643,23 +666,17 @@ router.delete('/:id/soft', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   DELETE /api/documents/:id
  * @desc    Hard delete a document
- * @access  Private (requires authentication)
- * @note    Root/Admin/Support can delete any document, Investors can only delete their own
+ * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.delete('/:id', authenticate, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
+  const { userRole } = getUserContext(req);
   const { id } = req.params;
+
+  // Block GUEST and INVESTOR roles from deleting documents
+  validate(userRole !== ROLES.GUEST && userRole !== ROLES.INVESTOR, 'Access denied. Guest and Investor roles cannot delete documents.');
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-
-  // Role-based authorization:
-  // - Root (0), Admin (1), Support (2) can delete any document
-  // - Investor (3) can only delete their own documents
-  if (userRole === ROLES.INVESTOR) {
-    validate(document.uploadedBy === userId, 'Unauthorized access to document');
-  }
-  // Root/Admin/Support can delete without ownership validation
 
   await Document.findByIdAndDelete(id);
 
