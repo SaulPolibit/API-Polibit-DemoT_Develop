@@ -417,7 +417,6 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
   // Then find the associated user
   const user = investor.userId ? await User.findById(investor.userId) : null;
   validate(user, 'Associated user not found');
-  validate(user.role === ROLES.INVESTOR, 'Associated user is not an investor');
 
   // Fetch associated structure data
   const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
