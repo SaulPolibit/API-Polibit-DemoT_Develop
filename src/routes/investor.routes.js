@@ -406,37 +406,14 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  // First, find the user by ID to verify they exist
-  const user = await User.findById(id);
-  validate(user, 'User not found');
-  validate(user.role === ROLES.INVESTOR, 'User is not an investor');
-
-  // Try to find investor record by ID (user ID and investor ID are the same)
-  // For new users, this may not exist yet
+  // First, find the investor record by ID
   const investor = await Investor.findById(id);
+  validate(investor, 'Investor not found');
 
-  if (!investor) {
-    // New user with no investor assignments yet - return empty structures
-    console.log(`[Investor API] No investor record found for user ${id}, returning empty structures`);
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        id: user.id,
-        userId: user.id,
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          role: user.role,
-          isActive: user.isActive
-        },
-        structures: [], // No structures assigned yet
-        structure: null
-      }
-    });
-  }
+  // Then find the associated user
+  const user = investor.userId ? await User.findById(investor.userId) : null;
+  validate(user, 'Associated user not found');
+  validate(user.role === ROLES.INVESTOR, 'Associated user is not an investor');
 
   // Fetch associated structure data
   const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
