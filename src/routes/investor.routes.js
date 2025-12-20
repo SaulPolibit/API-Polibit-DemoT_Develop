@@ -10,7 +10,7 @@ const Investor = require('../models/supabase/investor');
 const Structure = require('../models/supabase/structure');
 const DocusealSubmission = require('../models/supabase/docusealSubmission');
 const Payment = require('../models/supabase/payment');
-const { requireInvestmentManagerAccess, ROLES } = require('../middleware/rbac');
+const { requireInvestmentManagerAccess, ROLES, getUserContext } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
 
 const router = express.Router();
@@ -170,9 +170,14 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
  * @desc    Get all investors from Investor model with associated user, structure, and payment data
  * @desc    Includes hasFreeDocusealSubmission field indicating if investor has any DocusealSubmission not in Payments
  * @desc    Includes payments array with all payment records for the investor's userId
- * @access  Private (requires authentication, Root/Admin only)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
-router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/', authenticate, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
+
   const { investorType, kycStatus, accreditedInvestor, userId, structureId } = req.query;
 
   // Build filter for Investor model
@@ -273,9 +278,14 @@ router.get('/search', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/with-structures
  * @desc    Get all investors with their structures
- * @access  Private (requires authentication, Root/Admin/Support only)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
-router.get('/with-structures', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+router.get('/with-structures', authenticate, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
+
   // Get all investors (users with role = 3)
   const investors = await User.find({ role: ROLES.INVESTOR });
 
@@ -340,12 +350,14 @@ router.get('/with-structures', authenticate, requireInvestmentManagerAccess, cat
 /**
  * @route   GET /api/investors/:id
  * @desc    Get a single investor record by ID with user data
- * @access  Private (requires authentication, Root/Admin/Own investor)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const requestingUserId = req.auth?.userId || req.user?.id;
-  const requestingUserRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -358,14 +370,6 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
   // Fetch associated user data
   const user = investor.userId ? await User.findById(investor.userId) : null;
   validate(user, 'Associated user not found');
-
-  // Check access: Root/Admin can access any, Investors can only access their own
-  const hasAccess =
-    requestingUserRole === ROLES.ROOT ||
-    requestingUserRole === ROLES.ADMIN ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === investor.userId);
-
-  validate(hasAccess, 'Unauthorized access to investor data');
 
   // Build response with investor and user data
   const investorWithUser = {
@@ -389,12 +393,14 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/:id/with-structures
  * @desc    Get investor record with user and structure data
- * @access  Private (requires authentication, Root/Admin/Own investor)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const requestingUserId = req.auth?.userId || req.user?.id;
-  const requestingUserRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -404,14 +410,6 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
   const user = await User.findById(id);
   validate(user, 'User not found');
   validate(user.role === ROLES.INVESTOR, 'User is not an investor');
-
-  // Check access: Root/Admin can access any, Investors can only access their own
-  const hasAccess =
-    requestingUserRole === ROLES.ROOT ||
-    requestingUserRole === ROLES.ADMIN ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
-
-  validate(hasAccess, 'Unauthorized access to investor data');
 
   // Try to find investor record by ID (user ID and investor ID are the same)
   // For new users, this may not exist yet
@@ -474,12 +472,14 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
 /**
  * @route   GET /api/investors/:id/portfolio
  * @desc    Get investor portfolio summary
- * @access  Private (requires authentication, Root/Admin/Own investor)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/:id/portfolio', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const requestingUserId = req.auth?.userId || req.user?.id;
-  const requestingUserRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -488,14 +488,6 @@ router.get('/:id/portfolio', authenticate, catchAsync(async (req, res) => {
   const user = await User.findById(id);
   validate(user, 'Investor not found');
   validate(user.role === ROLES.INVESTOR, 'User is not an investor');
-
-  // Check access: Root/Admin can access any, Investors can only access their own
-  const hasAccess =
-    requestingUserRole === ROLES.ROOT ||
-    requestingUserRole === ROLES.ADMIN ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
-
-  validate(hasAccess, 'Unauthorized access to investor data');
 
   const portfolio = await User.getPortfolioSummary(id);
 
@@ -508,12 +500,14 @@ router.get('/:id/portfolio', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/:id/commitments
  * @desc    Get investor commitments with detailed structure information
- * @access  Private (requires authentication, Root/Admin/Support/Own investor)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const requestingUserId = req.auth?.userId || req.user?.id;
-  const requestingUserRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -522,15 +516,6 @@ router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
   const user = await User.findById(id);
   validate(user, 'Investor not found');
   validate(user.role === ROLES.INVESTOR, 'User is not an investor');
-
-  // Check access: Root/Admin/Support can access any, Investors can only access their own
-  const hasAccess =
-    requestingUserRole === ROLES.ROOT ||
-    requestingUserRole === ROLES.ADMIN ||
-    requestingUserRole === ROLES.SUPPORT ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
-
-  validate(hasAccess, 'Unauthorized access to investor data');
 
   const commitments = await User.getCommitmentsSummary(id);
 
@@ -635,14 +620,14 @@ router.put('/me', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/me/capital-calls-summary
  * @desc    Get authenticated user's capital calls summary (Total Called, Total Paid, Outstanding, Total Calls)
- * @access  Private (requires authentication, Investor role)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/me/capital-calls-summary', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth?.userId || req.user?.id;
-  const userRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
 
-  // Verify user is an investor
-  validate(userRole === ROLES.INVESTOR, 'This endpoint is only accessible to investors');
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   const capitalCallsData = await User.getCapitalCallsSummary(userId);
 
@@ -660,14 +645,14 @@ router.get('/me/capital-calls-summary', authenticate, catchAsync(async (req, res
 /**
  * @route   GET /api/investors/me/capital-calls
  * @desc    Get authenticated user's capital calls with structures and summary
- * @access  Private (requires authentication, Investor role)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/me/capital-calls', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth?.userId || req.user?.id;
-  const userRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
 
-  // Verify user is an investor
-  validate(userRole === ROLES.INVESTOR, 'This endpoint is only accessible to investors');
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   const user = await User.findById(userId);
   validate(user, 'User not found');
@@ -691,12 +676,14 @@ router.get('/me/capital-calls', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/:id/capital-calls/summary
  * @desc    Get investor capital calls summary (Total Called, Total Paid, Outstanding, Total Calls)
- * @access  Private (requires authentication, Root/Admin/Support/Own investor)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/:id/capital-calls/summary', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const requestingUserId = req.auth?.userId || req.user?.id;
-  const requestingUserRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -705,15 +692,6 @@ router.get('/:id/capital-calls/summary', authenticate, catchAsync(async (req, re
   const user = await User.findById(id);
   validate(user, 'Investor not found');
   validate(user.role === ROLES.INVESTOR, 'User is not an investor');
-
-  // Check access: Root/Admin/Support can access any, Investors can only access their own
-  const hasAccess =
-    requestingUserRole === ROLES.ROOT ||
-    requestingUserRole === ROLES.ADMIN ||
-    requestingUserRole === ROLES.SUPPORT ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
-
-  validate(hasAccess, 'Unauthorized access to investor data');
 
   const capitalCallsData = await User.getCapitalCallsSummary(id);
 
@@ -731,12 +709,14 @@ router.get('/:id/capital-calls/summary', authenticate, catchAsync(async (req, re
 /**
  * @route   GET /api/investors/:id/capital-calls
  * @desc    Get investor capital calls with structures and summary
- * @access  Private (requires authentication, Root/Admin/Support/Own investor)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/:id/capital-calls', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const requestingUserId = req.auth?.userId || req.user?.id;
-  const requestingUserRole = req.auth?.role ?? req.user?.role;
+  const { userRole } = getUserContext(req);
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -745,15 +725,6 @@ router.get('/:id/capital-calls', authenticate, catchAsync(async (req, res) => {
   const user = await User.findById(id);
   validate(user, 'Investor not found');
   validate(user.role === ROLES.INVESTOR, 'User is not an investor');
-
-  // Check access: Root/Admin/Support can access any, Investors can only access their own
-  const hasAccess =
-    requestingUserRole === ROLES.ROOT ||
-    requestingUserRole === ROLES.ADMIN ||
-    requestingUserRole === ROLES.SUPPORT ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === id);
-
-  validate(hasAccess, 'Unauthorized access to investor data');
 
   const capitalCallsData = await User.getCapitalCallsSummary(id);
 
@@ -922,7 +893,7 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
 /**
  * @route   GET /api/investors/me/dashboard
  * @desc    Get investor dashboard data with structures, summary, and distributions
- * @access  Private (requires authentication, Investor role)
+ * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  *
  * @success {200} Success Response
  * {
@@ -981,14 +952,15 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
  */
 router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
+  const { userRole } = getUserContext(req);
   const supabase = getSupabase();
+
+  // Block INVESTOR role from accessing this endpoint
+  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   // Get user details
   const user = await User.findById(userId);
   validate(user, 'User not found');
-
-  // Optional: Validate user is an investor (role 3)
-  // validate(user.role === ROLES.INVESTOR, 'Access denied. Investor role required.');
 
   // Get all structures this user has invested in (from investments table)
   const { data: investments, error: invError } = await supabase
