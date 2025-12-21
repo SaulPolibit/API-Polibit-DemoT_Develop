@@ -516,6 +516,62 @@ router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
 }));
 
 /**
+ * @route   GET /api/investors/me/with-structures
+ * @desc    Get authenticated investor's profile(s) with associated structures
+ * @access  Private (requires authentication, Investor role only)
+ */
+router.get('/me/with-structures', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const userRole = req.auth?.role ?? req.user?.role;
+
+  // Verify user is an investor (role 3)
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
+
+  const user = await User.findById(userId);
+  validate(user, 'User not found');
+
+  // Find all investor records for this user
+  const investors = await Investor.find({ userId });
+  validate(investors && investors.length > 0, 'No investor profile found for this user');
+
+  // Fetch associated structure data for each investor
+  const investorsWithStructures = await Promise.all(
+    investors.map(async (investor) => {
+      const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
+
+      return {
+        ...investor,
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive
+        },
+        structure: structure ? {
+          id: structure.id,
+          name: structure.name,
+          type: structure.type,
+          status: structure.status,
+          baseCurrency: structure.baseCurrency,
+          totalInvested: structure.totalInvested,
+          description: structure.description,
+          currentInvestors: structure.currentInvestors,
+          currentInvestments: structure.currentInvestments
+        } : null
+      };
+    })
+  );
+
+  res.status(200).json({
+    success: true,
+    count: investorsWithStructures.length,
+    data: investorsWithStructures
+  });
+}));
+
+/**
  * @route   PUT /api/investors/me
  * @desc    Update authenticated investor's own profile
  * @access  Private (requires authentication, Investor role)
