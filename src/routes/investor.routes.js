@@ -766,35 +766,92 @@ router.get('/:id/capital-calls/summary', authenticate, catchAsync(async (req, re
 /**
  * @route   GET /api/investors/:id/capital-calls
  * @desc    Get investor capital calls with structures and summary
- * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
+ * @access  Private (requires authentication, Investor role only)
  */
 router.get('/:id/capital-calls', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const { userRole } = getUserContext(req);
+  const { userRole, userId: currentUserId } = getUserContext(req);
 
-  // Block INVESTOR role from accessing this endpoint
-  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
+  // Allow only INVESTOR role to access this endpoint
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
+  // Investors can only access their own data
+  validate(id === currentUserId, 'Access denied. Investors can only access their own data.');
+
   const user = await User.findById(id);
-  validate(user, 'Investor not found');
+  validate(user, 'User not found');
   validate(user.role === ROLES.INVESTOR, 'User is not an investor');
 
-  const capitalCallsData = await User.getCapitalCallsSummary(id);
+  // Get all investor records for this user
+  const investors = await Investor.find({ userId: id });
 
-  // Add investor information to the response
-  const investorName = User.getDisplayName(user);
+  // If no investors found, return empty result
+  if (!investors || investors.length === 0) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId: user.id,
+        userName: User.getDisplayName(user),
+        userEmail: user.email,
+        investors: [],
+        summary: {
+          totalCalled: 0,
+          totalPaid: 0,
+          outstanding: 0,
+          totalCalls: 0
+        },
+        capitalCalls: []
+      }
+    });
+  }
+
+  // Fetch structures for all investor records
+  const investorsWithStructures = await Promise.all(
+    investors.map(async (investor) => {
+      let structure = null;
+      if (investor.structureId && uuidRegex.test(investor.structureId)) {
+        try {
+          structure = await Structure.findById(investor.structureId);
+        } catch (error) {
+          console.error(`Error fetching structure ${investor.structureId}:`, error.message);
+        }
+      }
+
+      return {
+        ...investor,
+        structure: structure ? {
+          id: structure.id,
+          name: structure.name,
+          type: structure.type,
+          status: structure.status,
+          baseCurrency: structure.baseCurrency,
+          totalInvested: structure.totalInvested
+        } : null
+      };
+    })
+  );
+
+  // Get capital calls data
+  const capitalCallsData = await User.getCapitalCallsSummary(id);
 
   res.status(200).json({
     success: true,
     data: {
       userId: user.id,
-      userName: investorName,
+      userName: User.getDisplayName(user),
       userEmail: user.email,
-      ...capitalCallsData
+      investors: investorsWithStructures,
+      summary: capitalCallsData.summary || {
+        totalCalled: 0,
+        totalPaid: 0,
+        outstanding: 0,
+        totalCalls: 0
+      },
+      capitalCalls: capitalCallsData.capitalCalls || []
     }
   });
 }));
