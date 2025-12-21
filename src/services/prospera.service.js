@@ -19,10 +19,20 @@ class ProsperapOAuthService {
   async initialize() {
     try {
       console.log('[Prospera OAuth] Initializing...');
+      console.log('[Prospera OAuth] Environment check:');
+      console.log('  - CLIENT_ID:', process.env.EPROSPERA_CLIENT_ID ? '✓ Set' : '✗ Missing');
+      console.log('  - CLIENT_SECRET:', process.env.EPROSPERA_CLIENT_SECRET ? '✓ Set' : '✗ Missing');
+      console.log('  - ISSUER_URL:', process.env.EPROSPERA_ISSUER_URL || 'Using default');
+      console.log('  - FRONTEND_URL:', process.env.FRONTEND_URL || '✗ Missing');
 
       // Check required environment variables
       if (!process.env.EPROSPERA_CLIENT_ID || !process.env.EPROSPERA_CLIENT_SECRET) {
-        console.warn('[Prospera OAuth] Missing credentials. Set EPROSPERA_CLIENT_ID and EPROSPERA_CLIENT_SECRET');
+        console.error('[Prospera OAuth] ✗ Missing credentials. Set EPROSPERA_CLIENT_ID and EPROSPERA_CLIENT_SECRET');
+        return false;
+      }
+
+      if (!process.env.FRONTEND_URL) {
+        console.error('[Prospera OAuth] ✗ Missing FRONTEND_URL environment variable');
         return false;
       }
 
@@ -34,24 +44,30 @@ class ProsperapOAuthService {
       console.log(`[Prospera OAuth] Discovering issuer: ${issuerUrl}`);
       this.issuer = await Issuer.discover(issuerUrl);
 
+      console.log('[Prospera OAuth] ✓ Issuer discovered');
+
       // Create OAuth client
+      const redirectUri = `${process.env.FRONTEND_URL}/lp-portal/login`;
+      console.log(`[Prospera OAuth] Creating client with redirect URI: ${redirectUri}`);
+
       this.client = new this.issuer.Client({
         client_id: process.env.EPROSPERA_CLIENT_ID,
         client_secret: process.env.EPROSPERA_CLIENT_SECRET,
-        redirect_uris: [
-          `${process.env.FRONTEND_URL}/lp-portal/login`,
-        ],
+        redirect_uris: [redirectUri],
         response_types: ['code'],
       });
 
       this.isInitialized = true;
       console.log('[Prospera OAuth] ✓ Initialized successfully');
       console.log(`[Prospera OAuth] Issuer: ${this.issuer.issuer}`);
-      console.log(`[Prospera OAuth] Redirect URI: ${process.env.FRONTEND_URL}/lp-portal/login`);
+      console.log(`[Prospera OAuth] Redirect URI: ${redirectUri}`);
 
       return true;
     } catch (error) {
-      console.error('[Prospera OAuth] Initialization failed:', error.message);
+      console.error('[Prospera OAuth] ✗ Initialization failed');
+      console.error('[Prospera OAuth] Error type:', error.constructor.name);
+      console.error('[Prospera OAuth] Error message:', error.message);
+      console.error('[Prospera OAuth] Stack trace:', error.stack);
       this.isInitialized = false;
       return false;
     }
