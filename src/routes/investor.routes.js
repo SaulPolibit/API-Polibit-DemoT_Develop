@@ -535,9 +535,20 @@ router.get('/me/with-structures', authenticate, catchAsync(async (req, res) => {
   validate(investors && investors.length > 0, 'No investor profile found for this user');
 
   // Fetch associated structure data for each investor
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   const investorsWithStructures = await Promise.all(
     investors.map(async (investor) => {
-      const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
+      // Only fetch structure if structureId exists and is a valid UUID
+      let structure = null;
+      if (investor.structureId && uuidRegex.test(investor.structureId)) {
+        try {
+          structure = await Structure.findById(investor.structureId);
+        } catch (error) {
+          console.error(`Error fetching structure ${investor.structureId}:`, error.message);
+          structure = null;
+        }
+      }
 
       return {
         ...investor,
