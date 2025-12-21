@@ -350,6 +350,73 @@ router.get('/with-structures', authenticate, catchAsync(async (req, res) => {
 }));
 
 /**
+ * @route   GET /api/investors/me/with-structures
+ * @desc    Get authenticated investor's profile(s) with associated structures
+ * @access  Private (requires authentication, Investor role only)
+ */
+router.get('/me/with-structures', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const userRole = req.auth?.role ?? req.user?.role;
+
+  // Verify user is an investor (role 3)
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
+
+  const user = await User.findById(userId);
+  validate(user, 'User not found');
+
+  // Find all investor records for this user
+  const investors = await Investor.find({ userId });
+  validate(investors && investors.length > 0, 'No investor profile found for this user');
+
+  // Fetch associated structure data for each investor
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const investorsWithStructures = await Promise.all(
+    investors.map(async (investor) => {
+      // Only fetch structure if structureId exists and is a valid UUID
+      let structure = null;
+      if (investor.structureId && uuidRegex.test(investor.structureId)) {
+        try {
+          structure = await Structure.findById(investor.structureId);
+        } catch (error) {
+          console.error(`Error fetching structure ${investor.structureId}:`, error.message);
+          structure = null;
+        }
+      }
+
+      return {
+        ...investor,
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive
+        },
+        structure: structure ? {
+          id: structure.id,
+          name: structure.name,
+          type: structure.type,
+          status: structure.status,
+          baseCurrency: structure.baseCurrency,
+          totalInvested: structure.totalInvested,
+          description: structure.description,
+          currentInvestors: structure.currentInvestors,
+          currentInvestments: structure.currentInvestments
+        } : null
+      };
+    })
+  );
+
+  res.status(200).json({
+    success: true,
+    count: investorsWithStructures.length,
+    data: investorsWithStructures
+  });
+}));
+
+/**
  * @route   GET /api/investors/:id
  * @desc    Get a single investor record by ID with user data
  * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
@@ -512,73 +579,6 @@ router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
       userEmail: user.email,
       ...commitments
     }
-  });
-}));
-
-/**
- * @route   GET /api/investors/me/with-structures
- * @desc    Get authenticated investor's profile(s) with associated structures
- * @access  Private (requires authentication, Investor role only)
- */
-router.get('/me/with-structures', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth?.userId || req.user?.id;
-  const userRole = req.auth?.role ?? req.user?.role;
-
-  // Verify user is an investor (role 3)
-  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
-
-  const user = await User.findById(userId);
-  validate(user, 'User not found');
-
-  // Find all investor records for this user
-  const investors = await Investor.find({ userId });
-  validate(investors && investors.length > 0, 'No investor profile found for this user');
-
-  // Fetch associated structure data for each investor
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-  const investorsWithStructures = await Promise.all(
-    investors.map(async (investor) => {
-      // Only fetch structure if structureId exists and is a valid UUID
-      let structure = null;
-      if (investor.structureId && uuidRegex.test(investor.structureId)) {
-        try {
-          structure = await Structure.findById(investor.structureId);
-        } catch (error) {
-          console.error(`Error fetching structure ${investor.structureId}:`, error.message);
-          structure = null;
-        }
-      }
-
-      return {
-        ...investor,
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          role: user.role,
-          isActive: user.isActive
-        },
-        structure: structure ? {
-          id: structure.id,
-          name: structure.name,
-          type: structure.type,
-          status: structure.status,
-          baseCurrency: structure.baseCurrency,
-          totalInvested: structure.totalInvested,
-          description: structure.description,
-          currentInvestors: structure.currentInvestors,
-          currentInvestments: structure.currentInvestments
-        } : null
-      };
-    })
-  );
-
-  res.status(200).json({
-    success: true,
-    count: investorsWithStructures.length,
-    data: investorsWithStructures
   });
 }));
 
