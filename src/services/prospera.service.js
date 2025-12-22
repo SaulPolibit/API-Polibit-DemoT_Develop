@@ -42,9 +42,33 @@ class ProsperapOAuthService {
       const issuerUrl = process.env.EPROSPERA_ISSUER_URL || 'https://staging-portal.eprospera.com';
 
       console.log(`[Prospera OAuth] Discovering issuer: ${issuerUrl}`);
-      this.issuer = await Issuer.discover(issuerUrl);
 
-      console.log('[Prospera OAuth] ✓ Issuer discovered');
+      // Try auto-discovery with increased timeout
+      try {
+        this.issuer = await Issuer.discover(issuerUrl, {
+          timeout: 15000, // 15 seconds for serverless environments
+        });
+        console.log('[Prospera OAuth] ✓ Issuer discovered via auto-discovery');
+      } catch (discoveryError) {
+        console.warn('[Prospera OAuth] Auto-discovery failed, using manual configuration');
+        console.warn('[Prospera OAuth] Discovery error:', discoveryError.message);
+
+        // Fallback: Manually configure issuer endpoints
+        // These are the actual Próspera OIDC endpoints (verified from /.well-known/openid-configuration)
+        this.issuer = new Issuer({
+          issuer: issuerUrl,
+          authorization_endpoint: `${issuerUrl}/api/oauth/authorize`,
+          token_endpoint: `${issuerUrl}/api/oauth/token`,
+          userinfo_endpoint: `${issuerUrl}/api/oauth/userinfo`,
+          jwks_uri: `${issuerUrl}/api/oauth/.well-known/jwks.json`,
+          response_types_supported: ['code'],
+          subject_types_supported: ['public'],
+          id_token_signing_alg_values_supported: ['RS256'],
+          token_endpoint_auth_methods_supported: ['client_secret_post'],
+          code_challenge_methods_supported: ['S256'],
+        });
+        console.log('[Prospera OAuth] ✓ Issuer configured manually');
+      }
 
       // Create OAuth client with multiple redirect URIs
       const redirectUris = [
