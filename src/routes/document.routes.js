@@ -292,29 +292,36 @@ router.get('/combined', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth.userId || req.user.id;
   const { documentType, isActive } = req.query;
 
-  // Build base filter
-  let baseFilter = { userId };
-  if (documentType) baseFilter.documentType = documentType;
-  if (isActive !== undefined) baseFilter.isActive = isActive === 'true';
+  // Build filters
+  let structureFilter = { entityType: 'Structure' };
+  let userFilter = { userId, entityType: { $ne: 'Structure' } };
 
-  // Get all user documents (excluding structures)
-  const userFilter = { ...baseFilter };
+  if (documentType) {
+    structureFilter.documentType = documentType;
+    userFilter.documentType = documentType;
+  }
+  if (isActive !== undefined) {
+    const activeStatus = isActive === 'true';
+    structureFilter.isActive = activeStatus;
+    userFilter.isActive = activeStatus;
+  }
+
+  // Get ALL structure documents (regardless of userId)
+  const structureDocuments = await Document.find(structureFilter);
+
+  // Get user's own documents (non-structure)
   const userDocuments = await Document.find(userFilter);
-
-  // Separate user documents from structure documents
-  const structureDocuments = userDocuments.filter(doc => doc.entityType === 'Structure');
-  const otherUserDocuments = userDocuments.filter(doc => doc.entityType !== 'Structure');
 
   res.status(200).json({
     success: true,
     data: {
-      userDocuments: otherUserDocuments,
+      userDocuments: userDocuments,
       structureDocuments: structureDocuments
     },
     counts: {
-      userDocuments: otherUserDocuments.length,
+      userDocuments: userDocuments.length,
       structureDocuments: structureDocuments.length,
-      total: userDocuments.length
+      total: userDocuments.length + structureDocuments.length
     }
   });
 }));
