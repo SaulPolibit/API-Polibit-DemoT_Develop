@@ -379,15 +379,36 @@ router.get('/search', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/documents/entity/:entityType/:entityId
  * @desc    Get all documents for a specific entity
- * @access  Private (requires authentication)
+ * @access  Private (requires authentication, accessible to all authenticated users)
  */
 router.get('/entity/:entityType/:entityId', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
-  const userRole = req.auth?.role ?? req.user?.role;
   const { entityType, entityId } = req.params;
 
-  // Validate entity exists and belongs to user
-  await validateEntity(entityType, entityId, userId, userRole);
+  // Validate entity type
+  const validEntityTypes = ['Structure', 'Investor', 'Investment', 'CapitalCall', 'Distribution'];
+  validate(validEntityTypes.includes(entityType), `Entity type must be one of: ${validEntityTypes.join(', ')}`);
+
+  // Validate entity exists (without ownership check)
+  let entity = null;
+  switch (entityType) {
+    case 'Structure':
+      entity = await Structure.findById(entityId);
+      break;
+    case 'Investor':
+      entity = await Investor.findById(entityId);
+      break;
+    case 'Investment':
+      entity = await Investment.findById(entityId);
+      break;
+    case 'CapitalCall':
+      entity = await CapitalCall.findById(entityId);
+      break;
+    case 'Distribution':
+      entity = await Distribution.findById(entityId);
+      break;
+  }
+
+  validate(entity, `${entityType} not found`);
 
   const documents = await Document.findByEntity(entityType, entityId);
 
