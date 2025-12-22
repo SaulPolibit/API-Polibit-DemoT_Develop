@@ -15,6 +15,41 @@ const { getSupabase } = require('../config/database');
 
 const router = express.Router();
 
+// ===== HELPER FUNCTIONS =====
+
+/**
+ * Helper to ensure request body is parsed (for Vercel compatibility)
+ * Vercel sometimes doesn't parse the body automatically
+ */
+const ensureBodyParsed = (req) => {
+  return new Promise((resolve, reject) => {
+    // If body is already parsed, return it
+    if (req.body && typeof req.body === 'object') {
+      return resolve(req.body);
+    }
+
+    // Otherwise, manually parse the raw body
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+    });
+    req.on('end', () => {
+      try {
+        req.body = data ? JSON.parse(data) : {};
+        resolve(req.body);
+      } catch (error) {
+        console.error('[Body Parser] Failed to parse body:', error);
+        req.body = {};
+        resolve({});
+      }
+    });
+    req.on('error', (error) => {
+      console.error('[Body Parser] Error reading body:', error);
+      req.body = {};
+      resolve({});
+    });
+  });
+};
 
 // ===== LOGIN API ENDPOINTS =====
 
@@ -809,9 +844,13 @@ async function ensureCrossmintInitialized() {
  * }
  */
 router.post('/prospera/auth-url', catchAsync(async (req, res) => {
-  const { redirectUri } = req.body;
+  // Ensure body is parsed (for Vercel compatibility)
+  await ensureBodyParsed(req);
+
+  const { redirectUri } = req.body || {};
 
   console.log('[Prospera] Generating authorization URL...');
+  console.log('[Prospera] Request body:', req.body);
   if (redirectUri) {
     console.log('[Prospera] Requested redirect URI:', redirectUri);
   }
