@@ -976,12 +976,16 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
   // Existing user - update and proceed with login
   console.log('[Prospera Callback] Existing user - updating and proceeding with login...');
 
-  user = await User.findByIdAndUpdate(user.id, {
-    prosperaId: prosperapData.user.prosperaId,
-    profileImage: prosperapData.user.picture || user.profileImage,
-    lastLogin: new Date(),
-    isEmailVerified: prosperapData.user.emailVerified || user.isEmailVerified,
-  });
+  user = await User.findByIdAndUpdate(
+    user.id,
+    {
+      prosperaId: prosperapData.user.prosperaId,
+      profileImage: prosperapData.user.picture || user.profileImage,
+      lastLogin: new Date(),
+      isEmailVerified: prosperapData.user.emailVerified || user.isEmailVerified,
+    },
+    { new: true } // Return the updated document
+  );
 
   console.log('[Prospera Callback] ✓ User updated');
 
@@ -1002,9 +1006,11 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
 
     // Update user with wallet address if new or changed
     if (user.walletAddress !== walletData.walletAddress) {
-      user = await User.findByIdAndUpdate(user.id, {
-        walletAddress: walletData.walletAddress,
-      });
+      user = await User.findByIdAndUpdate(
+        user.id,
+        { walletAddress: walletData.walletAddress },
+        { new: true } // Return the updated document
+      );
       console.log('[Prospera Callback] ✓ Wallet address saved to user profile');
     }
   } catch (walletError) {
@@ -1134,9 +1140,11 @@ router.post('/prospera/complete-registration', catchAsync(async (req, res) => {
     console.log('[Prospera Registration] ✓ Wallet ready:', walletData.walletAddress);
 
     // Update user with wallet address
-    user = await User.findByIdAndUpdate(user.id, {
-      walletAddress: walletData.walletAddress,
-    });
+    user = await User.findByIdAndUpdate(
+      user.id,
+      { walletAddress: walletData.walletAddress },
+      { new: true } // Return the updated document
+    );
     console.log('[Prospera Registration] ✓ Wallet address saved to user profile');
   } catch (walletError) {
     // Log wallet error but don't fail the registration
