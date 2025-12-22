@@ -145,7 +145,7 @@ router.post('/login', catchAsync(async (req, res) => {
       kycUrl: user.kycUrl,
       address: user.address,
       country: user.country,
-      walletAddress: user.wallet_address
+      walletAddress: user.walletAddress || null
     }
   });
 }));
