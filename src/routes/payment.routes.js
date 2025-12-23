@@ -127,7 +127,7 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     contractId: contractId.trim(),
     status: status?.trim() || 'pending',
     tokenId: tokenId?.trim() || null,
-    tokens: tokens || null,
+    tokens: tokens ? parseInt(tokens, 10) : null,
     walletAddress: walletAddress?.trim() || null,
     userId: userId
   };
@@ -343,6 +343,8 @@ router.put('/:id', authenticate, handleDocumentUpload, catchAsync(async (req, re
     if (req.body[field] !== undefined) {
       if (field === 'email') {
         updateData[field] = req.body[field].trim().toLowerCase();
+      } else if (field === 'tokens') {
+        updateData[field] = req.body[field] ? parseInt(req.body[field], 10) : null;
       } else if (typeof req.body[field] === 'string') {
         updateData[field] = req.body[field].trim();
       } else {
