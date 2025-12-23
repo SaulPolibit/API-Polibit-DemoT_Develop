@@ -8,7 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const { handleDocumentUpload } = require('../middleware/upload');
 const { uploadToSupabase } = require('../utils/fileUpload');
 const Payment = require('../models/supabase/payment');
-const { Structure } = require('../models/supabase');
+const { Structure, User } = require('../models/supabase');
 const { requireInvestmentManagerAccess, getUserContext } = require('../middleware/rbac');
 
 const router = express.Router();
@@ -169,10 +169,53 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
 
   const payments = await Payment.find(filter);
 
+  // Attach user and structure details to each payment
+  const paymentsWithDetails = await Promise.all(
+    payments.map(async (payment) => {
+      let user = null;
+      let structure = null;
+
+      if (payment.userId) {
+        try {
+          user = await User.findById(payment.userId);
+        } catch (error) {
+          console.error(`Error fetching user ${payment.userId}:`, error.message);
+        }
+      }
+
+      if (payment.structureId) {
+        try {
+          structure = await Structure.findById(payment.structureId);
+        } catch (error) {
+          console.error(`Error fetching structure ${payment.structureId}:`, error.message);
+        }
+      }
+
+      return {
+        ...payment,
+        user: user ? {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+        } : null,
+        structure: structure ? {
+          id: structure.id,
+          name: structure.name,
+          type: structure.type,
+          status: structure.status,
+          baseCurrency: structure.baseCurrency,
+          description: structure.description,
+        } : null
+      };
+    })
+  );
+
   res.status(200).json({
     success: true,
-    count: payments.length,
-    data: payments
+    count: paymentsWithDetails.length,
+    data: paymentsWithDetails
   });
 }));
 
