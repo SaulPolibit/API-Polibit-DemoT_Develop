@@ -279,7 +279,7 @@ router.get('/search', authenticate, catchAsync(async (req, res) => {
 
 /**
  * @route   GET /api/investors/with-structures
- * @desc    Get all investors with their structures
+ * @desc    Get all investors from Investor model with their user and structure data
  * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
  */
 router.get('/with-structures', authenticate, catchAsync(async (req, res) => {
@@ -288,64 +288,46 @@ router.get('/with-structures', authenticate, catchAsync(async (req, res) => {
   // Block INVESTOR role from accessing this endpoint
   validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
-  // Get all investors (users with role = 3)
-  const investors = await User.find({ role: ROLES.INVESTOR });
+  // Get all investors from Investor model
+  const investors = await Investor.find({});
 
-  // For each investor, get their structures from investments
-  const supabase = getSupabase();
-  const investorsWithStructures = await Promise.all(
+  // For each investor, get user and structure data
+  const investorsWithData = await Promise.all(
     investors.map(async (investor) => {
-      // Get all investments for this investor with structure details
-      const { data: investments, error: invError } = await supabase
-        .from('investments')
-        .select(`
-          structure_id,
-          ownership_percentage,
-          equity_ownership_percent,
-          structures:structure_id (
-            id,
-            name,
-            type,
-            status,
-            base_currency,
-            total_invested
-          )
-        `)
-        .eq('user_id', investor.id);
+      // Fetch user data from userId
+      const user = investor.userId ? await User.findById(investor.userId) : null;
 
-      if (invError) {
-        console.error(`Error fetching investments for investor ${investor.id}:`, invError.message);
-        return {
-          ...investor,
-          structures: []
-        };
-      }
-
-      // Get unique structures from investments
-      const uniqueStructures = new Map();
-      investments?.forEach(inv => {
-        if (inv.structures && !uniqueStructures.has(inv.structure_id)) {
-          const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
-          uniqueStructures.set(inv.structure_id, {
-            structure_id: inv.structure_id,
-            user_id: investor.id,
-            ownership_percent: ownershipPercent,
-            structure: inv.structures
-          });
-        }
-      });
+      // Fetch structure data from structureId
+      const structure = investor.structureId ? await Structure.findById(investor.structureId) : null;
 
       return {
         ...investor,
-        structures: Array.from(uniqueStructures.values())
+        user: user ? {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive
+        } : null,
+        structure: structure ? {
+          id: structure.id,
+          name: structure.name,
+          type: structure.type,
+          status: structure.status,
+          baseCurrency: structure.baseCurrency,
+          totalInvested: structure.totalInvested,
+          currentInvestors: structure.currentInvestors,
+          currentInvestments: structure.currentInvestments
+        } : null
       };
     })
   );
 
   res.status(200).json({
     success: true,
-    count: investorsWithStructures.length,
-    data: investorsWithStructures
+    count: investorsWithData.length,
+    data: investorsWithData
   });
 }));
 
