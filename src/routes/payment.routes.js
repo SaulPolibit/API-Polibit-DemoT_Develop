@@ -87,6 +87,7 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     contractId,
     status,
     tokenId,
+    tokens,
     walletAddress
   } = req.body;
 
@@ -126,6 +127,7 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     contractId: contractId.trim(),
     status: status?.trim() || 'pending',
     tokenId: tokenId?.trim() || null,
+    tokens: tokens || null,
     walletAddress: walletAddress?.trim() || null,
     userId: userId
   };
@@ -332,7 +334,8 @@ router.put('/:id', authenticate, handleDocumentUpload, catchAsync(async (req, re
     'mintTransactionHash',
     'amount',
     'status',
-    'tokenId'
+    'tokenId',
+    'tokens'
   ];
 
   // Update allowed fields

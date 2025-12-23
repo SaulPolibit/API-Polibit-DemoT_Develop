@@ -23,6 +23,7 @@ class Payment {
       contractId: 'contract_id',
       status: 'status',
       tokenId: 'token_id',
+      tokens: 'tokens',
       userId: 'user_id',
       // New approval workflow fields
       paymentMethod: 'payment_method',
@@ -66,6 +67,7 @@ class Payment {
       contractId: dbData.contract_id,
       status: dbData.status,
       tokenId: dbData.token_id,
+      tokens: dbData.tokens,
       userId: dbData.user_id,
       // New approval workflow fields
       paymentMethod: dbData.payment_method,
