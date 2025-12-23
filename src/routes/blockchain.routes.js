@@ -1972,6 +1972,7 @@ router.post('/contract/mint-tokens', authenticate, catchAsync(async (req, res) =
     res.status(200).json({
       success: true,
       message: 'Tokens minted successfully',
+      mintTransactionHash: receipt.transactionHash,
       data: {
         transactionHash: receipt.transactionHash,
         contractAddress: contractAddress.toLowerCase(),
