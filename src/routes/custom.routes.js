@@ -259,6 +259,11 @@ router.post('/mfa/enroll', authenticate, catchAsync(async (req, res) => {
     enrolledAt: new Date().toISOString()
   });
 
+  // Save factorId to user model
+  await User.findByIdAndUpdate(userId, {
+    mfaFactorId: data.id
+  });
+
   res.status(200).json({
     success: true,
     message: `MFA enrollment initiated using ${factorType.toUpperCase()}. Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.).`,
@@ -470,6 +475,11 @@ router.post('/mfa/unenroll', authenticate, catchAsync(async (req, res) => {
   // Remove from our database
   await MFAFactor.delete(factorIdToRemove);
 
+  // Clear mfaFactorId from user model
+  await User.findByIdAndUpdate(userId, {
+    mfaFactorId: null
+  });
+
   res.status(200).json({
     success: true,
     message: 'MFA removed successfully',
@@ -478,12 +488,44 @@ router.post('/mfa/unenroll', authenticate, catchAsync(async (req, res) => {
 }));
 
 /**
+ * @route   GET /api/custom/mfa/enabled
+ * @desc    Check if user has MFA enabled (simple boolean check)
+ * @access  Private
+ * @returns {boolean} enabled - True if user has MFA enabled
+ */
+router.get('/mfa/enabled', authenticate, catchAsync(async (req, res) => {
+  const { id: userId } = req.user;
+
+  // Get user from database
+  const user = await User.findById(userId);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: 'User not found'
+    });
+  }
+
+  // Check if user has mfaFactorId
+  const mfaEnabled = !!(user.mfaFactorId);
+
+  res.status(200).json({
+    success: true,
+    enabled: mfaEnabled,
+    mfaFactorId: mfaEnabled ? user.mfaFactorId : null
+  });
+}));
+
+/**
  * @route   GET /api/custom/mfa/status
- * @desc    Get user's MFA enrollment status
+ * @desc    Get user's MFA enrollment status (detailed)
  * @access  Private
  */
 router.get('/mfa/status', authenticate, catchAsync(async (req, res) => {
   const { id: userId } = req.user;
+
+  // Get user from database
+  const user = await User.findById(userId);
 
   // Check if user has active MFA
   const hasActiveMFA = await MFAFactor.hasActiveMFA(userId);
@@ -495,6 +537,7 @@ router.get('/mfa/status', authenticate, catchAsync(async (req, res) => {
     success: true,
     data: {
       mfaEnabled: hasActiveMFA,
+      mfaFactorId: user?.mfaFactorId || null,
       factorCount: activeFactors.length,
       factors: activeFactors.map(factor => ({
         id: factor.id,

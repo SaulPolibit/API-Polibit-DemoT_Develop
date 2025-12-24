@@ -778,6 +778,8 @@ class User {
       prosperaId: dbUser.prospera_id,
       // Blockchain wallet
       walletAddress: dbUser.wallet_address,
+      // MFA
+      mfaFactorId: dbUser.mfa_factor_id,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -855,6 +857,8 @@ class User {
       prosperaId: 'prospera_id',
       // Blockchain wallet
       walletAddress: 'wallet_address',
+      // MFA
+      mfaFactorId: 'mfa_factor_id',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {
