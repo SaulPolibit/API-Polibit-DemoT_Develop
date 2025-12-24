@@ -707,6 +707,7 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
       kycStatus: user.kycStatus,
       kycUrl: user.kycUrl,
       address: user.address,
+      userAddress: user.userAddress,
       country: user.country,
       isActive: user.isActive,
       lastLogin: user.lastLogin,
