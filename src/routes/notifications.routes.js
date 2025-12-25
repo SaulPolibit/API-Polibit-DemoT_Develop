@@ -91,7 +91,14 @@ router.put('/settings', authenticate, catchAsync(async (req, res) => {
     'preferredContactMethod',
     'reportDeliveryFormat',
     'documentUploads',
-    'generalAnnouncements'
+    'generalAnnouncements',
+    'capitalCallNotices',
+    'distributionNotices',
+    'k1TaxForms',
+    'paymentConfirmations',
+    'quarterlyReports',
+    'securityAlerts',
+    'urgentCapitalCalls'
   ];
 
   const updates = {};

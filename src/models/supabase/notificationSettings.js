@@ -268,6 +268,13 @@ class NotificationSettings {
       reportDeliveryFormat: dbSettings.report_delivery_format,
       documentUploads: dbSettings.document_uploads,
       generalAnnouncements: dbSettings.general_announcements,
+      capitalCallNotices: dbSettings.capital_call_notices,
+      distributionNotices: dbSettings.distribution_notices,
+      k1TaxForms: dbSettings.k1_tax_forms,
+      paymentConfirmations: dbSettings.payment_confirmations,
+      quarterlyReports: dbSettings.quarterly_reports,
+      securityAlerts: dbSettings.security_alerts,
+      urgentCapitalCalls: dbSettings.urgent_capital_calls,
       createdAt: dbSettings.created_at,
       updatedAt: dbSettings.updated_at,
 
@@ -286,7 +293,16 @@ class NotificationSettings {
           systemUpdateNotifications: true,
           marketingEmailNotifications: true,
           pushNotifications: true,
-          smsNotifications: true
+          smsNotifications: true,
+          documentUploads: true,
+          generalAnnouncements: true,
+          capitalCallNotices: true,
+          distributionNotices: true,
+          k1TaxForms: true,
+          paymentConfirmations: true,
+          quarterlyReports: true,
+          securityAlerts: true,
+          urgentCapitalCalls: true
         });
       },
 
@@ -300,7 +316,16 @@ class NotificationSettings {
           systemUpdateNotifications: false,
           marketingEmailNotifications: false,
           pushNotifications: false,
-          smsNotifications: false
+          smsNotifications: false,
+          documentUploads: false,
+          generalAnnouncements: false,
+          capitalCallNotices: false,
+          distributionNotices: false,
+          k1TaxForms: false,
+          paymentConfirmations: false,
+          quarterlyReports: false,
+          securityAlerts: false,
+          urgentCapitalCalls: false
         });
       }
     };
@@ -332,6 +357,13 @@ class NotificationSettings {
       reportDeliveryFormat: 'report_delivery_format',
       documentUploads: 'document_uploads',
       generalAnnouncements: 'general_announcements',
+      capitalCallNotices: 'capital_call_notices',
+      distributionNotices: 'distribution_notices',
+      k1TaxForms: 'k1_tax_forms',
+      paymentConfirmations: 'payment_confirmations',
+      quarterlyReports: 'quarterly_reports',
+      securityAlerts: 'security_alerts',
+      urgentCapitalCalls: 'urgent_capital_calls',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {
