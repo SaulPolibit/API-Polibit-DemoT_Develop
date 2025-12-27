@@ -27,7 +27,7 @@ router.get('/health', (_req, res) => {
 
 /**
  * @route   GET /api/firm-settings/logo
- * @desc    Get firm logo (public endpoint)
+ * @desc    Get firm logo and name (public endpoint)
  * @access  Public
  */
 router.get('/logo', catchAsync(async (_req, res) => {
@@ -37,7 +37,8 @@ router.get('/logo', catchAsync(async (_req, res) => {
   res.status(200).json({
     success: true,
     data: {
-      firmLogo: settings?.firmLogo || null
+      firmLogo: settings?.firmLogo || null,
+      firmName: settings?.firmName || 'PoliBit'
     }
   });
 }));
