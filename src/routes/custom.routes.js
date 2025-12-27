@@ -838,31 +838,31 @@ router.post('/didit/session', authenticate, catchAsync(async (req, res) => {
 
     const result = await apiManager.getDiditSession(context, variables);
 
-    if (result.error) {
-      return res.status(result.statusCode || 500).json({
-        error: result.error,
-        message: 'Failed to retrieve existing DiDit session',
-        details: result.body,
-      });
-    }
-
-    // Update user's kycStatus with the latest status from DiDit
-    const sessionData = result.body;
-    if (sessionData.status) {
+    // Check if session is valid and not expired
+    if (!result.error && result.body && result.body.status) {
+      // Valid session - update kycStatus and return
+      const sessionData = result.body;
       await User.findByIdAndUpdate(userId, {
         kycStatus: sessionData.status
       });
+
+      console.log('[DiDit] Existing KYC session retrieved successfully');
+      return res.status(200).json({
+        success: true,
+        message: 'Existing KYC session retrieved',
+        existingSession: true,
+        data: sessionData,
+      });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Existing KYC session retrieved',
-      existingSession: true,
-      data: sessionData,
-    });
+    // Session is expired, invalid, or error occurred - create new session
+    console.log('[DiDit] Existing session invalid/expired, creating new session');
+    console.log('[DiDit] Previous session error:', result.error || 'No valid status returned');
   }
 
-  // No existing session, create a new one
+  // No existing session OR expired session - create a new one
+  const hadPreviousSession = !!user.kycId;
+
   const result = await apiManager.createDiditSession(context, {
     token,
     ...req.body
@@ -876,7 +876,7 @@ router.post('/didit/session', authenticate, catchAsync(async (req, res) => {
     });
   }
 
-  // Save session data to user profile
+  // Save session data to user profile (including new kycUrl for renewed sessions)
   const sessionData = result.body;
   await User.findByIdAndUpdate(userId, {
     kycId: sessionData.session_id,
@@ -884,10 +884,16 @@ router.post('/didit/session', authenticate, catchAsync(async (req, res) => {
     kycUrl: sessionData.url
   });
 
+  console.log(`[DiDit] KYC session ${hadPreviousSession ? 'renewed' : 'created'} successfully`);
+  console.log(`[DiDit] New session ID: ${sessionData.session_id}`);
+
   res.status(result.statusCode || 201).json({
     success: true,
-    message: 'KYC session created successfully',
+    message: hadPreviousSession
+      ? 'Expired KYC session replaced with new one'
+      : 'KYC session created successfully',
     existingSession: false,
+    sessionRenewed: hadPreviousSession,
     data: sessionData,
   });
 }));
