@@ -1631,6 +1631,9 @@ router.post('/prospera/link-wallet', authenticate, catchAsync(async (req, res) =
  * @access  Private
  */
 router.get('/wallet/balances', authenticate, catchAsync(async (req, res) => {
+  // Ensure Crossmint is initialized (for serverless environments)
+  await ensureCrossmintInitialized();
+
   const user = await User.findById(req.auth.userId);
 
   if (!user) {
