@@ -178,19 +178,19 @@ class CrossmintWalletService {
 
   /**
    * Get wallet token balances
-   * @param {string} walletId - Crossmint wallet ID
+   * @param {string} walletLocator - Wallet address or Crossmint wallet ID
    * @returns {Array} Array of token balances with details
    */
-  async getWalletBalances(walletId) {
+  async getWalletBalances(walletLocator) {
     if (!this.isInitialized) {
       throw new Error('Crossmint service not initialized. Call initialize() first.');
     }
 
     try {
-      console.log('[Crossmint] Fetching balances for wallet:', walletId);
+      console.log('[Crossmint] Fetching balances for wallet:', walletLocator);
 
       const response = await axios.get(
-        `${this.baseUrl}/v1-alpha1/wallets/${walletId}/balances`,
+        `${this.baseUrl}/v1-alpha2/wallets/${walletLocator}/balances`,
         {
           headers: {
             'X-API-KEY': this.apiKey,

@@ -1650,24 +1650,16 @@ router.get('/wallet/balances', authenticate, catchAsync(async (req, res) => {
     });
   }
 
-  // Get walletId from user - need to fetch from Crossmint
-  // Since we only have walletAddress, we need to get wallet details first
-  const walletData = await crossmint.getWallet({
-    email: user.email,
-    userId: user.id
-  });
+  // For non-custodial wallets, use wallet address directly as walletLocator
+  // No need to call getWallet() - the address IS the locator
+  const balances = await crossmint.getWalletBalances(user.walletAddress);
 
-  // Get balances
-  const balances = await crossmint.getWalletBalances(walletData.walletId);
-
-  // Filter for USDT and ERC-3643 tokens (optional - can be done on frontend)
-  // For now, return all balances
   res.status(200).json({
     success: true,
     data: {
       walletAddress: user.walletAddress,
       balances: balances || [],
-      chain: walletData.chain || 'polygon-amoy'
+      chain: 'polygon-amoy'
     }
   });
 }));
