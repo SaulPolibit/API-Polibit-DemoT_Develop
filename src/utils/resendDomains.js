@@ -25,8 +25,8 @@ async function createDomain(domainName, region = 'us-east-1') {
     throw new Error('Domain name is required');
   }
 
-  // Validate domain format
-  const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/;
+  // Validate domain format (supports subdomains like mail.example.com)
+  const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
   if (!domainRegex.test(domainName)) {
     throw new Error('Invalid domain format');
   }
