@@ -6,7 +6,7 @@
 const express = require('express');
 const { Web3 } = require('web3');
 const apiManager = require('../services/apiManager');
-const { authenticate, requireApiKey, requireBearerToken } = require('../middleware/auth');
+const { authenticate, requireApiKey, requireBearerToken, requireRole } = require('../middleware/auth');
 const {
   catchAsync,
   validate
@@ -165,7 +165,7 @@ router.post('/contract/owner', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires Bearer token)
  * @body    { contractAddress: string, abi: array, functionName: string, params: array }
  */
-router.post('/contract/call', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/call', authenticate, requireRole([0, 1]), catchAsync(async (req, res) => {
   const { contractAddress, abi, functionName, params = [] } = req.body;
 
   validate(contractAddress, 'Contract address is required');
@@ -420,7 +420,7 @@ router.post('/contract/token-holders', authenticate, catchAsync(async (req, res)
  * @access  Private (requires Bearer token)
  * @body    { contractAddress: string, userAddress: string }
  */
-router.post('/contract/register-agent', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/register-agent', authenticate, requireRole(0), catchAsync(async (req, res) => {
   const { contractAddress, userAddress } = req.body;
 
   validate(contractAddress, 'Contract address is required');
@@ -842,7 +842,7 @@ router.delete('/contract/remove-agent', authenticate, catchAsync(async (req, res
  * @body    { identityAddress: string, userAddress: string, country: string, investorType: number }
  * investorType Options {0: retail, 1: professional, 2: institutional}
  */
-router.post('/contract/register-user', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/register-user', authenticate, requireRole(0), catchAsync(async (req, res) => {
   const { identityAddress, userAddress, country, investorType } = req.body;
 
   validate(identityAddress, 'Identity Contract address is required');
@@ -1416,7 +1416,7 @@ router.get('/contract/:complianceAddress/check-country/:country', authenticate, 
  * @access  Private (requires Bearer token)
  * @body    { complianceAddress: string, country: string }
  */
-router.post('/contract/add-country', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/add-country', authenticate, requireRole(0), catchAsync(async (req, res) => {
   const { complianceAddress, country } = req.body;
 
   validate(complianceAddress, 'Compliance address is required');
@@ -2025,7 +2025,7 @@ router.post('/contract/mint-tokens', authenticate, catchAsync(async (req, res) =
  * @access  Private (requires Bearer token)
  * @body    { contractAddress: string, addressFrom: string, addressTo: string, amount: number }
  */
-router.post('/contract/transfer-tokens', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/transfer-tokens', authenticate, requireRole([0, 1]), catchAsync(async (req, res) => {
   const { contractAddress, addressFrom, addressTo, amount } = req.body;
 
   validate(contractAddress, 'Contract address is required');
@@ -2205,7 +2205,7 @@ router.post('/contract/transfer-tokens', authenticate, catchAsync(async (req, re
  * @access  Private (requires Bearer token)
  * @body    { contractAddress: string, owner: string, spender: string, amount: number }
  */
-router.post('/contract/set-allowance', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/set-allowance', authenticate, requireRole([0, 1]), catchAsync(async (req, res) => {
   const { contractAddress, owner, spender, amount } = req.body;
 
   validate(contractAddress, 'Contract address is required');
@@ -2499,7 +2499,7 @@ router.get('/contract/allowance', requireBearerToken, catchAsync(async (req, res
  * @access  Private (requires Bearer token)
  * @body    { contractAddress: string, addresses: string[], amounts: number[] }
  */
-router.post('/contract/batch-transfer-tokens', authenticate, catchAsync(async (req, res) => {
+router.post('/contract/batch-transfer-tokens', authenticate, requireRole(0), catchAsync(async (req, res) => {
   const { contractAddress, addressList, amountsList } = req.body;
 
   // Validate required fields
@@ -2694,7 +2694,7 @@ router.post('/contract/batch-transfer-tokens', authenticate, catchAsync(async (r
  * @access  Private (requires API Key in x-api-key header AND Bearer token)
  * @body    { contractAddress: string, addressFrom: string, addressTo: string, amount: number }
  */
-router.post('/contract/force-transfer-tokens', requireApiKey, requireBearerToken, catchAsync(async (req, res) => {
+router.post('/contract/force-transfer-tokens', requireApiKey, requireBearerToken, requireRole(0), catchAsync(async (req, res) => {
   const { contractAddress, addressFrom, addressTo, amount } = req.body;
 
   // Validate required fields
@@ -2875,7 +2875,7 @@ router.post('/contract/force-transfer-tokens', requireApiKey, requireBearerToken
  * @access  Private (requires API Key in x-api-key header AND Bearer token)
  * @body    Same as GET query parameters
  */
-router.post('/deploy/erc3643', requireApiKey, requireBearerToken, catchAsync(async (req, res) => {
+router.post('/deploy/erc3643', requireApiKey, requireBearerToken, requireRole([0, 1]), catchAsync(async (req, res) => {
   const {
     structureId,
     contractTokenName,
@@ -3031,6 +3031,280 @@ router.get('/contract/total-supply', requireBearerToken, catchAsync(async (req, 
       success: false,
       error: 'Failed to get total supply',
       message: error.message || 'Failed to retrieve total supply'
+    });
+  }
+}));
+
+/**
+ * @route   GET /api/blockchain/contract/:contractAddress/ownership
+ * @desc    Check the current owner of a smart contract
+ * @access  Private (requires Bearer token)
+ * @param   {string} contractAddress - The contract address to check
+ */
+router.get('/contract/:contractAddress/ownership', authenticate, catchAsync(async (req, res) => {
+  const { contractAddress } = req.params;
+
+  validate(contractAddress, 'Contract address is required');
+
+  // Get RPC URL from environment variables
+  const rpcURL = process.env.RPC_URL;
+
+  if (!rpcURL) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuration error',
+      message: 'RPC_URL not configured in environment variables'
+    });
+  }
+
+  // Initialize Web3 with the RPC URL
+  const web3 = new Web3(rpcURL);
+
+  // Validate contract address format
+  if (!web3.utils.isAddress(contractAddress)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid address',
+      message: 'Please provide a valid contract address'
+    });
+  }
+
+  // Contract ABI for the owner function
+  const contractAbi = [{
+    'inputs': [],
+    'name': 'owner',
+    'outputs': [{
+      'internalType': 'address',
+      'name': '',
+      'type': 'address'
+    }],
+    'stateMutability': 'view',
+    'type': 'function'
+  }];
+
+  try {
+    // Create contract instance
+    const contract = new web3.eth.Contract(contractAbi, contractAddress);
+
+    // Call the owner function
+    const ownerAddress = await contract.methods.owner().call();
+
+    res.status(200).json({
+      success: true,
+      message: 'Owner retrieved successfully',
+      data: {
+        contractAddress: contractAddress.toLowerCase(),
+        ownerAddress: ownerAddress.toLowerCase(),
+        network: process.env.NETWORK_NAME || 'Polygon Amoy'
+      }
+    });
+
+  } catch (error) {
+    // Handle specific Web3 errors
+    if (error.message && error.message.includes('revert')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contract call failed',
+        message: 'Contract call reverted. The contract may not have an owner() function or may not be deployed.'
+      });
+    }
+
+    // Generic error handling
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get owner',
+      message: error.message || 'Failed to retrieve contract owner'
+    });
+  }
+}));
+
+/**
+ * @route   POST /api/blockchain/contract/transfer-ownership
+ * @desc    Transfer ownership of a smart contract to a new owner
+ * @access  Private (requires Bearer token and role 0 - root only)
+ * @body    { contractAddress: string, newOwnerAddress: string }
+ */
+router.post('/contract/transfer-ownership', authenticate, requireRole(0), catchAsync(async (req, res) => {
+  const { contractAddress, newOwnerAddress } = req.body;
+
+  // Validate required fields
+  validate(contractAddress, 'Contract address is required');
+  validate(newOwnerAddress, 'New owner address is required');
+
+  // Validate user role - only root (role 0) can transfer ownership
+  if (!req.user || req.user.role !== 0) {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied',
+      message: 'Only root users (role 0) can transfer contract ownership'
+    });
+  }
+
+  // Get RPC URL and Private Key from environment variables
+  const rpcURL = process.env.RPC_URL;
+  const privateKey = process.env.PORTAL_HQ_PRIVATE_KEY;
+
+  if (!rpcURL) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuration error',
+      message: 'RPC_URL not configured in environment variables'
+    });
+  }
+
+  if (!privateKey) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuration error',
+      message: 'PORTAL_HQ_PRIVATE_KEY not configured in environment variables'
+    });
+  }
+
+  // Initialize Web3 with the RPC URL
+  const web3 = new Web3(rpcURL);
+
+  // Validate addresses format
+  if (!web3.utils.isAddress(contractAddress)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid address',
+      message: 'Please provide a valid contract address'
+    });
+  }
+
+  if (!web3.utils.isAddress(newOwnerAddress)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid address',
+      message: 'Please provide a valid new owner address'
+    });
+  }
+
+  // Validate that new owner is not the zero address
+  if (newOwnerAddress === '0x0000000000000000000000000000000000000000') {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid address',
+      message: 'New owner cannot be the zero address'
+    });
+  }
+
+  // Contract ABI for the transferOwnership function
+  const contractAbi = [{
+    'inputs': [{
+      'internalType': 'address',
+      'name': 'newOwner',
+      'type': 'address'
+    }],
+    'name': 'transferOwnership',
+    'outputs': [{
+      'internalType': 'bool',
+      'name': '',
+      'type': 'bool'
+    }],
+    'stateMutability': 'nonpayable',
+    'type': 'function'
+  }];
+
+  try {
+    // Create contract instance
+    const contract = new web3.eth.Contract(contractAbi, contractAddress);
+
+    // Create account from private key (ensure it has 0x prefix)
+    const formattedPrivateKey = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+    const account = web3.eth.accounts.privateKeyToAccount(formattedPrivateKey);
+    web3.eth.accounts.wallet.add(account);
+
+    // Verify that the caller is the current owner
+    const ownerAbi = [{
+      'inputs': [],
+      'name': 'owner',
+      'outputs': [{
+        'internalType': 'address',
+        'name': '',
+        'type': 'address'
+      }],
+      'stateMutability': 'view',
+      'type': 'function'
+    }];
+
+    const ownerContract = new web3.eth.Contract(ownerAbi, contractAddress);
+    const currentOwner = await ownerContract.methods.owner().call();
+
+    if (currentOwner.toLowerCase() !== account.address.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized',
+        message: 'The configured wallet is not the current owner of this contract'
+      });
+    }
+
+    // Get current nonce
+    const nonce = await web3.eth.getTransactionCount(account.address, 'pending');
+
+    // Get current gas price
+    const gasPrice = await web3.eth.getGasPrice();
+
+    // Prepare transaction
+    const tx = {
+      from: account.address,
+      to: contractAddress,
+      gas: 300000,
+      gasPrice: gasPrice,
+      nonce: nonce,
+      data: contract.methods.transferOwnership(newOwnerAddress).encodeABI(),
+      chainId: parseInt(process.env.CHAIN_ID || '80002') // Chain ID from env
+    };
+
+    // Sign and send transaction
+    const signedTx = await web3.eth.accounts.signTransaction(tx, formattedPrivateKey);
+    const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+
+    res.status(200).json({
+      success: true,
+      message: 'Ownership transferred successfully',
+      data: {
+        transactionHash: receipt.transactionHash,
+        contractAddress: contractAddress.toLowerCase(),
+        previousOwner: currentOwner.toLowerCase(),
+        newOwner: newOwnerAddress.toLowerCase(),
+        blockNumber: receipt.blockNumber.toString(),
+        gasUsed: receipt.gasUsed.toString(),
+        network: process.env.NETWORK_NAME || 'Polygon Amoy'
+      }
+    });
+
+  } catch (error) {
+    // Handle specific Web3 errors
+    if (error.message && error.message.includes('revert')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Transaction reverted',
+        message: 'Contract call reverted. You may not have permission to transfer ownership or the new owner address may be invalid.'
+      });
+    }
+
+    if (error.message && error.message.includes('insufficient funds')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient funds',
+        message: 'Insufficient funds to complete the transaction'
+      });
+    }
+
+    if (error.message && error.message.includes('nonce')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nonce error',
+        message: 'Transaction nonce error. Please try again.'
+      });
+    }
+
+    // Generic error handling
+    return res.status(500).json({
+      success: false,
+      error: 'Transaction failed',
+      message: error.message || 'Failed to transfer ownership'
     });
   }
 }));
