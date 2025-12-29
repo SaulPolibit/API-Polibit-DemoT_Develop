@@ -9,6 +9,7 @@ class CrossmintWalletService {
   constructor() {
     this.apiKey = null;
     this.baseUrl = null;
+    this.chain = null;
     this.isInitialized = false;
   }
 
@@ -27,15 +28,17 @@ class CrossmintWalletService {
 
       this.apiKey = process.env.CROSSMINT_API_KEY;
 
-      // Set base URL based on environment
+      // Set base URL and chain based on environment
       const environment = process.env.CROSSMINT_ENVIRONMENT || 'staging';
       this.baseUrl = environment === 'production'
         ? 'https://www.crossmint.com/api'
         : 'https://staging.crossmint.com/api';
+      this.chain = environment === 'production' ? 'polygon' : 'polygon-amoy';
 
       this.isInitialized = true;
       console.log('[Crossmint] ✓ Initialized successfully');
       console.log(`[Crossmint] Environment: ${environment}`);
+      console.log(`[Crossmint] Chain: ${this.chain}`);
       console.log(`[Crossmint] Base URL: ${this.baseUrl}`);
 
       return true;
@@ -60,17 +63,14 @@ class CrossmintWalletService {
 
     try {
       console.log('[Crossmint] Creating wallet for user:', userData.email);
-
-      // Create a custodial wallet via REST API
-      // Use polygon-amoy for staging, polygon for production
-      const chain = process.env.CROSSMINT_ENVIRONMENT === 'production' ? 'polygon' : 'polygon-amoy';
+      console.log('[Crossmint] Chain:', this.chain);
 
       const response = await axios.post(
         `${this.baseUrl}/v1-alpha1/wallets`,
         {
           type: 'evm-smart-wallet',
           email: userData.email,
-          chain: chain,
+          chain: this.chain,
         },
         {
           headers: {
@@ -180,21 +180,25 @@ class CrossmintWalletService {
    * Get wallet token balances
    * @param {string} walletLocator - Wallet address or Crossmint wallet ID
    * @param {string} tokens - Comma-separated list of token symbols (e.g., 'pol,usdt')
-   * @param {string} chains - Optional comma-separated list of chains (e.g., 'polygon,polygon-amoy')
+   * @param {string} chains - Optional comma-separated list of chains (defaults to environment chain)
    * @returns {Array} Array of token balances with details
    */
-  async getWalletBalances(walletLocator, tokens = 'pol,matic,usdc', chains = 'polygon-amoy') {
+  async getWalletBalances(walletLocator, tokens = 'pol,matic,usdc', chains = null) {
     if (!this.isInitialized) {
       throw new Error('Crossmint service not initialized. Call initialize() first.');
     }
 
     try {
+      // Use provided chains or default to the environment chain
+      const targetChains = chains || this.chain;
+
       console.log('[Crossmint] Fetching balances for wallet:', walletLocator);
       console.log('[Crossmint] Tokens:', tokens);
+      console.log('[Crossmint] Chains:', targetChains);
 
       const params = { tokens };
-      if (chains) {
-        params.chains = chains;
+      if (targetChains) {
+        params.chains = targetChains;
       }
 
       const response = await axios.get(

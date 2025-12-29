@@ -1868,26 +1868,30 @@ router.get('/wallet/balances', authenticate, catchAsync(async (req, res) => {
   }
 
   // Build dynamic token list
-  // Base tokens supported on polygon-amoy
+  // Base tokens supported on the current chain
   const baseTokens = ['pol', 'matic', 'usdc'];
+
+  // Get the chain from crossmint service (polygon for production, polygon-amoy for staging)
+  const chain = crossmint.chain;
 
   // Query all smart contracts with deployed addresses
   const contracts = await SmartContract.find({});
   const customTokens = contracts
     .filter(contract => contract.contractAddress && contract.contractAddress.trim())
-    .map(contract => `polygon-amoy:${contract.contractAddress.trim()}`);
+    .map(contract => `${chain}:${contract.contractAddress.trim()}`);
 
   // Combine base tokens with custom contract tokens
   const allTokens = [...baseTokens, ...customTokens];
   const tokensParam = allTokens.join(',');
 
+  console.log('[Wallet Balances] Chain:', chain);
   console.log('[Wallet Balances] Querying tokens:', tokensParam);
 
   // For non-custodial wallets, use wallet address directly as walletLocator
   const balances = await crossmint.getWalletBalances(
     user.walletAddress,
     tokensParam,
-    'polygon-amoy'
+    chain
   );
 
   res.status(200).json({
@@ -1895,7 +1899,7 @@ router.get('/wallet/balances', authenticate, catchAsync(async (req, res) => {
     data: {
       walletAddress: user.walletAddress,
       balances: balances || [],
-      chain: 'polygon-amoy',
+      chain: chain,
       queriedTokens: allTokens
     }
   });
