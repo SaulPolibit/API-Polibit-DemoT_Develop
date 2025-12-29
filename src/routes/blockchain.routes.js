@@ -1451,7 +1451,7 @@ router.post('/contract/add-country', authenticate, requireRole(0), catchAsync(as
     return res.status(400).json({
       success: false,
       error: 'Invalid country',
-      message: 'Country not found. Please provide a valid country name.'
+      message: `Country ${country} not found. Please provide a valid country name.`
     });
   }
 
