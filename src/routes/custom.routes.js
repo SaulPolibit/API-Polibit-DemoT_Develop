@@ -166,11 +166,22 @@ router.post('/login', catchAsync(async (req, res) => {
   }
 
   // Check if user exists in users table
+  console.log('[Login] Authenticated user ID:', authData.user.id, 'Email:', authData.user.email);
   const user = await User.findById(authData.user.id);
   if (!user) {
+    console.error('[Login] User exists in Auth but not in users table:', {
+      authUserId: authData.user.id,
+      email: authData.user.email,
+      createdAt: authData.user.created_at
+    });
     return res.status(404).json({
       success: false,
-      message: 'User not found in system. Please contact administrator.'
+      message: 'User not found in system. Please contact administrator.',
+      debug: process.env.NODE_ENV === 'development' ? {
+        authUserId: authData.user.id,
+        email: authData.user.email,
+        hint: 'User exists in Supabase Auth but not in users table'
+      } : undefined
     });
   }
 
@@ -1829,6 +1840,55 @@ router.get('/wallet/balances', authenticate, catchAsync(async (req, res) => {
  * @desc    Health check for Custom API routes
  * @access  Public
  */
+/**
+ * Diagnostic endpoint to check if a user exists in both Auth and users table
+ */
+router.get('/diagnostic/user/:email', catchAsync(async (req, res) => {
+  const { email } = req.params;
+  const supabase = getSupabase();
+
+  // Check in users table
+  const user = await User.findByEmail(email);
+
+  // Check in Supabase Auth (admin only)
+  let authUser = null;
+  let authError = null;
+  try {
+    const { data, error } = await supabase.auth.admin.listUsers();
+    if (error) {
+      authError = error.message;
+    } else {
+      authUser = data.users.find(u => u.email === email);
+    }
+  } catch (error) {
+    authError = error.message;
+  }
+
+  res.json({
+    success: true,
+    email: email,
+    existsInUsersTable: !!user,
+    existsInAuth: !!authUser,
+    userTableData: user ? {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive
+    } : null,
+    authData: authUser ? {
+      id: authUser.id,
+      email: authUser.email,
+      createdAt: authUser.created_at
+    } : null,
+    authError: authError,
+    diagnosis: !user && authUser ? 'User exists in Auth but missing from users table - THIS IS THE PROBLEM' :
+               user && !authUser ? 'User exists in table but missing from Auth' :
+               user && authUser ? 'User exists in both - should work fine' :
+               'User does not exist in either system',
+    timestamp: new Date().toISOString()
+  });
+}));
+
 /**
  * Diagnostic endpoint to check Supabase configuration
  */
