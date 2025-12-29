@@ -209,25 +209,39 @@ router.post('/:id/verify', authenticate, catchAsync(async (req, res) => {
     });
   }
 
-  // Verify domain in Resend
-  let verificationResult;
+  // Trigger verification in Resend
   try {
-    verificationResult = await verifyDomain(domain.resendDomainId);
+    await verifyDomain(domain.resendDomainId);
+  } catch (error) {
+    // Ignore verify errors, we'll check actual status next
+    console.log('Verify call result:', error.message);
+  }
+
+  // Get the actual current status from Resend
+  let domainStatus;
+  try {
+    // Debug: Log which API key is being used (first 10 chars only)
+    const apiKey = process.env.RESEND_API_KEY || '';
+    console.log('[EmailDomain] Using API key:', apiKey.substring(0, 10) + '...');
+
+    domainStatus = await getDomain(domain.resendDomainId);
+    // Debug: Log what Resend returns
+    console.log('[EmailDomain] Resend domain status:', JSON.stringify(domainStatus, null, 2));
   } catch (error) {
     return res.status(400).json({
       success: false,
-      message: `Verification failed: ${error.message}`
+      message: `Failed to get domain status: ${error.message}`
     });
   }
 
-  // Update local record
+  // Update local record with actual status
   const updatedDomain = await EmailDomain.updateStatus(
     domain.id,
-    verificationResult.status,
-    verificationResult.records
+    domainStatus.status,
+    domainStatus.records
   );
 
-  const isVerified = verificationResult.status === 'verified';
+  const isVerified = domainStatus.status === 'verified';
 
   // Clear email sender cache so it picks up the newly verified domain
   if (isVerified) {
@@ -242,7 +256,7 @@ router.post('/:id/verify', authenticate, catchAsync(async (req, res) => {
       : 'DNS records not yet verified. Please ensure all records are added correctly and try again.',
     data: {
       ...updatedDomain,
-      dnsRecords: formatDnsRecords(verificationResult.records)
+      dnsRecords: formatDnsRecords(domainStatus.records)
     }
   });
 }));
