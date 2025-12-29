@@ -111,7 +111,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     originationDate: originationDate || investmentDate || new Date().toISOString(),
     status: 'Active',
     fundId: fundId || null,
-    fundCommitment: roundDecimal(fundCommitment, 2) || 0,
+    fundCommitment: fundCommitment !== undefined && fundCommitment !== null ? roundDecimal(fundCommitment, 2) : null,
     // Equity fields
     equityInvested: roundDecimal(equityInvested, 2),
     ownershipPercentage: roundDecimal(ownershipPercentage || equityOwnershipPercent, 4),
@@ -138,7 +138,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     totalReturns: 0,
     currentValue: roundDecimal(currentValue, 2) || 0,
     totalInvested: roundDecimal(totalInvested, 2) || 0,
-    totalInvestmentSize: roundDecimal(totalInvestmentSize, 2) || 0,
+    totalInvestmentSize: totalInvestmentSize !== undefined && totalInvestmentSize !== null ? roundDecimal(totalInvestmentSize, 2) : null,
     lastValuationDate: lastValuationDate || null,
     // Property specific
     totalPropertyValue: roundDecimal(totalPropertyValue, 2) || 0,
