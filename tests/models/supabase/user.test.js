@@ -1001,6 +1001,548 @@ describe('User Model', () => {
     });
   });
 
+  describe('create with ID', () => {
+    test('should create user with ID provided (for Supabase Auth integration)', async () => {
+      const dbResponse = {
+        id: 'auth-user-456',
+        email: 'auth@example.com',
+        password: '$2b$10$mockedhashpassword',
+        first_name: 'Auth',
+        last_name: 'User',
+        role: 3,
+        is_active: true,
+        created_at: '2024-01-15T10:00:00Z'
+      };
+
+      mockSupabase.setMockResponse('users', {
+        data: dbResponse,
+        error: null
+      });
+
+      const result = await User.create({
+        id: 'auth-user-456',
+        email: 'auth@example.com',
+        password: 'password123',
+        firstName: 'Auth',
+        lastName: 'User',
+        role: ROLES.INVESTOR
+      });
+
+      expect(result.id).toBe('auth-user-456');
+      expect(result.email).toBe('auth@example.com');
+    });
+  });
+
+  describe('Error handling in find methods', () => {
+    test('should throw error on database failure in findByEmail', async () => {
+      const error = new Error('Database connection lost');
+      mockSupabase.setMockResponse('users', {
+        data: null,
+        error: error
+      });
+
+      await expect(User.findByEmail('test@example.com')).rejects.toThrow('Database connection lost');
+    });
+
+    test('should throw error on database failure in findByProsperapId', async () => {
+      const error = new Error('Database error');
+      mockSupabase.setMockResponse('users', {
+        data: null,
+        error: error
+      });
+
+      await expect(User.findByProsperapId('prospera-123')).rejects.toThrow('Database error');
+    });
+
+    test('should throw error on database failure in findOne', async () => {
+      const error = new Error('Query failed');
+      mockSupabase.setMockResponse('users', {
+        data: null,
+        error: error
+      });
+
+      await expect(User.findOne({ email: 'test@example.com' })).rejects.toThrow('Query failed');
+    });
+
+    test('should throw error on database failure in find', async () => {
+      const error = new Error('Database error');
+      mockSupabase.setMockResponse('users', {
+        data: null,
+        error: error
+      });
+
+      await expect(User.find({ role: ROLES.INVESTOR })).rejects.toThrow('Database error');
+    });
+
+    test('should throw error on database failure in searchInvestors', async () => {
+      const error = new Error('Search failed');
+      const searchQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        or: jest.fn().mockResolvedValue({ data: null, error: error })
+      };
+      mockSupabase.from = jest.fn().mockReturnValue(searchQuery);
+
+      await expect(User.searchInvestors('search-term')).rejects.toThrow('Search failed');
+    });
+  });
+
+  describe('findWithStructures', () => {
+    test('should find user with structures successfully', async () => {
+      const userData = {
+        id: 'investor-123',
+        email: 'investor@example.com',
+        first_name: 'Investor',
+        last_name: 'User',
+        role: 3,
+        is_active: true
+      };
+
+      const investmentsData = [
+        {
+          structure_id: 'structure-1',
+          ownership_percentage: 25,
+          equity_ownership_percent: null,
+          structures: {
+            id: 'structure-1',
+            name: 'Fund A',
+            type: 'fund',
+            status: 'Active'
+          }
+        },
+        {
+          structure_id: 'structure-2',
+          ownership_percentage: null,
+          equity_ownership_percent: 15,
+          structures: {
+            id: 'structure-2',
+            name: 'Fund B',
+            type: 'fund',
+            status: 'Active'
+          }
+        }
+      ];
+
+      // Mock user query
+      mockSupabase.setMockResponse('users', {
+        data: userData,
+        error: null
+      });
+
+      // Mock investments query
+      const investmentsQuery = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({ data: investmentsData, error: null })
+      };
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'users') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({ data: userData, error: null })
+          };
+        } else if (table === 'investments') {
+          return investmentsQuery;
+        }
+      });
+
+      const result = await User.findWithStructures('investor-123');
+
+      // Test that the function executed successfully
+      expect(result.id).toBe('investor-123');
+      expect(result.firstName).toBe('Investor');
+      expect(result.lastName).toBe('User');
+    });
+
+    test('should throw error if user not found', async () => {
+      const error = new Error('User not found');
+      error.code = 'PGRST116';
+
+      mockSupabase.from = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: null, error: error })
+      }));
+
+      await expect(User.findWithStructures('nonexistent-id')).rejects.toThrow('User not found');
+    });
+
+    test('should throw error on database error', async () => {
+      const userData = {
+        id: 'investor-123',
+        email: 'investor@example.com',
+        first_name: 'Investor',
+        last_name: 'User',
+        role: 3,
+        is_active: true
+      };
+
+      const error = new Error('Database connection error');
+
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'users') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({ data: userData, error: null })
+          };
+        } else if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: null, error: error })
+          };
+        }
+      });
+
+      await expect(User.findWithStructures('investor-123')).rejects.toThrow('Error finding user structures');
+    });
+
+    test('should handle user with no investments', async () => {
+      const userData = {
+        id: 'investor-new',
+        email: 'new@example.com',
+        first_name: 'New',
+        last_name: 'Investor',
+        role: 3,
+        is_active: true
+      };
+
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'users') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({ data: userData, error: null })
+          };
+        } else if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: [], error: null })
+          };
+        }
+      });
+
+      const result = await User.findWithStructures('investor-new');
+
+      expect(result.id).toBe('investor-new');
+      expect(result.firstName).toBe('New');
+    });
+  });
+
+  describe('getPortfolioSummary', () => {
+    test('should get portfolio summary successfully', async () => {
+      const portfolioData = {
+        total_investment: 100000,
+        current_value: 150000,
+        unrealized_gain: 50000
+      };
+
+      mockSupabase.rpc = jest.fn().mockResolvedValue({
+        data: portfolioData,
+        error: null
+      });
+
+      const result = await User.getPortfolioSummary('investor-123');
+
+      expect(result).toEqual(portfolioData);
+      expect(mockSupabase.rpc).toHaveBeenCalledWith('get_investor_portfolio_summary', {
+        p_user_id: 'investor-123'
+      });
+    });
+
+    test('should throw error on RPC failure', async () => {
+      const error = new Error('RPC error');
+      mockSupabase.rpc = jest.fn().mockResolvedValue({
+        data: null,
+        error: error
+      });
+
+      await expect(User.getPortfolioSummary('investor-123')).rejects.toThrow('RPC error');
+    });
+  });
+
+  describe('getCommitmentsSummary', () => {
+    test('should get commitments summary successfully', async () => {
+      const investmentsData = [
+        {
+          structure_id: 'structure-1',
+          ownership_percentage: 25,
+          equity_ownership_percent: null,
+          structures: {
+            id: 'structure-1',
+            name: 'Fund A',
+            type: 'fund',
+            status: 'Active',
+            total_commitment: 100000,
+            base_currency: 'USD'
+          }
+        }
+      ];
+
+      const allocationsData = [
+        {
+          allocated_amount: 25000,
+          paid_amount: 15000,
+          capital_call: {
+            structure_id: 'structure-1'
+          }
+        }
+      ];
+
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: investmentsData, error: null })
+          };
+        } else if (table === 'capital_call_allocations') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: allocationsData, error: null })
+          };
+        }
+      });
+
+      const result = await User.getCommitmentsSummary('investor-123');
+
+      expect(result.totalCommitment).toBe(0);
+      expect(result.calledCapital).toBe(25000);
+      expect(result.structures).toBeDefined();
+    });
+
+    test('should return zeros when no commitments exist', async () => {
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: [], error: null })
+          };
+        } else if (table === 'capital_call_allocations') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: [], error: null })
+          };
+        }
+      });
+
+      const result = await User.getCommitmentsSummary('investor-123');
+
+      expect(result.totalCommitment).toBe(0);
+      expect(result.calledCapital).toBe(0);
+      expect(result.uncalledCapital).toBe(0);
+      expect(result.activeFunds).toBe(0);
+      expect(result.structures).toEqual([]);
+    });
+
+    test('should throw error on database failure', async () => {
+      const error = new Error('Database error');
+      mockSupabase.from = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({ data: null, error: error })
+      }));
+
+      await expect(User.getCommitmentsSummary('investor-123')).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getCapitalCallsSummary', () => {
+    test('should get capital calls summary successfully', async () => {
+      const investmentsData = [
+        {
+          structure_id: 'structure-1',
+          structures: {
+            id: 'structure-1',
+            name: 'Fund A',
+            type: 'fund',
+            status: 'Active'
+          }
+        }
+      ];
+
+      const allocationsData = [
+        {
+          id: 'alloc-1',
+          allocated_amount: 10000,
+          paid_amount: 5000,
+          status: 'Pending',
+          capital_call: {
+            id: 'call-1',
+            structure_id: 'structure-1',
+            call_number: 1,
+            call_date: '2024-01-15',
+            due_date: '2024-02-15',
+            status: 'Active',
+            purpose: 'Initial funding'
+          }
+        },
+        {
+          id: 'alloc-2',
+          allocated_amount: 15000,
+          paid_amount: 15000,
+          status: 'Paid',
+          capital_call: {
+            id: 'call-2',
+            structure_id: 'structure-1',
+            call_number: 2,
+            call_date: '2024-02-15',
+            due_date: '2024-03-15',
+            status: 'Paid',
+            purpose: 'Second funding'
+          }
+        }
+      ];
+
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: investmentsData, error: null })
+          };
+        } else if (table === 'capital_call_allocations') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: allocationsData, error: null })
+          };
+        }
+      });
+
+      const result = await User.getCapitalCallsSummary('investor-123');
+
+      expect(result.summary).toBeDefined();
+      expect(result.summary.totalCalled).toBe(25000);
+      expect(result.summary.totalPaid).toBe(20000);
+      expect(result.summary.outstanding).toBe(5000);
+      expect(result.summary.totalCalls).toBe(2);
+      expect(result.capitalCalls).toHaveLength(2);
+      expect(result.structures).toBeDefined();
+    });
+
+    test('should handle empty capital calls', async () => {
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: [], error: null })
+          };
+        } else if (table === 'capital_call_allocations') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: [], error: null })
+          };
+        }
+      });
+
+      const result = await User.getCapitalCallsSummary('investor-123');
+
+      expect(result.summary.totalCalled).toBe(0);
+      expect(result.summary.totalPaid).toBe(0);
+      expect(result.summary.outstanding).toBe(0);
+      expect(result.summary.totalCalls).toBe(0);
+      expect(result.capitalCalls).toEqual([]);
+    });
+
+    test('should throw error on investments query failure', async () => {
+      const error = new Error('Investments query failed');
+      mockSupabase.from = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockResolvedValue({ data: null, error: error })
+      }));
+
+      await expect(User.getCapitalCallsSummary('investor-123')).rejects.toThrow('Investments query failed');
+    });
+
+    test('should throw error on allocations query failure', async () => {
+      const investmentsData = [
+        {
+          structure_id: 'structure-1',
+          structures: {
+            id: 'structure-1',
+            name: 'Fund A',
+            type: 'fund',
+            status: 'Active'
+          }
+        }
+      ];
+
+      const error = new Error('Allocations query failed');
+
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: investmentsData, error: null })
+          };
+        } else if (table === 'capital_call_allocations') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: null, error: error })
+          };
+        }
+      });
+
+      await expect(User.getCapitalCallsSummary('investor-123')).rejects.toThrow('Allocations query failed');
+    });
+
+    test('should filter allocations without capital_call', async () => {
+      const investmentsData = [
+        {
+          structure_id: 'structure-1',
+          structures: {
+            id: 'structure-1',
+            name: 'Fund A',
+            type: 'fund',
+            status: 'Active'
+          }
+        }
+      ];
+
+      const allocationsData = [
+        {
+          id: 'alloc-1',
+          allocated_amount: 10000,
+          paid_amount: 5000,
+          status: 'Pending',
+          capital_call: null // No capital call associated
+        },
+        {
+          id: 'alloc-2',
+          allocated_amount: 15000,
+          paid_amount: 15000,
+          status: 'Paid',
+          capital_call: {
+            id: 'call-2',
+            structure_id: 'structure-1',
+            call_number: 1,
+            call_date: '2024-02-15',
+            due_date: '2024-03-15',
+            status: 'Paid',
+            purpose: 'Funding'
+          }
+        }
+      ];
+
+      mockSupabase.from = jest.fn((table) => {
+        if (table === 'investments') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: investmentsData, error: null })
+          };
+        } else if (table === 'capital_call_allocations') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockResolvedValue({ data: allocationsData, error: null })
+          };
+        }
+      });
+
+      const result = await User.getCapitalCallsSummary('investor-123');
+
+      // Should only include the allocation with a capital_call
+      expect(result.capitalCalls).toHaveLength(1);
+      expect(result.capitalCalls[0].id).toBe('call-2');
+    });
+  });
+
   describe('User roles', () => {
     test('should create root user', async () => {
       const dbResponse = {

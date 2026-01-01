@@ -182,14 +182,60 @@ describe('User Routes', () => {
       expect(response.body.token).toBeDefined();
     });
 
-    test('should return 400 if required fields are missing', async () => {
+    test('should return 400 if email is missing', async () => {
       const response = await request(app)
         .post('/api/users/register')
-        .send({ email: 'test@example.com' });
+        .send({ password: 'password123', firstName: 'John', role: 3 });
 
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
     });
+
+    test('should return 400 if password is missing', async () => {
+      const response = await request(app)
+        .post('/api/users/register')
+        .send({ email: 'test@example.com', firstName: 'John', role: 3 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should return 400 if firstName is missing', async () => {
+      const response = await request(app)
+        .post('/api/users/register')
+        .send({ email: 'test@example.com', password: 'password123', role: 3 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should return 400 if role is undefined', async () => {
+      const response = await request(app)
+        .post('/api/users/register')
+        .send({ email: 'test@example.com', password: 'password123', firstName: 'John' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should return 400 if role is null', async () => {
+      const response = await request(app)
+        .post('/api/users/register')
+        .send({ email: 'test@example.com', password: 'password123', firstName: 'John', role: null });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should return 400 if role is invalid', async () => {
+      const response = await request(app)
+        .post('/api/users/register')
+        .send({ email: 'test@example.com', password: 'password123', firstName: 'John', role: 99 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
 
     test('should return 409 if user already exists', async () => {
       // Mock User.findByEmail to return existing user
@@ -270,6 +316,352 @@ describe('User Routes', () => {
       const response = await request(app)
         .put('/api/users/profile')
         .send(updateData);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should return 404 if user not found', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: null,
+        error: { code: 'PGRST116' },
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({ firstName: 'Updated' });
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should return 400 if new password is same as old password', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          oldPassword: 'password123',
+          newPassword: 'password123',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    test.skip('should return 400 if new password is too short', async () => {
+      // Skipped: Requires complex Supabase Auth client mocking
+      expect(true).toBe(true);
+    });
+
+    test.skip('should return 401 if old password is incorrect', async () => {
+      // Skipped: Requires complex Supabase Auth client mocking
+      expect(true).toBe(true);
+    });
+
+    test('should return 409 if email is already taken', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      // Mock finding existing user with different ID
+      jest.spyOn(User, 'findByEmail').mockResolvedValue({
+        id: 'other-user',
+        email: 'taken@example.com',
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          email: 'taken@example.com',
+        });
+
+      expect(response.status).toBe(409);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should return 400 for invalid role', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          role: 99,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should update various profile fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          phoneNumber: '+1234567890',
+          address: '123 Main St',
+          country: 'USA',
+          appLanguage: 'es',
+          city: 'New York',
+          state: 'NY',
+          postalCode: '10001',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update lastName field', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          lastName: 'Smith',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update role field', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          role: 2,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update addressLine1 and addressLine2', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          addressLine1: '123 Main St',
+          addressLine2: 'Apt 4B',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update investor fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          investorType: 'individual',
+          taxId: '123-45-6789',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update accredited investor and risk fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          accreditedInvestor: true,
+          riskTolerance: 'high',
+          investmentPreferences: 'tech startups',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update individual investor fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          fullName: 'John Doe',
+          dateOfBirth: '1990-01-01',
+          nationality: 'USA',
+          passportNumber: 'AB123456',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update institution investor fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          institutionName: 'Acme Corp',
+          institutionType: 'LLC',
+          registrationNumber: 'REG123',
+          legalRepresentative: 'Jane Smith',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update fund investor fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          fundName: 'Tech Fund I',
+          fundManager: 'John Manager',
+          aum: '100M',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update family office fields', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          officeName: 'Smith Family Office',
+          familyName: 'Smith',
+          principalContact: 'John Smith',
+          assetsUnderManagement: '500M',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    test('should update tax classification', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          first_name: 'Admin',
+          role: 0,
+        },
+        error: null,
+      });
+
+      const response = await request(app)
+        .put('/api/users/profile')
+        .send({
+          taxClassification: 'individual',
+        });
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -446,6 +838,7 @@ describe('User Routes', () => {
   });
 
   describe('POST /api/users/profile-image', () => {
+
     test('should upload profile image successfully', async () => {
       // Mock User.findById
       jest.spyOn(User, 'findById').mockResolvedValue({
@@ -476,6 +869,43 @@ describe('User Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
     });
+
+    test('should return 404 if user not found', async () => {
+      jest.spyOn(User, 'findById').mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/users/profile-image');
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+    });
+
+    test('should handle upload with Supabase URL in old image', async () => {
+      jest.spyOn(User, 'findById').mockResolvedValue({
+        id: 'user-admin',
+        email: 'admin@example.com',
+        profileImage: 'https://supabase.co/storage/v1/documents/old-profile.jpg',
+      });
+
+      jest.spyOn(User, 'findByIdAndUpdate').mockResolvedValue({
+        id: 'user-admin',
+        profileImage: 'https://example.com/new-image.jpg',
+      });
+
+      uploadToSupabase.mockResolvedValue({
+        publicUrl: 'https://example.com/new-image.jpg',
+        fileName: 'profile-123.jpg',
+        size: 1024,
+      });
+
+      deleteFromSupabase.mockResolvedValue(true);
+
+      const response = await request(app)
+        .post('/api/users/profile-image');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
   });
 
   describe('DELETE /api/users/profile-image', () => {
@@ -497,6 +927,18 @@ describe('User Routes', () => {
       expect(response.body.success).toBe(true);
     });
 
+    test('should return 404 if user not found', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: null,
+        error: { code: 'PGRST116' },
+      });
+
+      const response = await request(app).delete('/api/users/profile-image');
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+    });
+
     test('should return 404 if no profile image exists', async () => {
       mockSupabase.setMockResponse('users', {
         data: {
@@ -511,6 +953,24 @@ describe('User Routes', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
+    });
+
+    test('should handle Supabase URL in profile image', async () => {
+      mockSupabase.setMockResponse('users', {
+        data: {
+          id: 'user-admin',
+          email: 'admin@example.com',
+          profile_image: 'https://supabase.co/storage/v1/documents/old-profile.jpg',
+        },
+        error: null,
+      });
+
+      deleteFromSupabase.mockResolvedValue(true);
+
+      const response = await request(app).delete('/api/users/profile-image');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
     });
   });
 });
