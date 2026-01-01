@@ -1402,6 +1402,20 @@ describe('Custom Routes', () => {
 
       expect(response.status).toBe(404);
     });
+
+    test('should handle other errors when fetching PDF', async () => {
+      apiManager.getDiditPDF.mockResolvedValue({
+        statusCode: 500,
+        error: 'Service unavailable',
+        body: null
+      });
+
+      const response = await request(app).get('/api/custom/didit/session/session-123/pdf');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Service unavailable');
+      expect(response.body.message).toContain('Failed to fetch DiDit PDF');
+    });
   });
 
   describe('POST /api/custom/didit/verify', () => {
@@ -1442,6 +1456,19 @@ describe('Custom Routes', () => {
   });
 
   describe('GET /api/custom/didit/session/:sessionId error handling', () => {
+    test('should handle 404 when DiDit session not found', async () => {
+      apiManager.getDiditSession.mockResolvedValue({
+        statusCode: 404,
+        error: 'Session not found',
+        body: null
+      });
+
+      const response = await request(app).get('/api/custom/didit/session/nonexistent-session');
+
+      expect(response.status).toBe(404);
+      expect(response.body.message).toContain('not found');
+    });
+
     test('should handle DiDit API errors', async () => {
       apiManager.getDiditSession.mockResolvedValue({
         statusCode: 500,
@@ -1759,9 +1786,8 @@ describe('Custom Routes', () => {
 
   describe('POST /api/custom/prospera/callback', () => {
     test.skip('should return 400 if code is missing', async () => {
-      // Skipped: The route uses ensureBodyParsed() which handles body parsing asynchronously
-      // When body fields are missing, it causes validation errors caught by middleware
-      // Testing this requires complex stream mocking
+      // Skipped: ensureProsperapInitialized() is called before validation
+      // The service initialization returns 503 before validation errors can be caught
     });
 
     test.skip('should return 400 if codeVerifier is missing', async () => {
