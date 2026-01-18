@@ -487,7 +487,9 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      isActive: user.isActive
+      isActive: user.isActive,
+      kycId: user.kycId,
+      kycStatus: user.kycStatus
     },
     structure: structure ? {
       id: structure.id,

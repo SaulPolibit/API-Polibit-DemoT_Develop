@@ -1881,11 +1881,9 @@ router.post('/wallet/register', authenticate, catchAsync(async (req, res) => {
     // In production, you might want to add additional verification
   }
 
-  // Update user with new wallet address and type
-  const updatedUser = await User.update(req.auth.userId, {
-    wallet_address: walletAddress,
-    wallet_type: walletType,
-    signer_type: signerType
+  // Update user with new wallet address
+  const updatedUser = await User.findByIdAndUpdate(req.auth.userId, {
+    walletAddress: walletAddress
   });
 
   console.log('[Wallet Register] Wallet registered successfully for user:', req.auth.userId);
