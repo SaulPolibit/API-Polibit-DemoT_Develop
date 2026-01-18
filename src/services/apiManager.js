@@ -1174,7 +1174,7 @@ console.log('****** BODY:', body);
 
     return httpClient.makeApiRequest({
       method: 'get',
-      url: `https://verification.didit.me/v2/session/${sessionID}/generate-pdf/`,
+      url: `https://verification.didit.me/v1/session/${sessionID}/generate-pdf/`,
       headers: {
         'Content-Type': 'application/json',
         'accept': 'application/json',
