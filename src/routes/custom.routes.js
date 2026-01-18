@@ -1070,7 +1070,7 @@ router.get('/didit/session/:sessionId', authenticate, catchAsync(async (req, res
 
 /**
  * @route   GET /api/custom/didit/session/:sessionId/pdf
- * @desc    Get DiDit session PDF report (streams binary PDF)
+ * @desc    Get DiDit session PDF report
  * @access  Private (Admin/Root only)
  * @params  sessionId - The DiDit session ID
  */
@@ -1110,23 +1110,75 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
     });
   }
 
-  // Check if we got binary PDF data
-  if (!result.body || result.body.length === 0) {
-    return res.status(500).json({
-      error: 'Empty PDF response',
-      message: 'No PDF data received from DiDit'
+  // Check what format the response is in
+  const responseData = result.body;
+  console.log('[DiDit PDF] Response body type:', typeof responseData);
+
+  // If response contains a URL, redirect or fetch from URL
+  if (responseData && responseData.url) {
+    console.log('[DiDit PDF] Response contains URL:', responseData.url);
+    // Fetch the actual PDF from the URL
+    const axios = require('axios');
+    const pdfResponse = await axios({
+      method: 'GET',
+      url: responseData.url,
+      responseType: 'arraybuffer',
     });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
+    res.setHeader('Content-Length', pdfResponse.data.length);
+    return res.send(Buffer.from(pdfResponse.data));
   }
 
-  console.log('[DiDit PDF] PDF retrieved successfully, size:', result.body.length, 'bytes');
+  // If response contains base64 PDF data
+  if (responseData && responseData.pdf) {
+    console.log('[DiDit PDF] Response contains base64 PDF data');
+    const pdfBuffer = Buffer.from(responseData.pdf, 'base64');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    return res.send(pdfBuffer);
+  }
 
-  // Set headers for PDF download
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
-  res.setHeader('Content-Length', result.body.length);
+  // If response contains pdf_url field
+  if (responseData && responseData.pdf_url) {
+    console.log('[DiDit PDF] Response contains pdf_url:', responseData.pdf_url);
+    const axios = require('axios');
+    const pdfResponse = await axios({
+      method: 'GET',
+      url: responseData.pdf_url,
+      responseType: 'arraybuffer',
+    });
 
-  // Send binary PDF data
-  res.send(Buffer.from(result.body));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
+    res.setHeader('Content-Length', pdfResponse.data.length);
+    return res.send(Buffer.from(pdfResponse.data));
+  }
+
+  // If response contains data field with base64
+  if (responseData && responseData.data) {
+    console.log('[DiDit PDF] Response contains data field');
+    // Check if it's base64
+    if (typeof responseData.data === 'string') {
+      const pdfBuffer = Buffer.from(responseData.data, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.send(pdfBuffer);
+    }
+  }
+
+  // Return the raw response so we can debug
+  console.log('[DiDit PDF] Unknown response format, returning raw data');
+  res.status(200).json({
+    success: true,
+    sessionId,
+    message: 'PDF response format unknown - check server logs',
+    responseKeys: responseData ? Object.keys(responseData) : [],
+    data: responseData,
+  });
 }));
 
 /**

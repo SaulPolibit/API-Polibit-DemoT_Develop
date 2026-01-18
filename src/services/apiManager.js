@@ -1172,29 +1172,36 @@ console.log('****** BODY:', body);
   async getDiditPDF(context, variables) {
     const { sessionID } = variables;
 
-    // Use v2 endpoint with x-api-key (same as other v2 endpoints)
-    // The PDF endpoint returns binary data
+    // Use v1 endpoint with x-api-key (same key used for other DIDIT endpoints)
+    // First, get the JSON response to see the format
     try {
+      console.log('[DiDit PDF] Requesting PDF for session:', sessionID);
+
       const response = await axios({
         method: 'GET',
-        url: `https://verification.didit.me/v2/session/${sessionID}/generate-pdf/`,
+        url: `https://verification.didit.me/v1/session/${sessionID}/generate-pdf/`,
         headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
           'x-api-key': process.env.DIDIT_API_KEY,
         },
-        responseType: 'arraybuffer', // Get binary data
-        validateStatus: () => true, // Handle all status codes
+        validateStatus: () => true,
       });
 
+      console.log('[DiDit PDF] Response status:', response.status);
+      console.log('[DiDit PDF] Response content-type:', response.headers['content-type']);
+      console.log('[DiDit PDF] Response data type:', typeof response.data);
+      console.log('[DiDit PDF] Response data keys:', response.data ? Object.keys(response.data) : 'null');
+
       if (response.status >= 400) {
-        // Try to parse error message from response
         let errorMessage = `HTTP ${response.status}`;
-        try {
-          const errorText = Buffer.from(response.data).toString('utf8');
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.detail || errorJson.message || errorMessage;
-        } catch (e) {
-          // Ignore parse errors
+        if (response.data?.detail) {
+          errorMessage = response.data.detail;
+        } else if (response.data?.message) {
+          errorMessage = response.data.message;
         }
+
+        console.error('[DiDit PDF] Error response:', response.status, errorMessage);
 
         return {
           statusCode: response.status,
@@ -1205,10 +1212,13 @@ console.log('****** BODY:', body);
         };
       }
 
+      // Log the full response to understand the format
+      console.log('[DiDit PDF] Full response data:', JSON.stringify(response.data, null, 2));
+
       return {
         statusCode: response.status,
         headers: response.headers,
-        body: response.data, // Binary PDF data
+        body: response.data,
         contentType: response.headers['content-type'],
         success: true,
         error: null,
