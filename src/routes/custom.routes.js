@@ -1070,8 +1070,8 @@ router.get('/didit/session/:sessionId', authenticate, catchAsync(async (req, res
 
 /**
  * @route   GET /api/custom/didit/session/:sessionId/pdf
- * @desc    Get DiDit session PDF report
- * @access  Public
+ * @desc    Get DiDit session PDF report (streams binary PDF)
+ * @access  Private (Admin/Root only)
  * @params  sessionId - The DiDit session ID
  */
 router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req, res) => {
@@ -1079,15 +1079,27 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
 
   validate(sessionId, 'sessionId is required');
 
+  // Check if user has admin permissions (role 0 or 1)
+  const userRole = req.user?.role ?? req.auth?.role;
+  if (userRole !== 0 && userRole !== 1) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Admin privileges required.'
+    });
+  }
+
+  console.log('[DiDit PDF] Fetching PDF for session:', sessionId);
+
   const context = { auth: req.auth };
   const variables = {
-    ...req.query,
     sessionID: sessionId
   };
 
   const result = await apiManager.getDiditPDF(context, variables);
 
   if (result.error) {
+    console.error('[DiDit PDF] Error:', result.error);
+
     if (result.statusCode === 404) {
       throw new NotFoundError(`PDF for session ${sessionId} not found`);
     }
@@ -1095,14 +1107,26 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
     return res.status(result.statusCode || 500).json({
       error: result.error,
       message: 'Failed to fetch DiDit PDF',
-      details: result.body,
     });
   }
 
-  // Stream PDF directly to client
+  // Check if we got binary PDF data
+  if (!result.body || result.body.length === 0) {
+    return res.status(500).json({
+      error: 'Empty PDF response',
+      message: 'No PDF data received from DiDit'
+    });
+  }
+
+  console.log('[DiDit PDF] PDF retrieved successfully, size:', result.body.length, 'bytes');
+
+  // Set headers for PDF download
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="KYC-Report-${sessionId}.pdf"`);
-  res.status(200).send(Buffer.from(result.body));
+  res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
+  res.setHeader('Content-Length', result.body.length);
+
+  // Send binary PDF data
+  res.send(Buffer.from(result.body));
 }));
 
 /**

@@ -1172,18 +1172,57 @@ console.log('****** BODY:', body);
   async getDiditPDF(context, variables) {
     const { sessionID } = variables;
 
-    return httpClient.makeApiRequest({
-      method: 'get',
-      url: `https://verification.didit.me/v1/session/${sessionID}/generate-pdf/`,
-      headers: {
-        'accept': 'application/pdf',
-        'x-api-key': process.env.DIDIT_API_KEY,
-      },
-      params: {},
-      returnBody: true,
-      isStreamingApi: false,
-      responseType: 'arraybuffer',
-    });
+    // Use v2 endpoint with x-api-key (same as other v2 endpoints)
+    // The PDF endpoint returns binary data
+    try {
+      const response = await axios({
+        method: 'GET',
+        url: `https://verification.didit.me/v2/session/${sessionID}/generate-pdf/`,
+        headers: {
+          'x-api-key': process.env.DIDIT_API_KEY,
+        },
+        responseType: 'arraybuffer', // Get binary data
+        validateStatus: () => true, // Handle all status codes
+      });
+
+      if (response.status >= 400) {
+        // Try to parse error message from response
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorText = Buffer.from(response.data).toString('utf8');
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorJson.message || errorMessage;
+        } catch (e) {
+          // Ignore parse errors
+        }
+
+        return {
+          statusCode: response.status,
+          headers: response.headers,
+          body: null,
+          error: errorMessage,
+          success: false,
+        };
+      }
+
+      return {
+        statusCode: response.status,
+        headers: response.headers,
+        body: response.data, // Binary PDF data
+        contentType: response.headers['content-type'],
+        success: true,
+        error: null,
+      };
+    } catch (error) {
+      console.error('[DiDit PDF] Request error:', error.message);
+      return {
+        statusCode: error.response?.status || 500,
+        headers: error.response?.headers,
+        body: null,
+        error: error.message,
+        success: false,
+      };
+    }
   }
 
   async deployContractERC20(context, variables) {
