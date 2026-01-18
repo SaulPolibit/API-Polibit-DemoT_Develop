@@ -1091,7 +1091,7 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
     if (result.statusCode === 404) {
       throw new NotFoundError(`PDF for session ${sessionId} not found`);
     }
-    
+
     return res.status(result.statusCode || 500).json({
       error: result.error,
       message: 'Failed to fetch DiDit PDF',
@@ -1099,11 +1099,10 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
     });
   }
 
-  res.status(result.statusCode || 200).json({
-    success: true,
-    sessionId,
-    data: result.body,
-  });
+  // Stream PDF directly to client
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="KYC-Report-${sessionId}.pdf"`);
+  res.status(200).send(Buffer.from(result.body));
 }));
 
 /**

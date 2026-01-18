@@ -1176,13 +1176,13 @@ console.log('****** BODY:', body);
       method: 'get',
       url: `https://verification.didit.me/v1/session/${sessionID}/generate-pdf/`,
       headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
+        'accept': 'application/pdf',
         'x-api-key': process.env.DIDIT_API_KEY,
       },
       params: {},
       returnBody: true,
       isStreamingApi: false,
+      responseType: 'arraybuffer',
     });
   }
 
