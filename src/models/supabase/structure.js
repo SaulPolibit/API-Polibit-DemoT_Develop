@@ -118,6 +118,9 @@ class Structure {
       fundType: 'fund_type',
       contractTemplateUrlNational: 'contract_template_url_national',
       contractTemplateUrlInternational: 'contract_template_url_international',
+      // ILPA Fee Configuration
+      managementFeeBase: 'management_fee_base',
+      gpCatchUpRate: 'gp_catch_up_rate',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -245,6 +248,9 @@ class Structure {
       fundType: dbData.fund_type,
       contractTemplateUrlNational: dbData.contract_template_url_national,
       contractTemplateUrlInternational: dbData.contract_template_url_international,
+      // ILPA Fee Configuration
+      managementFeeBase: dbData.management_fee_base,
+      gpCatchUpRate: dbData.gp_catch_up_rate,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at

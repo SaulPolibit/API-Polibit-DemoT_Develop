@@ -163,7 +163,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     capitalCallDefaultPercentage,
     fundType,
     contractTemplateUrlNational,
-    contractTemplateUrlInternational
+    contractTemplateUrlInternational,
+    // ILPA Fee Configuration
+    managementFeeBase,
+    gpCatchUpRate
   } = req.body;
 
   // Validate required fields
@@ -312,6 +315,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     fundType: fundType?.trim() || '',
     contractTemplateUrlNational: contractTemplateUrlNational?.trim() || '',
     contractTemplateUrlInternational: contractTemplateUrlInternational?.trim() || '',
+    // ILPA Fee Configuration
+    managementFeeBase: managementFeeBase?.trim() || 'committed',
+    gpCatchUpRate: sanitizeNumber(gpCatchUpRate, 100),
     createdBy: userId
   };
 
@@ -531,7 +537,9 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'walletOwnerAddress', 'operatingAgreementHash', 'incomeFlowTarget', 'vatRate',
     'vatRateNaturalPersons', 'vatRateLegalEntities', 'defaultTaxRate', 'determinedTier',
     'calculatedIssuances', 'capitalCallDefaultPercentage', 'fundType',
-    'contractTemplateUrlNational', 'contractTemplateUrlInternational'
+    'contractTemplateUrlNational', 'contractTemplateUrlInternational',
+    // ILPA Fee Configuration
+    'managementFeeBase', 'gpCatchUpRate'
   ];
 
   for (const field of allowedFields) {

@@ -125,6 +125,9 @@ class User {
       // Tax fields
       tax_classification: userData.taxClassification || null,
       w9_form: userData.w9Form || null,
+      // ILPA Fee Settings
+      fee_discount: userData.feeDiscount || 0,
+      vat_exempt: userData.vatExempt || false,
     };
 
     // Include ID if provided (for Supabase Auth integration)
@@ -798,6 +801,9 @@ class User {
       w9Form: dbUser.w9_form,
       // MFA
       mfaFactorId: dbUser.mfa_factor_id,
+      // ILPA Fee Settings
+      feeDiscount: dbUser.fee_discount,
+      vatExempt: dbUser.vat_exempt,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -885,6 +891,9 @@ class User {
       w9Form: 'w9_form',
       // MFA
       mfaFactorId: 'mfa_factor_id',
+      // ILPA Fee Settings
+      feeDiscount: 'fee_discount',
+      vatExempt: 'vat_exempt',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {

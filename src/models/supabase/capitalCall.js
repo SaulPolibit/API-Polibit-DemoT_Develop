@@ -25,6 +25,13 @@ class CapitalCall {
       notes: 'notes',
       investmentId: 'investment_id',
       sentDate: 'sent_date',
+      // ILPA Fee Configuration
+      managementFeeBase: 'management_fee_base',
+      managementFeeRate: 'management_fee_rate',
+      vatRate: 'vat_rate',
+      vatApplicable: 'vat_applicable',
+      feePeriod: 'fee_period',
+      approvalStatus: 'approval_status',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -59,6 +66,13 @@ class CapitalCall {
       notes: dbData.notes,
       investmentId: dbData.investment_id,
       sentDate: dbData.sent_date,
+      // ILPA Fee Configuration
+      managementFeeBase: dbData.management_fee_base,
+      managementFeeRate: dbData.management_fee_rate,
+      vatRate: dbData.vat_rate,
+      vatApplicable: dbData.vat_applicable,
+      feePeriod: dbData.fee_period,
+      approvalStatus: dbData.approval_status,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
@@ -353,20 +367,65 @@ class CapitalCall {
       throw new Error('Capital call not found');
     }
 
-    // Create allocations based on ownership percentage
-    const allocations = structureInvestors.map(si => {
-      const allocationAmount = capitalCall.totalCallAmount * (si.ownership_percent / 100);
+    // Create allocations based on ownership percentage with ILPA fee breakdown
+    const allocations = await Promise.all(structureInvestors.map(async (si) => {
+      const principalAmount = capitalCall.totalCallAmount * (si.ownership_percent / 100);
+
+      // Get user's fee discount and VAT exempt status
+      const { data: userData } = await supabase
+        .from('users')
+        .select('fee_discount, vat_exempt')
+        .eq('id', si.user_id)
+        .single();
+
+      const feeDiscount = userData?.fee_discount || 0;
+      const vatExempt = userData?.vat_exempt || false;
+
+      // Calculate management fee if ILPA fee config is set
+      let managementFeeGross = 0;
+      let managementFeeDiscountAmount = 0;
+      let managementFeeNet = 0;
+      let vatAmount = 0;
+
+      if (capitalCall.managementFeeRate) {
+        // Calculate based on fee period
+        let periodRate = capitalCall.managementFeeRate;
+        if (capitalCall.feePeriod === 'quarterly') {
+          periodRate = capitalCall.managementFeeRate / 4;
+        } else if (capitalCall.feePeriod === 'semi-annual') {
+          periodRate = capitalCall.managementFeeRate / 2;
+        }
+
+        // Fee base is the principal amount for this investor
+        managementFeeGross = principalAmount * (periodRate / 100);
+        managementFeeDiscountAmount = managementFeeGross * (feeDiscount / 100);
+        managementFeeNet = managementFeeGross - managementFeeDiscountAmount;
+
+        // Calculate VAT if applicable
+        if (capitalCall.vatApplicable && !vatExempt && capitalCall.vatRate) {
+          vatAmount = managementFeeNet * (capitalCall.vatRate / 100);
+        }
+      }
+
+      const totalDue = principalAmount + managementFeeNet + vatAmount;
 
       return {
         capital_call_id: capitalCallId,
         user_id: si.user_id,
-        allocated_amount: allocationAmount,
+        allocated_amount: totalDue,
         paid_amount: 0,
-        remaining_amount: allocationAmount,
+        remaining_amount: totalDue,
         status: 'Pending',
-        due_date: capitalCall.dueDate
+        due_date: capitalCall.dueDate,
+        // ILPA Fee Breakdown
+        principal_amount: principalAmount,
+        management_fee_gross: managementFeeGross,
+        management_fee_discount: managementFeeDiscountAmount,
+        management_fee_net: managementFeeNet,
+        vat_amount: vatAmount,
+        total_due: totalDue
       };
-    });
+    }));
 
     // Insert all allocations
     const { data, error } = await supabase

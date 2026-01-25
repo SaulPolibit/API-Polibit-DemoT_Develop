@@ -74,7 +74,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     officeName,
     familyName,
     principalContact,
-    assetsUnderManagement
+    assetsUnderManagement,
+    // ILPA Fee Settings
+    feeDiscount,
+    vatExempt
   } = req.body;
 
   // Validate required fields
@@ -157,6 +160,14 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
 
   // Create new investor profile
   const investor = await Investor.create(investorData);
+
+  // Update User record with ILPA fee settings if provided
+  if (feeDiscount !== undefined || vatExempt !== undefined) {
+    const userUpdateData = {};
+    if (feeDiscount !== undefined) userUpdateData.feeDiscount = feeDiscount;
+    if (vatExempt !== undefined) userUpdateData.vatExempt = vatExempt;
+    await User.findByIdAndUpdate(userId, userUpdateData);
+  }
 
   res.status(201).json({
     success: true,
@@ -894,7 +905,9 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
     // Fund of Funds fields
     'fundName', 'fundManager', 'aum',
     // Family Office fields
-    'officeName', 'familyName', 'principalContact', 'assetsUnderManagement'
+    'officeName', 'familyName', 'principalContact', 'assetsUnderManagement',
+    // ILPA Fee Settings (stored in User table)
+    'feeDiscount', 'vatExempt'
   ];
 
   // Define field types for proper handling
@@ -941,8 +954,27 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
 
   validate(Object.keys(updateData).length > 0, 'No valid fields provided for update');
 
-  // Update investor record
-  const updatedInvestor = await Investor.findByIdAndUpdate(id, updateData);
+  // Extract ILPA fields for User update (these are stored in users table, not investors)
+  const userIlpaFields = {};
+  if (updateData.feeDiscount !== undefined) {
+    userIlpaFields.feeDiscount = updateData.feeDiscount;
+    delete updateData.feeDiscount;
+  }
+  if (updateData.vatExempt !== undefined) {
+    userIlpaFields.vatExempt = updateData.vatExempt;
+    delete updateData.vatExempt;
+  }
+
+  // Update User record with ILPA fee settings if provided
+  if (Object.keys(userIlpaFields).length > 0 && investor.userId) {
+    await User.findByIdAndUpdate(investor.userId, userIlpaFields);
+  }
+
+  // Update investor record (if there are remaining fields)
+  let updatedInvestor = investor;
+  if (Object.keys(updateData).length > 0) {
+    updatedInvestor = await Investor.findByIdAndUpdate(id, updateData);
+  }
 
   // Build response with investor and user data
   const investorWithUser = {

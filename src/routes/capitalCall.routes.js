@@ -27,7 +27,14 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     purpose,
     notes,
     investmentId,
-    createAllocations
+    createAllocations,
+    // ILPA Fee Configuration
+    managementFeeBase,
+    managementFeeRate,
+    vatRate,
+    vatApplicable,
+    feePeriod,
+    approvalStatus
   } = req.body;
 
   // Validate required fields
@@ -53,6 +60,13 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     purpose: purpose?.trim() || '',
     notes: notes?.trim() || '',
     investmentId: investmentId || null,
+    // ILPA Fee Configuration
+    managementFeeBase: managementFeeBase || structure.managementFeeBase || 'committed',
+    managementFeeRate: managementFeeRate !== undefined ? managementFeeRate : structure.managementFee || 2.0,
+    vatRate: vatRate !== undefined ? vatRate : parseFloat(structure.vatRate) || 0,
+    vatApplicable: vatApplicable !== undefined ? vatApplicable : true,
+    feePeriod: feePeriod || 'quarterly',
+    approvalStatus: approvalStatus || 'draft',
     createdBy: userId
   };
 
@@ -225,7 +239,9 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   const updateData = {};
   const allowedFields = [
-    'callDate', 'dueDate', 'totalCallAmount', 'purpose', 'notes', 'status'
+    'callDate', 'dueDate', 'totalCallAmount', 'purpose', 'notes', 'status',
+    // ILPA Fee Configuration
+    'managementFeeBase', 'managementFeeRate', 'vatRate', 'vatApplicable', 'feePeriod', 'approvalStatus'
   ];
 
   for (const field of allowedFields) {
