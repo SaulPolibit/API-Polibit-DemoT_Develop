@@ -170,6 +170,63 @@ class CapitalCall {
   }
 
   /**
+   * Find capital calls by approval status (for approval workflow)
+   * Supports filtering by single status, array of statuses, or with user filter
+   */
+  static async findByApprovalStatus(filter = {}) {
+    const supabase = getSupabase();
+
+    let query = supabase
+      .from('capital_calls')
+      .select(`
+        *,
+        structures:structure_id (
+          id,
+          name,
+          type
+        )
+      `);
+
+    // Filter by single approval status
+    if (filter.approvalStatus) {
+      query = query.eq('approval_status', filter.approvalStatus);
+    }
+
+    // Filter by array of approval statuses (IN clause)
+    if (filter.approvalStatusIn && Array.isArray(filter.approvalStatusIn)) {
+      query = query.in('approval_status', filter.approvalStatusIn);
+    }
+
+    // Filter by creator
+    if (filter.createdBy) {
+      query = query.eq('created_by', filter.createdBy);
+    }
+
+    // Filter by structure
+    if (filter.structureId) {
+      query = query.eq('structure_id', filter.structureId);
+    }
+
+    // Order by creation date, newest first
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Error finding capital calls by approval status: ${error.message}`);
+    }
+
+    return data.map(item => ({
+      ...this._toModel(item),
+      structure: item.structures ? {
+        id: item.structures.id,
+        name: item.structures.name,
+        type: item.structures.type
+      } : null
+    }));
+  }
+
+  /**
    * Find capital calls by user ID (investor)
    * Gets all capital calls that have allocations for the specified user
    */
