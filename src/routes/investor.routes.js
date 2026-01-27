@@ -75,6 +75,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     familyName,
     principalContact,
     assetsUnderManagement,
+    // Structure Allocation
+    commitment,
+    ownershipPercent,
     // ILPA Fee Settings
     feeDiscount,
     vatExempt
@@ -128,6 +131,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     accreditedInvestor: accreditedInvestor || false,
     riskTolerance: riskTolerance?.trim() || '',
     investmentPreferences: investmentPreferences || {},
+    // Structure allocation
+    commitment: commitment || null,
+    ownershipPercent: ownershipPercent || null,
     createdBy: requestingUserId
   };
 

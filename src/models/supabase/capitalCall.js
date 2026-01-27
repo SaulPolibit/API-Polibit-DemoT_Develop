@@ -383,14 +383,15 @@ class CapitalCall {
 
   /**
    * Create allocations for all investors in structure
+   * Uses the investors table (LP commitments) to find investors assigned to the structure
    */
   static async createAllocationsForStructure(capitalCallId, structureId) {
     const supabase = getSupabase();
 
-    // Get all investors for this structure (from investments table)
-    const { data: investments, error: invError } = await supabase
-      .from('investments')
-      .select('user_id, ownership_percentage, equity_ownership_percent')
+    // Get all investors for this structure from the investors table (LP commitments)
+    const { data: investors, error: invError } = await supabase
+      .from('investors')
+      .select('user_id, ownership_percent, commitment')
       .eq('structure_id', structureId);
 
     if (invError) {
@@ -399,22 +400,28 @@ class CapitalCall {
 
     // Get unique investors with their ownership percentages
     const investorMap = new Map();
-    investments?.forEach(inv => {
+    investors?.forEach(inv => {
       const userId = inv.user_id;
-      const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
+      const ownershipPercent = inv.ownership_percent || 0;
+      const commitmentAmount = inv.commitment || 0;
 
       if (!investorMap.has(userId)) {
-        investorMap.set(userId, ownershipPercent);
+        investorMap.set(userId, { ownershipPercent, commitment: commitmentAmount });
       } else {
-        // Sum up ownership if multiple investments
-        investorMap.set(userId, investorMap.get(userId) + ownershipPercent);
+        // Sum up ownership if multiple investor records for same user
+        const existing = investorMap.get(userId);
+        investorMap.set(userId, {
+          ownershipPercent: existing.ownershipPercent + ownershipPercent,
+          commitment: existing.commitment + commitmentAmount
+        });
       }
     });
 
-    const structureInvestors = Array.from(investorMap.entries()).map(([userId, ownershipPercent]) => ({
+    const structureInvestors = Array.from(investorMap.entries()).map(([userId, data]) => ({
       user_id: userId,
       structure_id: structureId,
-      ownership_percent: ownershipPercent
+      ownership_percent: data.ownershipPercent,
+      commitment: data.commitment
     }));
 
     // Get capital call details

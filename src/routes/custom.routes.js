@@ -1106,7 +1106,7 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
 
     return res.status(result.statusCode || 500).json({
       error: result.error,
-      message: 'Failed to fetch DiDit PDF',
+      message: 'Failed to fetch PDF',
     });
   }
 
@@ -1116,7 +1116,7 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
   if (!pdfData || pdfData.length === 0) {
     return res.status(500).json({
       error: 'Empty PDF response',
-      message: 'No PDF data received from DiDit'
+      message: 'No PDF data received'
     });
   }
 

@@ -54,6 +54,9 @@ class Investor {
       familyName: 'family_name',
       principalContact: 'principal_contact',
       assetsUnderManagement: 'assets_under_management',
+      // Structure allocation
+      commitment: 'commitment',
+      ownershipPercent: 'ownership_percent',
       userId: 'user_id',
       structureId: 'structure_id',
       createdBy: 'created_by',
@@ -111,6 +114,9 @@ class Investor {
       familyName: dbData.family_name,
       principalContact: dbData.principal_contact,
       assetsUnderManagement: dbData.assets_under_management,
+      // Structure allocation
+      commitment: dbData.commitment,
+      ownershipPercent: dbData.ownership_percent,
       userId: dbData.user_id,
       structureId: dbData.structure_id,
       createdBy: dbData.created_by,
