@@ -239,7 +239,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     taxJurisdiction: taxJurisdiction?.trim() || '',
     regulatoryStatus: regulatoryStatus?.trim() || '',
     investmentStrategy: investmentStrategy?.trim() || '',
-    targetReturns: targetReturns?.trim() || '',
+    targetReturns: sanitizeNumber(targetReturns, null),
     riskProfile: riskProfile?.trim() || '',
     stage: stage?.trim() || '',
     performanceFee: sanitizeNumber(performanceFee, null),
@@ -290,8 +290,8 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     internationalBankAddress: internationalBankAddress?.trim() || '',
     blockchainNetwork: blockchainNetwork?.trim() || '',
     walletAddress: walletAddress?.trim() || '',
-    debtGrossInterestRate: debtGrossInterestRate?.trim() || '',
-    debtInterestRate: debtInterestRate?.trim() || '',
+    debtGrossInterestRate: sanitizeNumber(debtGrossInterestRate, null),
+    debtInterestRate: sanitizeNumber(debtInterestRate, null),
     parentStructureOwnershipPercentage: sanitizeNumber(parentStructureOwnershipPercentage, null),
     capitalCallNoticePeriod: sanitizeNumber(capitalCallNoticePeriod, null),
     capitalCallPaymentDeadline: sanitizeNumber(capitalCallPaymentDeadline, null),
@@ -305,13 +305,13 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     walletOwnerAddress: walletOwnerAddress?.trim() || '',
     operatingAgreementHash: operatingAgreementHash?.trim() || '',
     incomeFlowTarget: incomeFlowTarget?.trim() || '',
-    vatRate: vatRate?.trim() || '',
-    vatRateNaturalPersons: vatRateNaturalPersons?.trim() || '',
-    vatRateLegalEntities: vatRateLegalEntities?.trim() || '',
-    defaultTaxRate: defaultTaxRate?.trim() || '',
-    determinedTier: determinedTier?.trim() || '',
-    calculatedIssuances: calculatedIssuances?.trim() || '',
-    capitalCallDefaultPercentage: capitalCallDefaultPercentage?.trim() || '',
+    vatRate: sanitizeNumber(vatRate, null),
+    vatRateNaturalPersons: sanitizeNumber(vatRateNaturalPersons, null),
+    vatRateLegalEntities: sanitizeNumber(vatRateLegalEntities, null),
+    defaultTaxRate: sanitizeNumber(defaultTaxRate, null),
+    determinedTier: sanitizeNumber(determinedTier, null),
+    calculatedIssuances: sanitizeNumber(calculatedIssuances, null),
+    capitalCallDefaultPercentage: sanitizeNumber(capitalCallDefaultPercentage, null),
     fundType: fundType?.trim() || '',
     contractTemplateUrlNational: contractTemplateUrlNational?.trim() || '',
     contractTemplateUrlInternational: contractTemplateUrlInternational?.trim() || '',
@@ -542,9 +542,35 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'managementFeeBase', 'gpCatchUpRate'
   ];
 
+  // Fields that are numeric in the database and must not receive empty strings
+  const numericFields = new Set([
+    'totalCommitment', 'managementFee', 'carriedInterest', 'hurdleRate',
+    'termYears', 'extensionYears', 'performanceFee', 'preferredReturn',
+    'plannedInvestments', 'investors', 'minimumTicket', 'maximumTicket',
+    'targetReturns', 'debtGrossInterestRate', 'debtInterestRate',
+    'parentStructureOwnershipPercentage', 'capitalCallNoticePeriod',
+    'capitalCallPaymentDeadline', 'vatRate', 'vatRateNaturalPersons',
+    'vatRateLegalEntities', 'defaultTaxRate', 'determinedTier',
+    'calculatedIssuances', 'capitalCallDefaultPercentage',
+    'witholdingDividendTaxRateNaturalPersons', 'witholdingDividendTaxRateLegalEntities',
+    'incomeDebtTaxRateNaturalPersons', 'incomeEquityTaxRateNaturalPersons',
+    'incomeDebtTaxRateLegalEntities', 'incomeEquityTaxRateLegalEntities',
+    'gpCatchUpRate'
+  ]);
+
+  const sanitizeUpdateNumber = (value) => {
+    if (value === null || value === undefined || value === 'null' || value === '') {
+      return null;
+    }
+    const num = Number(value);
+    return isNaN(num) ? null : num;
+  };
+
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
-      updateData[field] = req.body[field];
+      updateData[field] = numericFields.has(field)
+        ? sanitizeUpdateNumber(req.body[field])
+        : req.body[field];
     }
   }
 
