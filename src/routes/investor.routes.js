@@ -94,8 +94,11 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
 
   // Validate required fields
   validate(structureId, 'Structure ID is required');
-  validate(investorType, 'Investor type is required');
-  validate(['Individual', 'Institution', 'Fund of Funds', 'Family Office'].includes(investorType), 'Invalid investor type');
+  // investorType is required only when creating a new user (existing users already have it)
+  if (createUser) {
+    validate(investorType, 'Investor type is required');
+    validate(['Individual', 'Institution', 'Fund of Funds', 'Family Office'].includes(investorType), 'Invalid investor type');
+  }
 
   // Validate UUID format for structureId
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -158,20 +161,61 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
       });
     }
 
-    // Create user in users table with role 3 (INVESTOR)
+    // Create user in users table with role 3 (INVESTOR) and all profile data
     try {
-      existingUser = await User.create({
+      const userCreateData = {
         id: authData.user.id,
         email,
         password,
         firstName,
         lastName: lastName || '',
-        role: ROLES.INVESTOR // role 3
-      });
+        role: ROLES.INVESTOR, // role 3
+        // Profile data stored on users table
+        investorType,
+        phoneNumber: phoneNumber?.trim() || null,
+        country: country?.trim() || null,
+        taxId: taxId?.trim() || null,
+        kycStatus: kycStatus || 'Not Started',
+        accreditedInvestor: accreditedInvestor || false,
+        riskTolerance: riskTolerance?.trim() || null,
+        investmentPreferences: investmentPreferences || null,
+        // ILPA Fee Settings
+        feeDiscount: feeDiscount || 0,
+        vatExempt: vatExempt || false,
+      };
+
+      // Add type-specific fields to user record
+      if (investorType === 'Individual') {
+        userCreateData.fullName = fullName?.trim() || `${firstName} ${lastName || ''}`.trim();
+        userCreateData.dateOfBirth = dateOfBirth || null;
+        userCreateData.nationality = nationality?.trim() || null;
+        userCreateData.passportNumber = passportNumber?.trim() || null;
+        userCreateData.addressLine1 = addressLine1?.trim() || null;
+        userCreateData.addressLine2 = addressLine2?.trim() || null;
+        userCreateData.city = city?.trim() || null;
+        userCreateData.state = state?.trim() || null;
+        userCreateData.postalCode = postalCode?.trim() || null;
+      } else if (investorType === 'Institution') {
+        userCreateData.institutionName = institutionName?.trim() || null;
+        userCreateData.institutionType = institutionType?.trim() || null;
+        userCreateData.registrationNumber = registrationNumber?.trim() || null;
+        userCreateData.legalRepresentative = legalRepresentative?.trim() || null;
+      } else if (investorType === 'Fund of Funds') {
+        userCreateData.fundName = fundName?.trim() || null;
+        userCreateData.fundManager = fundManager?.trim() || null;
+        userCreateData.aum = aum || null;
+      } else if (investorType === 'Family Office') {
+        userCreateData.officeName = officeName?.trim() || null;
+        userCreateData.familyName = familyName?.trim() || null;
+        userCreateData.principalContact = principalContact?.trim() || null;
+        userCreateData.assetsUnderManagement = assetsUnderManagement || null;
+      }
+
+      existingUser = await User.create(userCreateData);
       userId = existingUser.id;
       newUserCreated = true;
       plainPassword = password;
-      console.log('[Investor Route] New investor user created:', userId);
+      console.log('[Investor Route] New investor user created with full profile:', userId);
     } catch (createError) {
       console.error('[Investor Route] Error creating user in users table:', createError);
       return res.status(500).json({
@@ -190,15 +234,17 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     validate(existingUser, 'User not found');
   }
 
-  // Validate type-specific required fields
-  if (investorType === 'Individual') {
-    validate(fullName, 'Full name is required for individual investors');
-  } else if (investorType === 'Institution') {
-    validate(institutionName, 'Institution name is required');
-  } else if (investorType === 'Fund of Funds') {
-    validate(fundName, 'Fund name is required');
-  } else if (investorType === 'Family Office') {
-    validate(officeName, 'Office name is required');
+  // Validate type-specific required fields (only for new user creation)
+  if (createUser) {
+    if (investorType === 'Individual') {
+      validate(fullName || firstName, 'Full name or first name is required for individual investors');
+    } else if (investorType === 'Institution') {
+      validate(institutionName, 'Institution name is required');
+    } else if (investorType === 'Fund of Funds') {
+      validate(fundName, 'Fund name is required');
+    } else if (investorType === 'Family Office') {
+      validate(officeName, 'Office name is required');
+    }
   }
 
   // Check if investor profile already exists for this user-structure combination
@@ -210,62 +256,21 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     });
   }
 
-  // Prepare investor data
+  // Prepare investor data (thin junction: user-structure relationship only)
+  // Personal/profile data is stored on the users table, not here
   const investorData = {
     userId,
     structureId,
-    investorType,
+    investorType: investorType || existingUser.investorType || 'Individual',
     email: email?.toLowerCase() || existingUser.email,
-    phoneNumber: phoneNumber?.trim() || '',
-    country: country?.trim() || '',
-    taxId: taxId?.trim() || '',
-    kycStatus: kycStatus || 'Not Started',
-    accreditedInvestor: accreditedInvestor || false,
-    riskTolerance: riskTolerance?.trim() || '',
-    investmentPreferences: investmentPreferences || {},
     // Structure allocation
     commitment: commitment || null,
     ownershipPercent: ownershipPercent || null,
     createdBy: requestingUserId
   };
 
-  // Add type-specific fields
-  if (investorType === 'Individual') {
-    investorData.fullName = fullName?.trim() || '';
-    investorData.dateOfBirth = dateOfBirth || null;
-    investorData.nationality = nationality?.trim() || '';
-    investorData.passportNumber = passportNumber?.trim() || '';
-    investorData.addressLine1 = addressLine1?.trim() || '';
-    investorData.addressLine2 = addressLine2?.trim() || '';
-    investorData.city = city?.trim() || '';
-    investorData.state = state?.trim() || '';
-    investorData.postalCode = postalCode?.trim() || '';
-  } else if (investorType === 'Institution') {
-    investorData.institutionName = institutionName?.trim() || '';
-    investorData.institutionType = institutionType?.trim() || '';
-    investorData.registrationNumber = registrationNumber?.trim() || '';
-    investorData.legalRepresentative = legalRepresentative?.trim() || '';
-  } else if (investorType === 'Fund of Funds') {
-    investorData.fundName = fundName?.trim() || '';
-    investorData.fundManager = fundManager?.trim() || '';
-    investorData.aum = aum || null;
-  } else if (investorType === 'Family Office') {
-    investorData.officeName = officeName?.trim() || '';
-    investorData.familyName = familyName?.trim() || '';
-    investorData.principalContact = principalContact?.trim() || '';
-    investorData.assetsUnderManagement = assetsUnderManagement || null;
-  }
-
-  // Create new investor profile
+  // Create new investor profile (junction record)
   const investor = await Investor.create(investorData);
-
-  // Update User record with ILPA fee settings if provided
-  if (feeDiscount !== undefined || vatExempt !== undefined) {
-    const userUpdateData = {};
-    if (feeDiscount !== undefined) userUpdateData.feeDiscount = feeDiscount;
-    if (vatExempt !== undefined) userUpdateData.vatExempt = vatExempt;
-    await User.findByIdAndUpdate(userId, userUpdateData);
-  }
 
   // Send welcome email if a new user was created and sendWelcomeEmail is true
   let emailSent = false;
