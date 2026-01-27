@@ -51,7 +51,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     vatRate,
     vatApplicable,
     feePeriod,
-    approvalStatus
+    approvalStatus,
+    // Proximity Dual-Rate Fee Fields
+    feeRateOnNic,
+    feeRateOnUnfunded
   } = req.body;
 
   // Validate required fields
@@ -84,6 +87,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     vatApplicable: vatApplicable !== undefined ? vatApplicable : true,
     feePeriod: feePeriod || 'quarterly',
     approvalStatus: approvalStatus || 'draft',
+    // Proximity Dual-Rate Fee Fields (default from structure if not provided)
+    feeRateOnNic: feeRateOnNic !== undefined ? feeRateOnNic : structure.feeRateOnNic || null,
+    feeRateOnUnfunded: feeRateOnUnfunded !== undefined ? feeRateOnUnfunded : structure.feeRateOnUnfunded || null,
     createdBy: userId
   };
 
@@ -258,7 +264,9 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
   const allowedFields = [
     'callDate', 'dueDate', 'totalCallAmount', 'purpose', 'notes', 'status',
     // ILPA Fee Configuration
-    'managementFeeBase', 'managementFeeRate', 'vatRate', 'vatApplicable', 'feePeriod', 'approvalStatus'
+    'managementFeeBase', 'managementFeeRate', 'vatRate', 'vatApplicable', 'feePeriod', 'approvalStatus',
+    // Proximity Dual-Rate Fee Fields
+    'feeRateOnNic', 'feeRateOnUnfunded'
   ];
 
   for (const field of allowedFields) {

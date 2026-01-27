@@ -166,7 +166,11 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     contractTemplateUrlInternational,
     // ILPA Fee Configuration
     managementFeeBase,
-    gpCatchUpRate
+    gpCatchUpRate,
+    // Proximity Dual-Rate Fee Fields
+    feeRateOnNic,
+    feeRateOnUnfunded,
+    gpPercentage
   } = req.body;
 
   // Validate required fields
@@ -318,6 +322,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     // ILPA Fee Configuration
     managementFeeBase: managementFeeBase?.trim() || 'committed',
     gpCatchUpRate: sanitizeNumber(gpCatchUpRate, 100),
+    // Proximity Dual-Rate Fee Fields
+    feeRateOnNic: sanitizeNumber(feeRateOnNic, null),
+    feeRateOnUnfunded: sanitizeNumber(feeRateOnUnfunded, null),
+    gpPercentage: sanitizeNumber(gpPercentage, null),
     createdBy: userId
   };
 
@@ -539,7 +547,9 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'calculatedIssuances', 'capitalCallDefaultPercentage', 'fundType',
     'contractTemplateUrlNational', 'contractTemplateUrlInternational',
     // ILPA Fee Configuration
-    'managementFeeBase', 'gpCatchUpRate'
+    'managementFeeBase', 'gpCatchUpRate',
+    // Proximity Dual-Rate Fee Fields
+    'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage'
   ];
 
   // Fields that are numeric in the database and must not receive empty strings
@@ -555,7 +565,8 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'witholdingDividendTaxRateNaturalPersons', 'witholdingDividendTaxRateLegalEntities',
     'incomeDebtTaxRateNaturalPersons', 'incomeEquityTaxRateNaturalPersons',
     'incomeDebtTaxRateLegalEntities', 'incomeEquityTaxRateLegalEntities',
-    'gpCatchUpRate'
+    'gpCatchUpRate',
+    'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage'
   ]);
 
   const sanitizeUpdateNumber = (value) => {

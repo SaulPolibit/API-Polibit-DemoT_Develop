@@ -121,6 +121,10 @@ class Structure {
       // ILPA Fee Configuration
       managementFeeBase: 'management_fee_base',
       gpCatchUpRate: 'gp_catch_up_rate',
+      // Proximity Dual-Rate Fee Fields
+      feeRateOnNic: 'fee_rate_on_nic',
+      feeRateOnUnfunded: 'fee_rate_on_unfunded',
+      gpPercentage: 'gp_percentage',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -251,6 +255,10 @@ class Structure {
       // ILPA Fee Configuration
       managementFeeBase: dbData.management_fee_base,
       gpCatchUpRate: dbData.gp_catch_up_rate,
+      // Proximity Dual-Rate Fee Fields
+      feeRateOnNic: dbData.fee_rate_on_nic,
+      feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
+      gpPercentage: dbData.gp_percentage,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at

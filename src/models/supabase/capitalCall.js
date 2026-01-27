@@ -32,6 +32,9 @@ class CapitalCall {
       vatApplicable: 'vat_applicable',
       feePeriod: 'fee_period',
       approvalStatus: 'approval_status',
+      // Proximity Dual-Rate Fee Fields
+      feeRateOnNic: 'fee_rate_on_nic',
+      feeRateOnUnfunded: 'fee_rate_on_unfunded',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -73,6 +76,9 @@ class CapitalCall {
       vatApplicable: dbData.vat_applicable,
       feePeriod: dbData.fee_period,
       approvalStatus: dbData.approval_status,
+      // Proximity Dual-Rate Fee Fields
+      feeRateOnNic: dbData.fee_rate_on_nic,
+      feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
@@ -437,59 +443,169 @@ class CapitalCall {
       throw new Error('Capital call not found');
     }
 
-    // Create allocations based on ownership percentage with ILPA fee breakdown
-    const allocations = structureInvestors.map((si) => {
-      const principalAmount = capitalCall.totalCallAmount * (si.ownership_percent / 100);
+    // Determine if we should use dual-rate mode (Proximity Parks)
+    const isDualRateMode = capitalCall.managementFeeBase === 'nic_plus_unfunded' &&
+      (capitalCall.feeRateOnNic != null || capitalCall.feeRateOnUnfunded != null);
 
-      // Fee settings from the investor-structure record (per-structure)
-      const feeDiscount = si.fee_discount || 0;
-      const vatExempt = si.vat_exempt || false;
+    // Get structure for GP percentage (needed for fee offset in dual-rate mode)
+    let structure = null;
+    if (isDualRateMode) {
+      const { data: structureData } = await supabase
+        .from('structures')
+        .select('gp_percentage')
+        .eq('id', structureId)
+        .single();
+      structure = structureData;
+    }
 
-      // Calculate management fee if ILPA fee config is set
-      let managementFeeGross = 0;
-      let managementFeeDiscountAmount = 0;
-      let managementFeeNet = 0;
-      let vatAmount = 0;
+    // Calculate period fraction based on fee period
+    let periodFraction = 1.0;
+    if (capitalCall.feePeriod === 'quarterly') {
+      periodFraction = 0.25;
+    } else if (capitalCall.feePeriod === 'semi-annual') {
+      periodFraction = 0.5;
+    }
 
-      if (capitalCall.managementFeeRate) {
-        // Calculate based on fee period
-        let periodRate = capitalCall.managementFeeRate;
-        if (capitalCall.feePeriod === 'quarterly') {
-          periodRate = capitalCall.managementFeeRate / 4;
-        } else if (capitalCall.feePeriod === 'semi-annual') {
-          periodRate = capitalCall.managementFeeRate / 2;
+    let allocations;
+
+    if (isDualRateMode) {
+      // ===== PROXIMITY DUAL-RATE MODE =====
+      const nicRate = capitalCall.feeRateOnNic || 0;
+      const unfundedRate = capitalCall.feeRateOnUnfunded || 0;
+      const gpPercentage = structure?.gp_percentage || 0;
+
+      // Pass 1: Calculate each investor's NIC fee and Unfunded fee
+      const investorFees = structureInvestors.map((si) => {
+        const principalAmount = capitalCall.totalCallAmount * (si.ownership_percent / 100);
+        const feeDiscount = si.fee_discount || 0;
+        const vatExempt = si.vat_exempt || false;
+        const commitment = si.commitment || 0;
+
+        // NIC = calledCapital (commitment - unfunded). For unfunded, use commitment minus what's been called.
+        // unfundedCommitment is the investor's remaining unfunded capital before this call
+        const unfundedCommitment = commitment; // pre-call unfunded (simplified: full commitment for first call)
+        const nicBase = commitment - unfundedCommitment; // prior NIC (0 for first call)
+
+        // Fee discount is subtracted from the rate per Proximity formula
+        const effectiveNicRate = Math.max(0, nicRate - feeDiscount);
+        const effectiveUnfundedRate = Math.max(0, unfundedRate - feeDiscount);
+
+        // Calculate individual fees
+        const nicFee = nicBase * periodFraction * (effectiveNicRate / 100);
+        const unfundedFee = unfundedCommitment * periodFraction * (effectiveUnfundedRate / 100);
+        const managementFeeGross = nicFee + unfundedFee;
+
+        return {
+          si,
+          principalAmount,
+          feeDiscount,
+          vatExempt,
+          nicFee,
+          unfundedFee,
+          managementFeeGross
+        };
+      });
+
+      // Pass 2: Calculate fee offset (GP contribution)
+      const totalFundFeeGross = investorFees.reduce((sum, f) => sum + f.managementFeeGross, 0);
+
+      allocations = investorFees.map((f) => {
+        // Fee offset: proportional share of GP fee offset
+        let feeOffset = 0;
+        let deemedGpContribution = 0;
+        if (gpPercentage > 0 && totalFundFeeGross > 0) {
+          // GP offset = investor's pro-rata share of fees * GP ownership percentage
+          feeOffset = f.managementFeeGross * (gpPercentage / 100);
+          deemedGpContribution = -feeOffset;
         }
 
-        // Fee base is the principal amount for this investor
-        managementFeeGross = principalAmount * (periodRate / 100);
-        managementFeeDiscountAmount = managementFeeGross * (feeDiscount / 100);
-        managementFeeNet = managementFeeGross - managementFeeDiscountAmount;
+        const managementFeeNet = f.managementFeeGross - feeOffset;
 
         // Calculate VAT if applicable
-        if (capitalCall.vatApplicable && !vatExempt && capitalCall.vatRate) {
+        let vatAmount = 0;
+        if (capitalCall.vatApplicable && !f.vatExempt && capitalCall.vatRate) {
           vatAmount = managementFeeNet * (capitalCall.vatRate / 100);
         }
-      }
 
-      const totalDue = principalAmount + managementFeeNet + vatAmount;
+        const totalDue = f.principalAmount + managementFeeNet + vatAmount;
 
-      return {
-        capital_call_id: capitalCallId,
-        user_id: si.user_id,
-        allocated_amount: totalDue,
-        paid_amount: 0,
-        remaining_amount: totalDue,
-        status: 'Pending',
-        due_date: capitalCall.dueDate,
-        // ILPA Fee Breakdown
-        principal_amount: principalAmount,
-        management_fee_gross: managementFeeGross,
-        management_fee_discount: managementFeeDiscountAmount,
-        management_fee_net: managementFeeNet,
-        vat_amount: vatAmount,
-        total_due: totalDue
-      };
-    });
+        return {
+          capital_call_id: capitalCallId,
+          user_id: f.si.user_id,
+          allocated_amount: totalDue,
+          paid_amount: 0,
+          remaining_amount: totalDue,
+          status: 'Pending',
+          due_date: capitalCall.dueDate,
+          // ILPA Fee Breakdown
+          principal_amount: f.principalAmount,
+          management_fee_gross: f.managementFeeGross,
+          management_fee_discount: feeOffset,
+          management_fee_net: managementFeeNet,
+          vat_amount: vatAmount,
+          total_due: totalDue,
+          // Dual-rate breakdown columns
+          nic_fee_amount: f.nicFee,
+          unfunded_fee_amount: f.unfundedFee,
+          fee_offset_amount: feeOffset,
+          deemed_gp_contribution: deemedGpContribution
+        };
+      });
+    } else {
+      // ===== LEGACY SINGLE-RATE MODE (unchanged) =====
+      allocations = structureInvestors.map((si) => {
+        const principalAmount = capitalCall.totalCallAmount * (si.ownership_percent / 100);
+
+        // Fee settings from the investor-structure record (per-structure)
+        const feeDiscount = si.fee_discount || 0;
+        const vatExempt = si.vat_exempt || false;
+
+        // Calculate management fee if ILPA fee config is set
+        let managementFeeGross = 0;
+        let managementFeeDiscountAmount = 0;
+        let managementFeeNet = 0;
+        let vatAmount = 0;
+
+        if (capitalCall.managementFeeRate) {
+          // Calculate based on fee period
+          let periodRate = capitalCall.managementFeeRate;
+          if (capitalCall.feePeriod === 'quarterly') {
+            periodRate = capitalCall.managementFeeRate / 4;
+          } else if (capitalCall.feePeriod === 'semi-annual') {
+            periodRate = capitalCall.managementFeeRate / 2;
+          }
+
+          // Fee base is the principal amount for this investor
+          managementFeeGross = principalAmount * (periodRate / 100);
+          managementFeeDiscountAmount = managementFeeGross * (feeDiscount / 100);
+          managementFeeNet = managementFeeGross - managementFeeDiscountAmount;
+
+          // Calculate VAT if applicable
+          if (capitalCall.vatApplicable && !vatExempt && capitalCall.vatRate) {
+            vatAmount = managementFeeNet * (capitalCall.vatRate / 100);
+          }
+        }
+
+        const totalDue = principalAmount + managementFeeNet + vatAmount;
+
+        return {
+          capital_call_id: capitalCallId,
+          user_id: si.user_id,
+          allocated_amount: totalDue,
+          paid_amount: 0,
+          remaining_amount: totalDue,
+          status: 'Pending',
+          due_date: capitalCall.dueDate,
+          // ILPA Fee Breakdown
+          principal_amount: principalAmount,
+          management_fee_gross: managementFeeGross,
+          management_fee_discount: managementFeeDiscountAmount,
+          management_fee_net: managementFeeNet,
+          vat_amount: vatAmount,
+          total_due: totalDue
+        };
+      });
+    }
 
     // Insert all allocations
     const { data, error } = await supabase
