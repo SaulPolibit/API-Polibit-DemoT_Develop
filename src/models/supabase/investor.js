@@ -60,6 +60,8 @@ class Investor {
       // ILPA Fee Settings (per-structure)
       feeDiscount: 'fee_discount',
       vatExempt: 'vat_exempt',
+      // Custom terms (per-investor overrides)
+      customTerms: 'custom_terms',
       userId: 'user_id',
       structureId: 'structure_id',
       createdBy: 'created_by',
@@ -123,6 +125,8 @@ class Investor {
       // ILPA Fee Settings (per-structure)
       feeDiscount: dbData.fee_discount,
       vatExempt: dbData.vat_exempt,
+      // Custom terms (per-investor overrides)
+      customTerms: dbData.custom_terms,
       userId: dbData.user_id,
       structureId: dbData.structure_id,
       createdBy: dbData.created_by,

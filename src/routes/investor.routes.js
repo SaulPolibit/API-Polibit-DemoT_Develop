@@ -89,7 +89,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     ownershipPercent,
     // ILPA Fee Settings
     feeDiscount,
-    vatExempt
+    vatExempt,
+    // Custom terms (per-investor overrides)
+    customTerms
   } = req.body;
 
   // Validate required fields
@@ -266,6 +268,8 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     // ILPA Fee Settings (per-structure)
     feeDiscount: feeDiscount !== undefined ? feeDiscount : 0,
     vatExempt: vatExempt !== undefined ? vatExempt : false,
+    // Custom terms (per-investor overrides)
+    customTerms: customTerms || null,
     createdBy: requestingUserId
   };
 
@@ -1059,13 +1063,15 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
     // Family Office fields
     'officeName', 'familyName', 'principalContact', 'assetsUnderManagement',
     // ILPA Fee Settings (stored in User table)
-    'feeDiscount', 'vatExempt'
+    'feeDiscount', 'vatExempt',
+    // Custom terms (per-investor overrides, stored in investors table)
+    'customTerms'
   ];
 
   // Define field types for proper handling
   const booleanFields = ['accreditedInvestor'];
   const numberFields = ['aum', 'assetsUnderManagement'];
-  const jsonFields = ['investmentPreferences'];
+  const jsonFields = ['investmentPreferences', 'customTerms'];
 
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
