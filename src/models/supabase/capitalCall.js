@@ -388,31 +388,35 @@ class CapitalCall {
   static async createAllocationsForStructure(capitalCallId, structureId) {
     const supabase = getSupabase();
 
-    // Get all investors for this structure from the investors table (LP commitments)
+    // Get all investors for this structure from the investors table (LP commitments + fee settings)
     const { data: investors, error: invError } = await supabase
       .from('investors')
-      .select('user_id, ownership_percent, commitment')
+      .select('user_id, ownership_percent, commitment, fee_discount, vat_exempt')
       .eq('structure_id', structureId);
 
     if (invError) {
       throw new Error(`Error fetching structure investors: ${invError.message}`);
     }
 
-    // Get unique investors with their ownership percentages
+    // Get unique investors with their ownership percentages and fee settings
     const investorMap = new Map();
     investors?.forEach(inv => {
       const userId = inv.user_id;
       const ownershipPercent = inv.ownership_percent || 0;
       const commitmentAmount = inv.commitment || 0;
+      const feeDiscount = inv.fee_discount || 0;
+      const vatExempt = inv.vat_exempt || false;
 
       if (!investorMap.has(userId)) {
-        investorMap.set(userId, { ownershipPercent, commitment: commitmentAmount });
+        investorMap.set(userId, { ownershipPercent, commitment: commitmentAmount, feeDiscount, vatExempt });
       } else {
         // Sum up ownership if multiple investor records for same user
         const existing = investorMap.get(userId);
         investorMap.set(userId, {
           ownershipPercent: existing.ownershipPercent + ownershipPercent,
-          commitment: existing.commitment + commitmentAmount
+          commitment: existing.commitment + commitmentAmount,
+          feeDiscount,
+          vatExempt
         });
       }
     });
@@ -421,7 +425,9 @@ class CapitalCall {
       user_id: userId,
       structure_id: structureId,
       ownership_percent: data.ownershipPercent,
-      commitment: data.commitment
+      commitment: data.commitment,
+      fee_discount: data.feeDiscount,
+      vat_exempt: data.vatExempt
     }));
 
     // Get capital call details
@@ -432,18 +438,12 @@ class CapitalCall {
     }
 
     // Create allocations based on ownership percentage with ILPA fee breakdown
-    const allocations = await Promise.all(structureInvestors.map(async (si) => {
+    const allocations = structureInvestors.map((si) => {
       const principalAmount = capitalCall.totalCallAmount * (si.ownership_percent / 100);
 
-      // Get user's fee discount and VAT exempt status
-      const { data: userData } = await supabase
-        .from('users')
-        .select('fee_discount, vat_exempt')
-        .eq('id', si.user_id)
-        .single();
-
-      const feeDiscount = userData?.fee_discount || 0;
-      const vatExempt = userData?.vat_exempt || false;
+      // Fee settings from the investor-structure record (per-structure)
+      const feeDiscount = si.fee_discount || 0;
+      const vatExempt = si.vat_exempt || false;
 
       // Calculate management fee if ILPA fee config is set
       let managementFeeGross = 0;
@@ -489,7 +489,7 @@ class CapitalCall {
         vat_amount: vatAmount,
         total_due: totalDue
       };
-    }));
+    });
 
     // Insert all allocations
     const { data, error } = await supabase

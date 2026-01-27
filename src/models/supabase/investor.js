@@ -57,6 +57,9 @@ class Investor {
       // Structure allocation
       commitment: 'commitment',
       ownershipPercent: 'ownership_percent',
+      // ILPA Fee Settings (per-structure)
+      feeDiscount: 'fee_discount',
+      vatExempt: 'vat_exempt',
       userId: 'user_id',
       structureId: 'structure_id',
       createdBy: 'created_by',
@@ -117,6 +120,9 @@ class Investor {
       // Structure allocation
       commitment: dbData.commitment,
       ownershipPercent: dbData.ownership_percent,
+      // ILPA Fee Settings (per-structure)
+      feeDiscount: dbData.fee_discount,
+      vatExempt: dbData.vat_exempt,
       userId: dbData.user_id,
       structureId: dbData.structure_id,
       createdBy: dbData.created_by,

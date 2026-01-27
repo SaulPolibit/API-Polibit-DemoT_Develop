@@ -179,9 +179,6 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
         accreditedInvestor: accreditedInvestor || false,
         riskTolerance: riskTolerance?.trim() || null,
         investmentPreferences: investmentPreferences || null,
-        // ILPA Fee Settings
-        feeDiscount: feeDiscount || 0,
-        vatExempt: vatExempt || false,
       };
 
       // Add type-specific fields to user record
@@ -256,7 +253,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     });
   }
 
-  // Prepare investor data (thin junction: user-structure relationship only)
+  // Prepare investor data (junction: user-structure relationship + per-structure settings)
   // Personal/profile data is stored on the users table, not here
   const investorData = {
     userId,
@@ -266,6 +263,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     // Structure allocation
     commitment: commitment || null,
     ownershipPercent: ownershipPercent || null,
+    // ILPA Fee Settings (per-structure)
+    feeDiscount: feeDiscount !== undefined ? feeDiscount : 0,
+    vatExempt: vatExempt !== undefined ? vatExempt : false,
     createdBy: requestingUserId
   };
 
