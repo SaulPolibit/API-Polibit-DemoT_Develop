@@ -12,6 +12,8 @@ const DocusealSubmission = require('../models/supabase/docusealSubmission');
 const Payment = require('../models/supabase/payment');
 const { requireInvestmentManagerAccess, ROLES, getUserContext } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
+const { sendEmail } = require('../utils/emailSender');
+const { FirmSettings } = require('../models/supabase');
 
 const router = express.Router();
 
@@ -40,7 +42,14 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   const { userId: requestingUserId, userRole: requestingUserRole } = req.auth || req.user || {};
 
   const {
-    userId,
+    // User creation fields (when createUser is true)
+    createUser,
+    firstName,
+    lastName,
+    password,
+    sendWelcomeEmail,
+    // Existing fields
+    userId: providedUserId,
     structureId,
     investorType,
     email,
@@ -84,19 +93,102 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   } = req.body;
 
   // Validate required fields
-  validate(userId, 'User ID is required');
   validate(structureId, 'Structure ID is required');
   validate(investorType, 'Investor type is required');
   validate(['Individual', 'Institution', 'Fund of Funds', 'Family Office'].includes(investorType), 'Invalid investor type');
 
-  // Validate UUID format
+  // Validate UUID format for structureId
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  validate(uuidRegex.test(userId), 'Invalid user ID format');
   validate(uuidRegex.test(structureId), 'Invalid structure ID format');
 
-  // Verify user exists
-  const existingUser = await User.findById(userId);
-  validate(existingUser, 'User not found');
+  let userId;
+  let existingUser;
+  let newUserCreated = false;
+  let plainPassword = null;
+
+  if (createUser) {
+    // --- Create new user inline with role 3 (INVESTOR) ---
+    validate(email, 'Email is required when creating a new user');
+    validate(password, 'Password is required when creating a new user');
+    validate(firstName, 'First name is required when creating a new user');
+
+    // Check if user already exists
+    const existingByEmail = await User.findByEmail(email);
+    if (existingByEmail) {
+      return res.status(409).json({
+        success: false,
+        message: 'A user with this email already exists. Use "Select Existing User" instead.'
+      });
+    }
+
+    // Create user in Supabase Auth
+    const { createClient } = require('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName || ''
+      }
+    });
+
+    if (authError) {
+      console.error('[Investor Route] Supabase Auth error:', authError);
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to create user account',
+        error: authError.message
+      });
+    }
+
+    if (!authData?.user) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create user account - no user returned'
+      });
+    }
+
+    // Create user in users table with role 3 (INVESTOR)
+    try {
+      existingUser = await User.create({
+        id: authData.user.id,
+        email,
+        password,
+        firstName,
+        lastName: lastName || '',
+        role: ROLES.INVESTOR // role 3
+      });
+      userId = existingUser.id;
+      newUserCreated = true;
+      plainPassword = password;
+      console.log('[Investor Route] New investor user created:', userId);
+    } catch (createError) {
+      console.error('[Investor Route] Error creating user in users table:', createError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create user profile',
+        error: createError.message
+      });
+    }
+  } else {
+    // --- Select existing user ---
+    userId = providedUserId;
+    validate(userId, 'User ID is required');
+    validate(uuidRegex.test(userId), 'Invalid user ID format');
+
+    existingUser = await User.findById(userId);
+    validate(existingUser, 'User not found');
+  }
 
   // Validate type-specific required fields
   if (investorType === 'Individual') {
@@ -175,10 +267,59 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     await User.findByIdAndUpdate(userId, userUpdateData);
   }
 
+  // Send welcome email if a new user was created and sendWelcomeEmail is true
+  let emailSent = false;
+  if (newUserCreated && sendWelcomeEmail !== false) {
+    try {
+      // Get firm name for whitelabeling
+      let firmName = 'Investment Manager';
+      try {
+        const firmSettings = await FirmSettings.findByUserId(requestingUserId);
+        if (firmSettings?.firmName) firmName = firmSettings.firmName;
+      } catch (e) {
+        console.warn('[Investor Route] Could not fetch firm settings for email:', e.message);
+      }
+
+      // Get structure name
+      const structure = await Structure.findById(structureId);
+      const structureName = structure?.name || 'a fund structure';
+
+      const loginUrl = process.env.LP_PORTAL_URL || process.env.FRONTEND_URL || 'https://app.polibit.com';
+
+      await sendEmail(requestingUserId, {
+        to: [investorData.email],
+        subject: `Welcome to ${firmName} - Your Investor Account`,
+        bodyHtml: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Welcome to ${firmName}</h2>
+            <p>Your investor account has been created. You have been assigned to <strong>${structureName}</strong>.</p>
+            <p>You can access the LP Portal using the following credentials:</p>
+            <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+              <p style="margin: 4px 0;"><strong>Email:</strong> ${investorData.email}</p>
+              <p style="margin: 4px 0;"><strong>Password:</strong> ${plainPassword}</p>
+            </div>
+            <p><a href="${loginUrl}/lp-portal/login" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Login to LP Portal</a></p>
+            <p style="color: #666; font-size: 12px; margin-top: 24px;">For security, we recommend changing your password after your first login.</p>
+          </div>
+        `,
+        bodyText: `Welcome to ${firmName}\n\nYour investor account has been created. You have been assigned to ${structureName}.\n\nEmail: ${investorData.email}\nPassword: ${plainPassword}\n\nLogin at: ${loginUrl}/lp-portal/login\n\nFor security, we recommend changing your password after your first login.`
+      });
+      emailSent = true;
+      console.log('[Investor Route] Welcome email sent to:', investorData.email);
+    } catch (emailError) {
+      console.error('[Investor Route] Failed to send welcome email:', emailError.message);
+      // Don't fail the request if email fails - investor was still created
+    }
+  }
+
   res.status(201).json({
     success: true,
-    message: 'Investor profile created successfully',
-    data: investor
+    message: newUserCreated
+      ? `Investor profile and user account created successfully${emailSent ? '. Welcome email sent.' : '.'}`
+      : 'Investor profile created successfully',
+    data: investor,
+    userCreated: newUserCreated,
+    emailSent
   });
 }));
 
