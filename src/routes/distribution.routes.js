@@ -8,7 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const { Distribution, Structure, User, FirmSettings } = require('../models/supabase');
 const ApprovalHistory = require('../models/supabase/approvalHistory');
 const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
-const { generateDistributionNoticePDF } = require('../services/documentGenerator');
+const { generateDistributionNoticePDF, generateIndividualDistributionNoticePDF } = require('../services/documentGenerator');
 const { sendEmail } = require('../utils/emailSender');
 
 /**
@@ -956,6 +956,56 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
 }));
 
 /**
+ * @route   GET /api/distributions/:id/generate-lp-notice/:investorId
+ * @desc    Generate per-LP personalized Distribution Notice PDF
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { userId, userRole } = getUserContext(req);
+  const { id, investorId } = req.params;
+  const defaultFirmName = await getFirmNameForUser(userId);
+  const { firmName = defaultFirmName } = req.query;
+
+  const distribution = await Distribution.findById(id);
+  validate(distribution, 'Distribution not found');
+
+  // Root can access any distribution, Admin can only access their own
+  if (userRole === ROLES.ADMIN) {
+    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
+  }
+
+  const structure = await Structure.findById(distribution.structureId);
+  validate(structure, 'Structure not found');
+
+  // Get allocations and find the specific investor's allocation
+  const distributionWithAllocations = await Distribution.findWithAllocations(id);
+  const allocations = distributionWithAllocations?.distribution_allocations || [];
+  const allocation = allocations.find(a => a.user_id === investorId);
+  validate(allocation, 'Investor allocation not found for this distribution');
+
+  // Get investor profile
+  const investor = allocation.user || await User.findById(investorId);
+  validate(investor, 'Investor not found');
+
+  // Generate personalized PDF
+  const pdfBuffer = await generateIndividualDistributionNoticePDF(
+    distribution,
+    allocation,
+    structure,
+    investor,
+    { firmName }
+  );
+
+  // Set response headers for PDF download
+  const investorNameClean = (investor.name || 'Investor').replace(/\s+/g, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="ILPA_Distribution_${distribution.distributionNumber}_${investorNameClean}.pdf"`);
+  res.setHeader('Content-Length', pdfBuffer.length);
+
+  res.send(pdfBuffer);
+}));
+
+/**
  * @route   POST /api/distributions/:id/send-notices
  * @desc    Send ILPA Distribution Notices to all investors via email
  * @access  Private (requires authentication, Root/Admin only)
@@ -1001,11 +1051,13 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
         continue;
       }
 
-      // Generate distribution notice PDF for investor
-      const pdfBuffer = await generateDistributionNoticePDF(
-        { ...distribution, allocations: [allocation] },
+      // Generate personalized distribution notice PDF for investor
+      const pdfBuffer = await generateIndividualDistributionNoticePDF(
+        distribution,
+        allocation,
         structure,
-        { firmName, bankDetails: structure.bankDetails }
+        investor,
+        { firmName }
       );
 
       // Prepare email content
