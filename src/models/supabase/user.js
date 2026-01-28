@@ -128,6 +128,13 @@ class User {
       // ILPA Fee Settings
       fee_discount: userData.feeDiscount || 0,
       vat_exempt: userData.vatExempt || false,
+      // Closing Tranche (Proximity Parks)
+      closing_tranche: userData.closingTranche || null,
+      closing_date: userData.closingDate || null,
+      closing_tranche_custom_name: userData.closingTrancheCustomName || null,
+      // Mexican Banking (Bank Planilla)
+      clabe: userData.clabe || null,
+      rfc: userData.rfc || null,
     };
 
     // Include ID if provided (for Supabase Auth integration)
@@ -804,6 +811,13 @@ class User {
       // ILPA Fee Settings
       feeDiscount: dbUser.fee_discount,
       vatExempt: dbUser.vat_exempt,
+      // Closing Tranche (Proximity Parks)
+      closingTranche: dbUser.closing_tranche,
+      closingDate: dbUser.closing_date,
+      closingTrancheCustomName: dbUser.closing_tranche_custom_name,
+      // Mexican Banking (Bank Planilla)
+      clabe: dbUser.clabe,
+      rfc: dbUser.rfc,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -894,6 +908,13 @@ class User {
       // ILPA Fee Settings
       feeDiscount: 'fee_discount',
       vatExempt: 'vat_exempt',
+      // Closing Tranche (Proximity Parks)
+      closingTranche: 'closing_tranche',
+      closingDate: 'closing_date',
+      closingTrancheCustomName: 'closing_tranche_custom_name',
+      // Mexican Banking (Bank Planilla)
+      clabe: 'clabe',
+      rfc: 'rfc',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {
