@@ -8,7 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const { Structure, User, FirmSettings } = require('../models/supabase');
 const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
 const { generateFeeReportPDF, generateFeeReportExcel } = require('../services/feeReportGenerator');
-const { supabase } = require('../models/supabase/supabaseClient');
+const { getSupabase } = require('../config/database');
 
 async function getFirmNameForUser(userId) {
   try {
@@ -25,7 +25,7 @@ async function getFirmNameForUser(userId) {
  */
 async function aggregateFeeData(structureId, startDate, endDate) {
   // Get all capital calls for the structure in the period
-  let query = supabase
+  let query = getSupabase()
     .from('capital_calls')
     .select('id, callNumber, callDate, structure_id')
     .eq('structure_id', structureId);
@@ -46,7 +46,7 @@ async function aggregateFeeData(structureId, startDate, endDate) {
   const callIds = capitalCalls.map(cc => cc.id);
 
   // Get all allocations for those capital calls
-  const { data: allocations } = await supabase
+  const { data: allocations } = await getSupabase()
     .from('capital_call_allocations')
     .select('*, user:users(id, name, email)')
     .in('capital_call_id', callIds);
@@ -211,7 +211,7 @@ router.get('/:structureId/investor/:investorId', authenticate, catchAsync(async 
   }
 
   // Get capital calls for the structure
-  let query = supabase
+  let query = getSupabase()
     .from('capital_calls')
     .select('id')
     .eq('structure_id', structureId);
@@ -230,7 +230,7 @@ router.get('/:structureId/investor/:investorId', authenticate, catchAsync(async 
   }
 
   // Get allocations for this investor
-  const { data: allocations } = await supabase
+  const { data: allocations } = await getSupabase()
     .from('capital_call_allocations')
     .select('*, capital_call:capital_calls(callNumber, callDate)')
     .eq('user_id', investorId)

@@ -6,7 +6,7 @@
  * Ports IRR/TVPI/DPI/RVPI calculations from frontend to server-side.
  */
 
-const { supabase } = require('../models/supabase/supabaseClient');
+const { getSupabase } = require('../config/database');
 
 /**
  * Calculate IRR using Newton-Raphson method
@@ -65,14 +65,14 @@ async function calculatePerformanceMetrics(structureId, asOfDate) {
   const dateFilter = asOfDate || new Date().toISOString().split('T')[0];
 
   // Get structure
-  const { data: structure } = await supabase
+  const { data: structure } = await getSupabase()
     .from('structures')
     .select('*')
     .eq('id', structureId)
     .single();
 
   // Get capital calls
-  const { data: capitalCalls } = await supabase
+  const { data: capitalCalls } = await getSupabase()
     .from('capital_calls')
     .select('*, capital_call_allocations(*)')
     .eq('structure_id', structureId)
@@ -80,7 +80,7 @@ async function calculatePerformanceMetrics(structureId, asOfDate) {
     .order('callDate', { ascending: true });
 
   // Get distributions
-  const { data: distributions } = await supabase
+  const { data: distributions } = await getSupabase()
     .from('distributions')
     .select('*, distribution_allocations(*)')
     .eq('structure_id', structureId)
@@ -88,7 +88,7 @@ async function calculatePerformanceMetrics(structureId, asOfDate) {
     .order('distributionDate', { ascending: true });
 
   // Get investors
-  const { data: investors } = await supabase
+  const { data: investors } = await getSupabase()
     .from('investors')
     .select('*, user:users(id, name, email)')
     .eq('structure_id', structureId);
@@ -206,7 +206,7 @@ async function calculatePerformanceMetrics(structureId, asOfDate) {
  */
 async function calculateQuarterlyActivity(structureId, startDate, endDate) {
   // Get capital calls this quarter
-  const { data: quarterCalls } = await supabase
+  const { data: quarterCalls } = await getSupabase()
     .from('capital_calls')
     .select('*')
     .eq('structure_id', structureId)
@@ -214,7 +214,7 @@ async function calculateQuarterlyActivity(structureId, startDate, endDate) {
     .lte('callDate', endDate);
 
   // Get distributions this quarter
-  const { data: quarterDists } = await supabase
+  const { data: quarterDists } = await getSupabase()
     .from('distributions')
     .select('*')
     .eq('structure_id', structureId)
@@ -258,14 +258,14 @@ async function calculateQuarterlyActivity(structureId, startDate, endDate) {
  */
 async function calculateCCDSummary(structureId) {
   // Get all capital calls
-  const { data: allCalls } = await supabase
+  const { data: allCalls } = await getSupabase()
     .from('capital_calls')
     .select('*')
     .eq('structure_id', structureId)
     .order('callDate', { ascending: true });
 
   // Get all distributions
-  const { data: allDists } = await supabase
+  const { data: allDists } = await getSupabase()
     .from('distributions')
     .select('*')
     .eq('structure_id', structureId)

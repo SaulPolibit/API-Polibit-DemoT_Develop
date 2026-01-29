@@ -8,7 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const { Structure, User, FirmSettings } = require('../models/supabase');
 const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
 const { generateCapitalAccountStatementPDF } = require('../services/capitalAccountGenerator');
-const { supabase } = require('../models/supabase/supabaseClient');
+const { getSupabase } = require('../config/database');
 
 async function getFirmNameForUser(userId) {
   try {
@@ -52,7 +52,7 @@ router.get('/:investorId/statement', authenticate, catchAsync(async (req, res) =
   validate(investor, 'Investor not found');
 
   // Get investor commitment from investors table
-  const { data: investorRecord } = await supabase
+  const { data: investorRecord } = await getSupabase()
     .from('investors')
     .select('*')
     .eq('user_id', investorId)
@@ -66,7 +66,7 @@ router.get('/:investorId/statement', authenticate, catchAsync(async (req, res) =
   };
 
   // Get capital call allocations
-  const { data: callAllocations } = await supabase
+  const { data: callAllocations } = await getSupabase()
     .from('capital_call_allocations')
     .select('*, capital_call:capital_calls(*)')
     .eq('user_id', investorId)
@@ -74,7 +74,7 @@ router.get('/:investorId/statement', authenticate, catchAsync(async (req, res) =
     .order('created_at', { ascending: true });
 
   // Get distribution allocations
-  const { data: distAllocations } = await supabase
+  const { data: distAllocations } = await getSupabase()
     .from('distribution_allocations')
     .select('*, distribution:distributions(*)')
     .eq('user_id', investorId)
@@ -127,7 +127,7 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
   validate(investor, 'Investor not found');
 
   // Get investor commitment
-  const { data: investorRecord } = await supabase
+  const { data: investorRecord } = await getSupabase()
     .from('investors')
     .select('*')
     .eq('user_id', investorId)
@@ -137,7 +137,7 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
   const commitment = investorRecord?.commitment || investorRecord?.total_commitment || 0;
 
   // Get capital call allocations
-  const { data: callAllocations } = await supabase
+  const { data: callAllocations } = await getSupabase()
     .from('capital_call_allocations')
     .select('*, capital_call:capital_calls(*)')
     .eq('user_id', investorId)
@@ -145,7 +145,7 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
     .order('created_at', { ascending: true });
 
   // Get distribution allocations
-  const { data: distAllocations } = await supabase
+  const { data: distAllocations } = await getSupabase()
     .from('distribution_allocations')
     .select('*, distribution:distributions(*)')
     .eq('user_id', investorId)
