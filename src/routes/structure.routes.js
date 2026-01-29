@@ -5,7 +5,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { Structure, StructureAdmin, User } = require('../models/supabase');
+const { Structure, StructureAdmin, User, CapitalCall } = require('../models/supabase');
 const SmartContract = require('../models/supabase/smartContract');
 const {
   requireInvestmentManagerAccess,
@@ -53,6 +53,68 @@ async function enrichStructuresWithSmartContracts(structures) {
 
   return Promise.all(
     structures.map(structure => enrichStructureWithSmartContract(structure))
+  );
+}
+
+/**
+ * Helper function to enrich structure with capital call summary data
+ * @param {Object} structure - Structure object
+ * @returns {Promise<Object>} Structure with capital call summary
+ */
+async function enrichStructureWithCapitalCallSummary(structure) {
+  if (!structure) return structure;
+
+  try {
+    // Get all capital calls for this structure
+    const capitalCalls = await CapitalCall.findByStructureId(structure.id);
+
+    // Calculate summary metrics
+    const totalCalled = capitalCalls.reduce((sum, cc) => sum + (cc.totalCallAmount || 0), 0);
+    const totalPaid = capitalCalls.reduce((sum, cc) => sum + (cc.totalPaidAmount || 0), 0);
+    const callCount = capitalCalls.length;
+    const lastCall = capitalCalls[0]; // Already sorted by date desc from findByStructureId
+
+    // Determine if capital calls are enabled for this structure type
+    const capitalCallsEnabled = structure.type === 'fund' ||
+                                structure.type === 'fideicomiso' ||
+                                structure.managementFeeBase === 'nic_plus_unfunded' ||
+                                callCount > 0;
+
+    return {
+      ...structure,
+      capitalCallSummary: {
+        enabled: capitalCallsEnabled,
+        totalCalled,
+        totalPaid,
+        totalUnpaid: totalCalled - totalPaid,
+        callCount,
+        percentageCalled: structure.totalCommitment > 0
+          ? parseFloat(((totalCalled / structure.totalCommitment) * 100).toFixed(2))
+          : 0,
+        lastCallDate: lastCall?.callDate || null,
+        lastCallNumber: lastCall?.callNumber || null,
+        lastCallStatus: lastCall?.status || null
+      }
+    };
+  } catch (error) {
+    console.error(`Error fetching capital call summary for structure ${structure.id}:`, error.message);
+    return {
+      ...structure,
+      capitalCallSummary: null
+    };
+  }
+}
+
+/**
+ * Helper function to enrich multiple structures with capital call summary data
+ * @param {Array} structures - Array of structure objects
+ * @returns {Promise<Array>} Structures with capital call summaries
+ */
+async function enrichStructuresWithCapitalCallSummaries(structures) {
+  if (!structures || !Array.isArray(structures)) return structures;
+
+  return Promise.all(
+    structures.map(structure => enrichStructureWithCapitalCallSummary(structure))
   );
 }
 
@@ -349,9 +411,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
  * @query   type?: string - Filter by structure type
  * @query   status?: string - Filter by status
  * @query   parentId?: string - Filter by parent structure ID
+ * @query   includeCapitalCalls?: string - Include capital call summary data ('true' to enable)
  */
 router.get('/', authenticate, catchAsync(async (req, res) => {
-  const { createdBy, type, status, parentId } = req.query;
+  const { createdBy, type, status, parentId, includeCapitalCalls } = req.query;
 
   // Build filter object based on query parameters
   const filter = {};
@@ -364,7 +427,12 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
   const structures = await Structure.find(filter);
 
   // Enrich with smart contract data
-  const enrichedStructures = await enrichStructuresWithSmartContracts(structures);
+  let enrichedStructures = await enrichStructuresWithSmartContracts(structures);
+
+  // Optionally enrich with capital call summary data
+  if (includeCapitalCalls === 'true') {
+    enrichedStructures = await enrichStructuresWithCapitalCallSummaries(enrichedStructures);
+  }
 
   res.status(200).json({
     success: true,
@@ -406,15 +474,22 @@ router.get('/root', authenticate, requireInvestmentManagerAccess, catchAsync(asy
  * @route   GET /api/structures/:id
  * @desc    Get a single structure by ID
  * @access  Private (requires authentication)
+ * @query   includeCapitalCalls?: string - Include capital call summary data ('true' to enable)
  */
 router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
+  const { includeCapitalCalls } = req.query;
 
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
   // Enrich with smart contract data
-  const enrichedStructure = await enrichStructureWithSmartContract(structure);
+  let enrichedStructure = await enrichStructureWithSmartContract(structure);
+
+  // Optionally enrich with capital call summary data
+  if (includeCapitalCalls === 'true') {
+    enrichedStructure = await enrichStructureWithCapitalCallSummary(enrichedStructure);
+  }
 
   res.status(200).json({
     success: true,
