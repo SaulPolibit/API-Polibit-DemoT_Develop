@@ -500,19 +500,60 @@ router.get('/status/:status', authenticate, catchAsync(async (req, res) => {
 
 /**
  * @route   GET /api/payments/:id
- * @desc    Get a single payment by ID
+ * @desc    Get a single payment by ID with investor and capital call details
  * @access  Private (requires authentication)
  */
 router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
+  const userId = req.auth.userId || req.user.id;
 
   const payment = await Payment.findById(id);
 
   validate(payment, 'Payment not found');
 
+  let structure = null;
+  let investor = null;
+  let capitalCallData = null;
+
+  if (payment.structureId) {
+    try {
+      structure = await Structure.findById(payment.structureId);
+    } catch (error) {
+      console.error(`Error fetching structure ${payment.structureId}:`, error.message);
+    }
+
+    // Get structure investor record for this user+structure
+    investor = await getStructureInvestorForUser(userId, payment.structureId);
+
+    // If structure investor exists, get capital call data
+    if (investor) {
+      capitalCallData = await getCapitalCallDataForInvestor(investor.userId, payment.structureId);
+    }
+  }
+
   res.status(200).json({
     success: true,
-    data: payment
+    data: {
+      ...payment,
+      structure: structure ? {
+        id: structure.id,
+        name: structure.name,
+        type: structure.type,
+        status: structure.status,
+        baseCurrency: structure.baseCurrency,
+        description: structure.description,
+        bannerImage: structure.bannerImage,
+        totalCommitment: structure.totalCommitment,
+        enableCapitalCalls: structure.enableCapitalCalls,
+      } : null,
+      investor: investor ? {
+        id: investor.id,
+        commitment: investor.commitment,
+        ownershipPercent: investor.ownershipPercent,
+        status: investor.status,
+      } : null,
+      capitalCallData: capitalCallData
+    }
   });
 }));
 
