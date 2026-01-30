@@ -9,10 +9,101 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const { handleDocumentUpload } = require('../middleware/upload');
 const { uploadToSupabase } = require('../utils/fileUpload');
 const Payment = require('../models/supabase/payment');
-const { Structure, User } = require('../models/supabase');
+const { Structure, User, Investor, CapitalCall } = require('../models/supabase');
 const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
 
 const router = express.Router();
+
+/**
+ * Helper function to get or create investor record for a user+structure combination
+ * Used when capital commitments are made through the marketplace
+ */
+async function getOrCreateInvestor(userId, structureId, commitment, email) {
+  try {
+    // Check if investor record already exists for this user+structure
+    const existingInvestors = await Investor.find({ userId, structureId });
+
+    if (existingInvestors && existingInvestors.length > 0) {
+      // Update existing investor's commitment
+      const existingInvestor = existingInvestors[0];
+      const newCommitment = (existingInvestor.commitment || 0) + commitment;
+
+      const updatedInvestor = await Investor.findByIdAndUpdate(existingInvestor.id, {
+        commitment: newCommitment
+      });
+
+      console.log(`[Payment] Updated existing investor ${existingInvestor.id} commitment to ${newCommitment}`);
+      return updatedInvestor;
+    }
+
+    // Create new investor record
+    const investorData = {
+      userId,
+      structureId,
+      email: email.toLowerCase(),
+      investorType: 'individual', // Default type
+      commitment,
+      ownershipPercent: 0, // Will be calculated based on total commitments
+      kycStatus: 'pending'
+    };
+
+    const newInvestor = await Investor.create(investorData);
+    console.log(`[Payment] Created new investor ${newInvestor.id} for user ${userId} in structure ${structureId}`);
+    return newInvestor;
+  } catch (error) {
+    console.error('[Payment] Error in getOrCreateInvestor:', error.message);
+    // Don't throw - investor creation is supplementary to payment
+    return null;
+  }
+}
+
+/**
+ * Helper function to get investor data for a user+structure combination
+ */
+async function getInvestorForUserStructure(userId, structureId) {
+  try {
+    const investors = await Investor.find({ userId, structureId });
+    return investors && investors.length > 0 ? investors[0] : null;
+  } catch (error) {
+    console.error('[Payment] Error fetching investor:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Helper function to get capital call data for an investor in a structure
+ */
+async function getCapitalCallDataForInvestor(investorId, structureId) {
+  try {
+    const capitalCalls = await CapitalCall.findByStructureId(structureId);
+
+    let totalCalled = 0;
+    let totalPaid = 0;
+
+    for (const call of capitalCalls) {
+      if (call.status === 'Draft' || call.status === 'Cancelled') continue;
+
+      const allocation = call.investorAllocations?.find(
+        alloc => alloc.investorId === investorId
+      );
+
+      if (allocation) {
+        totalCalled += allocation.allocatedAmount || 0;
+        totalPaid += allocation.amountPaid || 0;
+      }
+    }
+
+    return {
+      totalCalled,
+      totalPaid,
+      totalUnpaid: totalCalled - totalPaid,
+      callCount: capitalCalls.filter(cc => cc.status !== 'Draft' && cc.status !== 'Cancelled').length
+    };
+  } catch (error) {
+    console.error('[Payment] Error fetching capital call data:', error.message);
+    return { totalCalled: 0, totalPaid: 0, totalUnpaid: 0, callCount: 0 };
+  }
+}
 
 /**
  * @route   GET /api/payments/health
@@ -29,7 +120,7 @@ router.get('/health', (_req, res) => {
 
 /**
  * @route   GET /api/payments/me
- * @desc    Get all payments for the authenticated user with structure details
+ * @desc    Get all payments for the authenticated user with structure and investor details
  * @access  Private (requires authentication)
  */
 router.get('/me', authenticate, catchAsync(async (req, res) => {
@@ -38,16 +129,26 @@ router.get('/me', authenticate, catchAsync(async (req, res) => {
   // Get all payments for the current user
   const payments = await Payment.find({ userId });
 
-  // Attach structure details to each payment
-  const paymentsWithStructures = await Promise.all(
+  // Attach structure, investor, and capital call details to each payment
+  const paymentsWithDetails = await Promise.all(
     payments.map(async (payment) => {
       let structure = null;
+      let investor = null;
+      let capitalCallData = null;
 
       if (payment.structureId) {
         try {
           structure = await Structure.findById(payment.structureId);
         } catch (error) {
           console.error(`Error fetching structure ${payment.structureId}:`, error.message);
+        }
+
+        // Get investor record for this user+structure
+        investor = await getInvestorForUserStructure(userId, payment.structureId);
+
+        // If investor exists, get capital call data
+        if (investor) {
+          capitalCallData = await getCapitalCallDataForInvestor(investor.id, payment.structureId);
         }
       }
 
@@ -61,15 +162,25 @@ router.get('/me', authenticate, catchAsync(async (req, res) => {
           baseCurrency: structure.baseCurrency,
           description: structure.description,
           bannerImage: structure.bannerImage,
-        } : null
+          totalCommitment: structure.totalCommitment,
+          enableCapitalCalls: structure.enableCapitalCalls,
+        } : null,
+        investor: investor ? {
+          id: investor.id,
+          commitment: investor.commitment,
+          ownershipPercent: investor.ownershipPercent,
+          kycStatus: investor.kycStatus,
+          investorType: investor.investorType,
+        } : null,
+        capitalCallData: capitalCallData
       };
     })
   );
 
   res.status(200).json({
     success: true,
-    count: paymentsWithStructures.length,
-    data: paymentsWithStructures
+    count: paymentsWithDetails.length,
+    data: paymentsWithDetails
   });
 }));
 
@@ -149,10 +260,30 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
 
   const payment = await Payment.create(paymentData);
 
+  // Create or update investor record for capital commitment tracking
+  let investor = null;
+  if (userId && structureId && amount) {
+    const commitmentAmount = parseFloat(amount) || 0;
+    if (commitmentAmount > 0) {
+      investor = await getOrCreateInvestor(
+        userId,
+        structureId.trim(),
+        commitmentAmount,
+        email.trim()
+      );
+    }
+  }
+
   res.status(201).json({
     success: true,
     message: 'Payment created successfully',
-    data: payment
+    data: {
+      ...payment,
+      investor: investor ? {
+        id: investor.id,
+        commitment: investor.commitment,
+      } : null
+    }
   });
 }));
 
