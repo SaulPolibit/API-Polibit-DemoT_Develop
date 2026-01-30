@@ -223,7 +223,12 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
   validate(email, 'Email is required');
   validate(amount, 'Amount is required');
   validate(structureId, 'Structure ID is required');
-  validate(contractId, 'Contract ID is required');
+
+  // contractId is required except for capital commitments
+  const isCapitalCommitment = paymentMethod === 'capital-commitment';
+  if (!isCapitalCommitment) {
+    validate(contractId, 'Contract ID is required');
+  }
 
   // Generate submission ID if not provided
   const finalSubmissionId = submissionId?.trim() || `PAY-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
@@ -254,7 +259,7 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     mintTransactionHash: mintTransactionHash?.trim() || null,
     amount: amount.trim(),
     structureId: structureId.trim(),
-    contractId: contractId.trim(),
+    contractId: contractId?.trim() || null, // Optional for capital commitments
     status: status?.trim() || 'pending',
     tokenId: tokenId?.trim() || null,
     tokens: tokens ? parseInt(tokens, 10) : null,
