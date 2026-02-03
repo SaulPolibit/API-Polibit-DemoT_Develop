@@ -5,7 +5,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { Structure, StructureAdmin, User, CapitalCall } = require('../models/supabase');
+const { Structure, StructureAdmin, User, CapitalCall, StructureInvestor } = require('../models/supabase');
 const SmartContract = require('../models/supabase/smartContract');
 const {
   requireInvestmentManagerAccess,
@@ -559,6 +559,99 @@ router.get('/:id/with-investors', authenticate, catchAsync(async (req, res) => {
   res.status(200).json({
     success: true,
     data: enrichedStructure
+  });
+}));
+
+/**
+ * @route   GET /api/structures/:id/investors
+ * @desc    Get all investors for a structure with their commitment and ownership data
+ * @access  Private (requires authentication, Root/Admin/Guest)
+ */
+router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
+  const { userId, userRole } = getUserContext(req);
+  const { id } = req.params;
+
+  // Only allow Root, Admin, and Guest roles
+  validate(
+    [ROLES.ROOT, ROLES.ADMIN, ROLES.GUEST].includes(userRole),
+    'Unauthorized: Only Root, Admin, and Guest roles can access this endpoint'
+  );
+
+  const structure = await Structure.findById(id);
+  validate(structure, 'Structure not found');
+
+  // Root and Guest can access any structure, Admin can only access their own
+  if (userRole === ROLES.ADMIN) {
+    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
+    validate(hasAccess, 'Unauthorized access to structure');
+  }
+
+  // Get all investors for this structure from structure_investors junction table
+  const structureInvestors = await StructureInvestor.findByStructureId(id);
+
+  // Get capital calls for this structure to calculate called capital per investor
+  const capitalCalls = await CapitalCall.find({ structureId: id });
+
+  // Transform the data to match what the frontend expects
+  const investors = structureInvestors.map(si => {
+    // Get user data from the joined users table
+    const user = si.user || {};
+
+    // Calculate called capital for this investor from all capital calls
+    let calledCapital = 0;
+    if (capitalCalls && capitalCalls.length > 0) {
+      capitalCalls.forEach(call => {
+        if (call.allocations) {
+          const allocation = call.allocations.find(a => a.investorId === si.userId || a.userId === si.userId);
+          if (allocation && call.status !== 'draft') {
+            calledCapital += allocation.callAmount || 0;
+          }
+        }
+      });
+    }
+
+    // Build investor name based on available data
+    const name = user.first_name && user.last_name
+      ? `${user.first_name} ${user.last_name}`
+      : user.email || 'Unknown Investor';
+
+    return {
+      id: si.id,
+      name: name,
+      email: user.email,
+      type: user.investor_type || 'individual',
+      userId: si.userId,
+      structureId: si.structureId,
+      commitment: si.commitment || 0,
+      ownershipPercent: si.ownershipPercent || 0,
+      calledCapital: calledCapital,
+      uncalledCapital: (si.commitment || 0) - calledCapital,
+      feeDiscount: si.feeDiscount || 0,
+      vatExempt: si.vatExempt || false,
+      customTerms: si.customTerms,
+      status: si.status || 'active',
+      // Include fundOwnerships array for compatibility with capital call wizard
+      fundOwnerships: [{
+        fundId: id,
+        commitment: si.commitment || 0,
+        ownershipPercent: si.ownershipPercent || 0,
+        calledCapital: calledCapital,
+        uncalledCapital: (si.commitment || 0) - calledCapital,
+        feeDiscount: si.feeDiscount || 0,
+        vatExempt: si.vatExempt || false,
+      }]
+    };
+  });
+
+  res.status(200).json({
+    success: true,
+    data: investors,
+    meta: {
+      structureId: id,
+      structureName: structure.name,
+      totalInvestors: investors.length,
+      totalCommitment: investors.reduce((sum, inv) => sum + (inv.commitment || 0), 0)
+    }
   });
 }));
 

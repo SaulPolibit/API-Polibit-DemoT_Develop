@@ -8,6 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const User = require('../models/supabase/user');
 const Investor = require('../models/supabase/investor');
 const Structure = require('../models/supabase/structure');
+const StructureInvestor = require('../models/supabase/structureInvestor');
 const DocusealSubmission = require('../models/supabase/docusealSubmission');
 const Payment = require('../models/supabase/payment');
 const { requireInvestmentManagerAccess, ROLES, getUserContext } = require('../middleware/rbac');
@@ -273,8 +274,27 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     createdBy: requestingUserId
   };
 
-  // Create new investor profile (junction record)
+  // Create new investor profile (junction record in legacy investors table)
   const investor = await Investor.create(investorData);
+
+  // Also create a record in structure_investors junction table (new architecture)
+  // This ensures compatibility with capital calls and other features using the new table
+  try {
+    await StructureInvestor.upsert({
+      userId,
+      structureId,
+      commitment: commitment || 0,
+      ownershipPercent: ownershipPercent || 0,
+      feeDiscount: feeDiscount !== undefined ? feeDiscount : 0,
+      vatExempt: vatExempt !== undefined ? vatExempt : false,
+      customTerms: customTerms || null,
+      status: 'active'
+    });
+    console.log('[Investor Route] Structure investor record created/updated for userId:', userId, 'structureId:', structureId);
+  } catch (siError) {
+    console.error('[Investor Route] Failed to create structure_investor record:', siError.message);
+    // Don't fail the request - the legacy investor record was still created
+  }
 
   // Send welcome email if a new user was created and sendWelcomeEmail is true
   let emailSent = false;
