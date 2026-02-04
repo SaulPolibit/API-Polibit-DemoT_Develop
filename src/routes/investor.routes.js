@@ -728,14 +728,16 @@ router.get('/:id/portfolio', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/:id/commitments
  * @desc    Get investor commitments with detailed structure information
- * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
+ * @access  Private (requires authentication, Investors can only access their own data)
  */
 router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const { userRole } = getUserContext(req);
+  const { userRole, userId } = getUserContext(req);
 
-  // Block INVESTOR role from accessing this endpoint
-  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
+  // Investors can only access their own commitments data
+  if (userRole === ROLES.INVESTOR) {
+    validate(id === userId, 'Access denied. You can only view your own commitments.');
+  }
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

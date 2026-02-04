@@ -190,6 +190,76 @@ router.get('/me', authenticate, catchAsync(async (req, res) => {
 }));
 
 /**
+ * @route   GET /api/payments/check-commitment/:structureId
+ * @desc    Check if the authenticated user has an existing capital commitment for a structure
+ * @access  Private (requires authentication)
+ */
+router.get('/check-commitment/:structureId', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth.userId || req.user.id;
+  const { structureId } = req.params;
+
+  if (!structureId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Structure ID is required'
+    });
+  }
+
+  // Check if structure exists and has capital calls enabled
+  const structure = await Structure.findById(structureId);
+
+  if (!structure) {
+    return res.status(404).json({
+      success: false,
+      message: 'Structure not found'
+    });
+  }
+
+  // If structure doesn't have capital calls enabled, no restriction applies
+  if (!structure.enableCapitalCalls) {
+    return res.status(200).json({
+      success: true,
+      hasExistingCommitment: false,
+      capitalCallsEnabled: false,
+      message: 'This structure does not use capital calls'
+    });
+  }
+
+  // Check for existing capital commitment (pending or approved)
+  const existingCommitments = await Payment.find({
+    userId: userId,
+    structureId: structureId,
+    paymentMethod: 'capital-commitment'
+  });
+
+  // Filter to only non-rejected commitments
+  const activeCommitment = existingCommitments.find(c => c.status !== 'rejected');
+
+  if (activeCommitment) {
+    return res.status(200).json({
+      success: true,
+      hasExistingCommitment: true,
+      capitalCallsEnabled: true,
+      commitment: {
+        id: activeCommitment.id,
+        amount: activeCommitment.amount,
+        tokens: activeCommitment.tokens,
+        status: activeCommitment.status,
+        createdAt: activeCommitment.createdAt
+      },
+      message: 'You already have a capital commitment for this structure'
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    hasExistingCommitment: false,
+    capitalCallsEnabled: true,
+    message: 'No existing commitment found'
+  });
+}));
+
+/**
  * @route   POST /api/payments
  * @desc    Create a new payment with optional file upload
  * @access  Private (requires authentication)
@@ -230,6 +300,40 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     validate(contractId, 'Contract ID is required');
   }
 
+  // Get authenticated user ID
+  const userId = req.auth?.userId || req.user?.id;
+
+  // For capital commitments, check if user already has a commitment for this structure
+  if (isCapitalCommitment && userId && structureId) {
+    // Check if structure has capital calls enabled
+    const structure = await Structure.findById(structureId.trim());
+
+    if (structure && structure.enableCapitalCalls) {
+      // Check for existing capital commitment (pending or approved)
+      const existingCommitments = await Payment.find({
+        userId: userId,
+        structureId: structureId.trim(),
+        paymentMethod: 'capital-commitment'
+      });
+
+      // Filter to only non-rejected commitments
+      const activeCommitment = existingCommitments.find(c => c.status !== 'rejected');
+
+      if (activeCommitment) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have already made a capital commitment to this fund. Only one commitment per investor is allowed.',
+          existingCommitment: {
+            id: activeCommitment.id,
+            amount: activeCommitment.amount,
+            status: activeCommitment.status,
+            createdAt: activeCommitment.createdAt
+          }
+        });
+      }
+    }
+  }
+
   // Generate submission ID if not provided
   const finalSubmissionId = submissionId?.trim() || `PAY-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
@@ -246,9 +350,6 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     );
     paymentImageUrl = uploadResult.publicUrl;
   }
-
-  // Get authenticated user ID
-  const userId = req.auth?.userId || req.user?.id;
 
   // Create payment data
   const paymentData = {
