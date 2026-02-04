@@ -524,13 +524,16 @@ class User {
   static async getCommitmentsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all investments for this user with structure details
-    const { data: investments, error: invError } = await supabase
-      .from('investments')
+    // Get all structure_investors records for this user with structure details
+    const { data: structureInvestors, error: siError } = await supabase
+      .from('structure_investors')
       .select(`
+        id,
         structure_id,
-        ownership_percentage,
-        equity_ownership_percent,
+        commitment,
+        ownership_percent,
+        status,
+        created_at,
         structures:structure_id (
           id,
           name,
@@ -540,25 +543,10 @@ class User {
           base_currency
         )
       `)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('status', 'active');
 
-    if (invError) throw invError;
-
-    // Get unique structures from investments
-    const uniqueStructures = new Map();
-    investments?.forEach(inv => {
-      if (inv.structures && !uniqueStructures.has(inv.structure_id)) {
-        const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
-        uniqueStructures.set(inv.structure_id, {
-          structure_id: inv.structure_id,
-          user_id: userId,
-          ownership_percent: ownershipPercent,
-          structure: inv.structures
-        });
-      }
-    });
-
-    const structureInvestors = Array.from(uniqueStructures.values());
+    if (siError) throw siError;
 
     if (!structureInvestors || structureInvestors.length === 0) {
       return {
@@ -589,32 +577,34 @@ class User {
       sum + (parseFloat(alloc.allocated_amount) || 0), 0) || 0;
 
     // Process structures
-    const structures = structureInvestors.map(si => {
-      // Filter allocations for this specific structure
-      const structureAllocations = allocations?.filter(a =>
-        a.capital_call?.structure_id === si.structure_id
-      ) || [];
+    const structures = structureInvestors
+      .filter(si => si.structures) // Only include records with valid structure data
+      .map(si => {
+        // Filter allocations for this specific structure
+        const structureAllocations = allocations?.filter(a =>
+          a.capital_call?.structure_id === si.structure_id
+        ) || [];
 
-      const structureCalledCapital = structureAllocations.reduce((sum, alloc) =>
-        sum + (parseFloat(alloc.allocated_amount) || 0), 0);
+        const structureCalledCapital = structureAllocations.reduce((sum, alloc) =>
+          sum + (parseFloat(alloc.allocated_amount) || 0), 0);
 
-      const commitment = parseFloat(si.commitment_amount) || 0;
-      const uncalledCapital = commitment - structureCalledCapital;
+        const commitment = parseFloat(si.commitment) || 0;
+        const uncalledCapital = commitment - structureCalledCapital;
 
-      return {
-        id: si.structure.id,
-        name: si.structure.name,
-        type: si.structure.type,
-        commitment: commitment,
-        calledCapital: structureCalledCapital,
-        uncalledCapital: uncalledCapital > 0 ? uncalledCapital : 0,
-        ownershipPercent: parseFloat(si.ownership_percent) || 0,
-        status: si.structure.status,
-        investedDate: si.invested_at,
-        onboardingStatus: 'Complete',
-        currency: si.structure.base_currency || 'USD'
-      };
-    });
+        return {
+          id: si.structures.id,
+          name: si.structures.name,
+          type: si.structures.type,
+          commitment: commitment,
+          calledCapital: structureCalledCapital,
+          uncalledCapital: uncalledCapital > 0 ? uncalledCapital : 0,
+          ownershipPercent: parseFloat(si.ownership_percent) || 0,
+          status: si.structures.status,
+          investedDate: si.created_at,
+          onboardingStatus: 'Complete',
+          currency: si.structures.base_currency || 'USD'
+        };
+      });
 
     // Calculate totals
     const totalCommitment = structures.reduce((sum, s) => sum + s.commitment, 0);
@@ -626,7 +616,7 @@ class User {
       calledCapital,
       uncalledCapital: totalUncalledCapital > 0 ? totalUncalledCapital : 0,
       activeFunds,
-      structures: structures.filter(s => s.status === 'Active')
+      structures
     };
   }
 
