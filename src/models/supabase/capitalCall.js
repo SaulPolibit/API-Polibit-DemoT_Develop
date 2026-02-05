@@ -791,6 +791,179 @@ class CapitalCall {
       } : null
     }));
   }
+
+  /**
+   * Get cumulative called amount for an investor in a structure
+   * @param {string} structureId - The structure ID
+   * @param {string} userId - The investor's user ID
+   * @param {string} excludeCallId - Optional capital call ID to exclude (for editing)
+   * @returns {number} Total amount previously called from this investor
+   */
+  static async getCumulativeCalledByInvestor(structureId, userId, excludeCallId = null) {
+    const supabase = getSupabase();
+
+    // Get all capital calls for this structure that are not drafts
+    let query = supabase
+      .from('capital_calls')
+      .select('id')
+      .eq('structure_id', structureId)
+      .in('status', ['Sent', 'Paid', 'Partially Paid']);
+
+    if (excludeCallId) {
+      query = query.neq('id', excludeCallId);
+    }
+
+    const { data: calls, error: callsError } = await query;
+
+    if (callsError) {
+      throw new Error(`Error fetching capital calls: ${callsError.message}`);
+    }
+
+    if (!calls || calls.length === 0) {
+      return 0;
+    }
+
+    const callIds = calls.map(c => c.id);
+
+    // Get all allocations for this investor across these calls
+    const { data: allocations, error: allocError } = await supabase
+      .from('capital_call_allocations')
+      .select('principal_amount')
+      .eq('user_id', userId)
+      .in('capital_call_id', callIds);
+
+    if (allocError) {
+      throw new Error(`Error fetching allocations: ${allocError.message}`);
+    }
+
+    // Sum the principal amounts
+    const cumulativeCalled = allocations?.reduce((sum, a) => sum + (a.principal_amount || 0), 0) || 0;
+
+    return cumulativeCalled;
+  }
+
+  /**
+   * Get historical capital calls for a structure with investor-level details
+   * @param {string} structureId - The structure ID
+   * @returns {Array} Array of historical capital calls with allocations
+   */
+  static async getHistoryByStructure(structureId) {
+    const supabase = getSupabase();
+
+    // Get all capital calls for this structure (not drafts)
+    const { data: calls, error: callsError } = await supabase
+      .from('capital_calls')
+      .select(`
+        *,
+        capital_call_allocations (
+          id,
+          user_id,
+          principal_amount,
+          management_fee_gross,
+          management_fee_discount,
+          management_fee_net,
+          vat_amount,
+          total_due,
+          paid_amount,
+          remaining_amount,
+          status,
+          nic_fee_amount,
+          unfunded_fee_amount,
+          fee_offset_amount
+        )
+      `)
+      .eq('structure_id', structureId)
+      .in('status', ['Sent', 'Paid', 'Partially Paid'])
+      .order('call_date', { ascending: true });
+
+    if (callsError) {
+      throw new Error(`Error fetching capital call history: ${callsError.message}`);
+    }
+
+    // Transform to model format
+    return calls.map(call => ({
+      id: call.id,
+      callNumber: call.call_number,
+      callDate: call.call_date,
+      deadlineDate: call.deadline_date,
+      totalCallAmount: call.total_call_amount,
+      totalPaidAmount: call.total_paid_amount,
+      totalUnpaidAmount: call.total_unpaid_amount,
+      status: call.status,
+      purpose: call.purpose,
+      allocations: (call.capital_call_allocations || []).map(a => ({
+        id: a.id,
+        userId: a.user_id,
+        principalAmount: a.principal_amount,
+        managementFeeGross: a.management_fee_gross,
+        managementFeeDiscount: a.management_fee_discount,
+        managementFeeNet: a.management_fee_net,
+        vatAmount: a.vat_amount,
+        totalDue: a.total_due,
+        paidAmount: a.paid_amount,
+        remainingAmount: a.remaining_amount,
+        status: a.status,
+        nicFeeAmount: a.nic_fee_amount,
+        unfundedFeeAmount: a.unfunded_fee_amount,
+        feeOffsetAmount: a.fee_offset_amount
+      }))
+    }));
+  }
+
+  /**
+   * Get cumulative called amounts for all investors in a structure
+   * @param {string} structureId - The structure ID
+   * @param {string} excludeCallId - Optional capital call ID to exclude
+   * @returns {Object} Map of userId -> cumulativeCalled
+   */
+  static async getCumulativeCalledByStructure(structureId, excludeCallId = null) {
+    const supabase = getSupabase();
+
+    // Get all capital calls for this structure that are not drafts
+    let query = supabase
+      .from('capital_calls')
+      .select('id')
+      .eq('structure_id', structureId)
+      .in('status', ['Sent', 'Paid', 'Partially Paid']);
+
+    if (excludeCallId) {
+      query = query.neq('id', excludeCallId);
+    }
+
+    const { data: calls, error: callsError } = await query;
+
+    if (callsError) {
+      throw new Error(`Error fetching capital calls: ${callsError.message}`);
+    }
+
+    if (!calls || calls.length === 0) {
+      return {};
+    }
+
+    const callIds = calls.map(c => c.id);
+
+    // Get all allocations across these calls
+    const { data: allocations, error: allocError } = await supabase
+      .from('capital_call_allocations')
+      .select('user_id, principal_amount')
+      .in('capital_call_id', callIds);
+
+    if (allocError) {
+      throw new Error(`Error fetching allocations: ${allocError.message}`);
+    }
+
+    // Aggregate by user
+    const cumulativeMap = {};
+    allocations?.forEach(a => {
+      const userId = a.user_id;
+      if (!cumulativeMap[userId]) {
+        cumulativeMap[userId] = 0;
+      }
+      cumulativeMap[userId] += a.principal_amount || 0;
+    });
+
+    return cumulativeMap;
+  }
 }
 
 module.exports = CapitalCall;

@@ -219,6 +219,52 @@ router.get('/structure/:structureId/summary', authenticate, requireInvestmentMan
 }));
 
 /**
+ * @route   GET /api/capital-calls/structure/:structureId/history
+ * @desc    Get historical capital calls for a structure with cumulative data
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.get('/structure/:structureId/history', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { userId, userRole } = getUserContext(req);
+  const { structureId } = req.params;
+
+  const structure = await Structure.findById(structureId);
+  validate(structure, 'Structure not found');
+
+  // Root can access any structure, Admin can only access their own
+  if (userRole === ROLES.ADMIN) {
+    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+  }
+
+  // Get historical capital calls with allocations
+  const history = await CapitalCall.getHistoryByStructure(structureId);
+
+  // Get cumulative called amounts per investor
+  const cumulativeCalled = await CapitalCall.getCumulativeCalledByStructure(structureId);
+
+  // Calculate totals
+  const totalCalled = history.reduce((sum, call) => sum + (call.totalCallAmount || 0), 0);
+  const totalPaid = history.reduce((sum, call) => sum + (call.totalPaidAmount || 0), 0);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      history,
+      cumulativeCalled,
+      summary: {
+        totalCalls: history.length,
+        totalCalled,
+        totalPaid,
+        totalUnpaid: totalCalled - totalPaid,
+        structureTotalCommitment: structure.totalCommitment || 0,
+        percentCalled: structure.totalCommitment > 0
+          ? ((totalCalled / structure.totalCommitment) * 100).toFixed(2)
+          : 0
+      }
+    }
+  });
+}));
+
+/**
  * @route   GET /api/capital-calls/investor/:investorId
  * @desc    Get all capital calls for a specific investor
  * @access  Private (requires authentication, Root/Admin only)
