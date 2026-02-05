@@ -17,6 +17,8 @@ class CapitalCall {
       callNumber: 'call_number',
       callDate: 'call_date',
       dueDate: 'due_date',
+      noticeDate: 'notice_date',
+      deadlineDate: 'deadline_date',
       totalCallAmount: 'total_call_amount',
       totalPaidAmount: 'total_paid_amount',
       totalUnpaidAmount: 'total_unpaid_amount',
@@ -61,6 +63,8 @@ class CapitalCall {
       callNumber: dbData.call_number,
       callDate: dbData.call_date,
       dueDate: dbData.due_date,
+      noticeDate: dbData.notice_date,
+      deadlineDate: dbData.deadline_date,
       totalCallAmount: dbData.total_call_amount,
       totalPaidAmount: dbData.total_paid_amount,
       totalUnpaidAmount: dbData.total_unpaid_amount,
@@ -618,6 +622,174 @@ class CapitalCall {
     }
 
     return data;
+  }
+
+  /**
+   * Find capital calls where notice should be sent today
+   * Returns calls where noticeDate = today and status is 'Draft'
+   */
+  static async findCallsToNotifyToday() {
+    const supabase = getSupabase();
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('capital_calls')
+      .select(`
+        *,
+        structures:structure_id (
+          id,
+          name,
+          type,
+          base_currency
+        )
+      `)
+      .eq('notice_date', today)
+      .eq('status', 'Draft');
+
+    if (error) {
+      throw new Error(`Error finding calls to notify: ${error.message}`);
+    }
+
+    return data.map(item => ({
+      ...this._toModel(item),
+      structure: item.structures ? {
+        id: item.structures.id,
+        name: item.structures.name,
+        type: item.structures.type,
+        baseCurrency: item.structures.base_currency
+      } : null
+    }));
+  }
+
+  /**
+   * Find capital calls where deadline reminders should be sent
+   * @param {number} daysBeforeDeadline - Number of days before deadline (e.g., 3, 1, 0)
+   */
+  static async findCallsForDeadlineReminder(daysBeforeDeadline) {
+    const supabase = getSupabase();
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysBeforeDeadline);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('capital_calls')
+      .select(`
+        *,
+        structures:structure_id (
+          id,
+          name,
+          type,
+          base_currency
+        )
+      `)
+      .eq('deadline_date', targetDateStr)
+      .in('status', ['Sent', 'Partially Paid']);
+
+    if (error) {
+      throw new Error(`Error finding calls for reminder: ${error.message}`);
+    }
+
+    return data.map(item => ({
+      ...this._toModel(item),
+      structure: item.structures ? {
+        id: item.structures.id,
+        name: item.structures.name,
+        type: item.structures.type,
+        baseCurrency: item.structures.base_currency
+      } : null
+    }));
+  }
+
+  /**
+   * Get unpaid allocations for a capital call
+   * Returns allocations where paid_amount < allocated_amount
+   */
+  static async getUnpaidAllocations(capitalCallId) {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from('capital_call_allocations')
+      .select(`
+        *,
+        users:user_id (
+          id,
+          email,
+          first_name,
+          last_name
+        )
+      `)
+      .eq('capital_call_id', capitalCallId)
+      .neq('status', 'Paid');
+
+    if (error) {
+      throw new Error(`Error getting unpaid allocations: ${error.message}`);
+    }
+
+    return data.map(item => ({
+      id: item.id,
+      capitalCallId: item.capital_call_id,
+      userId: item.user_id,
+      allocatedAmount: item.allocated_amount,
+      paidAmount: item.paid_amount,
+      remainingAmount: item.remaining_amount,
+      status: item.status,
+      dueDate: item.due_date,
+      principalAmount: item.principal_amount,
+      managementFeeNet: item.management_fee_net,
+      vatAmount: item.vat_amount,
+      totalDue: item.total_due,
+      user: item.users ? {
+        id: item.users.id,
+        email: item.users.email,
+        firstName: item.users.first_name,
+        lastName: item.users.last_name
+      } : null
+    }));
+  }
+
+  /**
+   * Get all allocations for a capital call (for initial notice)
+   */
+  static async getAllocationsWithUsers(capitalCallId) {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from('capital_call_allocations')
+      .select(`
+        *,
+        users:user_id (
+          id,
+          email,
+          first_name,
+          last_name
+        )
+      `)
+      .eq('capital_call_id', capitalCallId);
+
+    if (error) {
+      throw new Error(`Error getting allocations: ${error.message}`);
+    }
+
+    return data.map(item => ({
+      id: item.id,
+      capitalCallId: item.capital_call_id,
+      userId: item.user_id,
+      allocatedAmount: item.allocated_amount,
+      paidAmount: item.paid_amount,
+      remainingAmount: item.remaining_amount,
+      status: item.status,
+      dueDate: item.due_date,
+      principalAmount: item.principal_amount,
+      managementFeeNet: item.management_fee_net,
+      vatAmount: item.vat_amount,
+      totalDue: item.total_due,
+      user: item.users ? {
+        id: item.users.id,
+        email: item.users.email,
+        firstName: item.users.first_name,
+        lastName: item.users.last_name
+      } : null
+    }));
   }
 }
 

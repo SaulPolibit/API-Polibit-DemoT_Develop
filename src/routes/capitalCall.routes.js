@@ -40,6 +40,8 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     callNumber,
     callDate,
     dueDate,
+    noticeDate,
+    deadlineDate,
     totalCallAmount,
     purpose,
     notes,
@@ -72,7 +74,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     structureId,
     callNumber: typeof callNumber === 'string' ? callNumber.trim() : callNumber,
     callDate: callDate || new Date().toISOString(),
-    dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days default
+    dueDate: dueDate || deadlineDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days default
+    noticeDate: noticeDate || null, // Date when email notification will be sent
+    deadlineDate: deadlineDate || dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     totalCallAmount,
     totalPaidAmount: 0,
     totalUnpaidAmount: totalCallAmount,
@@ -1146,6 +1150,35 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
     message: 'Changes requested on capital call',
     data: updatedCapitalCall
   });
+}));
+
+/**
+ * @route   POST /api/capital-calls/trigger-reminders
+ * @desc    Manually trigger capital call reminder job (for testing)
+ * @access  Private (requires authentication, Root only)
+ */
+router.post('/trigger-reminders', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Only Root users can trigger this
+  validate(userRole === ROLES.ROOT, 'Only administrators can trigger reminder jobs');
+
+  try {
+    const { runCapitalCallReminderJob } = require('../jobs/capitalCallReminders');
+    await runCapitalCallReminderJob();
+
+    res.status(200).json({
+      success: true,
+      message: 'Capital call reminder job triggered successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to run reminder job',
+      error: error.message
+    });
+  }
 }));
 
 /**

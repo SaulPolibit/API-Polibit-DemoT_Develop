@@ -31,6 +31,7 @@
     "mongoose": "^8.19.2",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
+    "node-cron": "^3.0.3",
     "nodemailer": "^7.0.10",
     "openid-client": "^5.7.1",
     "qs": "^6.11.2",
