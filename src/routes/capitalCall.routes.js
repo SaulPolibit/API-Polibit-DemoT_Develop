@@ -715,12 +715,12 @@ router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, ca
 
   let filter = {};
 
-  // Filter by approval status - default to all pending statuses
+  // Filter by approval status - default to pending_cfo (simplified workflow)
   if (status) {
     filter.approvalStatus = status;
   } else {
-    // Get all non-draft, non-approved, non-rejected items
-    filter.approvalStatusIn = ['pending_review', 'pending_cfo'];
+    // Get all pending CFO approval items (simplified workflow)
+    filter.approvalStatusIn = ['pending_cfo'];
   }
 
   // Role-based filtering: Root sees all, Admin sees only their own
@@ -739,7 +739,7 @@ router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, ca
 
 /**
  * @route   PATCH /api/capital-calls/:id/submit-for-review
- * @desc    Submit capital call for review (draft -> pending_review)
+ * @desc    Submit capital call for CFO approval (draft -> pending_cfo)
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
@@ -759,9 +759,9 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
   // Get user details for history
   const user = await User.findById(userId);
 
-  // Update approval status
+  // Update approval status - go directly to pending_cfo (simplified workflow)
   const updatedCapitalCall = await CapitalCall.findByIdAndUpdate(id, {
-    approvalStatus: 'pending_review'
+    approvalStatus: 'pending_cfo'
   });
 
   // Log approval action
@@ -770,16 +770,16 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
     entityId: id,
     action: 'submitted',
     fromStatus: 'draft',
-    toStatus: 'pending_review',
+    toStatus: 'pending_cfo',
     userId,
     userName: user?.name || 'Unknown',
     notes,
     metadata: { callNumber: capitalCall.callNumber }
   });
 
-  // Send email notification to approvers (Root users)
+  // Send email notification to CFO/approvers (Root users)
   try {
-    const rootUsers = await User.findByRole(0); // Root users are approvers
+    const rootUsers = await User.findByRole(0); // Root users are CFO/approvers
     const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
 
@@ -787,12 +787,12 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
       if (approver?.email && approver.id !== userId) {
         await sendEmail(userId, {
           to: [approver.email],
-          subject: `Action Required: Capital Call #${capitalCall.callNumber} Awaiting Approval - ${structure?.name || 'Fund'}`,
-          bodyText: `Dear ${approver.name},\n\nA capital call has been submitted for your review.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nSubmitted by: ${user?.name || 'Unknown'}\n\nPlease log in to review and approve.\n\nBest regards,\n${firmName}`,
+          subject: `CFO Approval Required: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
+          bodyText: `Dear ${approver.name},\n\nA capital call has been submitted for your approval.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nSubmitted by: ${user?.name || 'Unknown'}\n\nPlease log in to review and approve.\n\nBest regards,\n${firmName}`,
           bodyHtml: `
             <div style="font-family: Arial, sans-serif; max-width: 600px;">
-              <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #f39c12; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #856404;">Approval Required</h2>
+              <div style="background-color: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #0c5460;">CFO Approval Required</h2>
               </div>
               <p>Dear ${approver.name},</p>
               <p>A capital call has been submitted for your review and approval.</p>
@@ -815,20 +815,21 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
 
   res.status(200).json({
     success: true,
-    message: 'Capital call submitted for review',
+    message: 'Capital call submitted for CFO approval',
     data: updatedCapitalCall
   });
 }));
 
 /**
  * @route   PATCH /api/capital-calls/:id/approve
- * @desc    Approve capital call (pending_review -> pending_cfo or approved)
+ * @desc    Approve capital call (legacy endpoint - redirects to cfo-approve for simplified workflow)
  * @access  Private (requires authentication, Root/Admin only)
+ * @deprecated Use cfo-approve endpoint instead. This is kept for backwards compatibility.
  */
 router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
-  const { notes, requireCFO = true } = req.body;
+  const { notes } = req.body;
 
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
@@ -837,99 +838,66 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
   if (userRole === ROLES.ADMIN) {
     validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
   }
+
+  // With simplified workflow, this endpoint now handles pending_cfo status
   validate(
-    capitalCall.approvalStatus === 'pending_review',
-    'Capital call must be pending review to approve'
+    capitalCall.approvalStatus === 'pending_cfo',
+    'Capital call must be pending CFO approval'
   );
+
+  // Only Root (CFO) can approve
+  validate(userRole === ROLES.ROOT, 'Only CFO can approve capital calls');
 
   // Get user details for history
   const user = await User.findById(userId);
 
-  // Determine next status
-  const nextStatus = requireCFO ? 'pending_cfo' : 'approved';
-  const action = requireCFO ? 'cfo_submitted' : 'approved';
-
-  // Update approval status
+  // Update approval status directly to approved
   const updatedCapitalCall = await CapitalCall.findByIdAndUpdate(id, {
-    approvalStatus: nextStatus
+    approvalStatus: 'approved'
   });
 
   // Log approval action
   await ApprovalHistory.logAction({
     entityType: 'capital_call',
     entityId: id,
-    action,
-    fromStatus: 'pending_review',
-    toStatus: nextStatus,
+    action: 'cfo_approved',
+    fromStatus: 'pending_cfo',
+    toStatus: 'approved',
     userId,
     userName: user?.name || 'Unknown',
     notes,
-    metadata: { callNumber: capitalCall.callNumber, requireCFO }
+    metadata: { callNumber: capitalCall.callNumber }
   });
 
-  // Send email notification
+  // Send email notification to submitter
   try {
     const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
+    const creator = await User.findById(capitalCall.createdBy);
 
-    if (requireCFO) {
-      // Notify CFO (Root users) that approval is needed
-      const rootUsers = await User.findByRole(0);
-      for (const cfo of rootUsers) {
-        if (cfo?.email) {
-          await sendEmail(userId, {
-            to: [cfo.email],
-            subject: `CFO Approval Required: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
-            bodyText: `Dear ${cfo.name},\n\nA capital call has been reviewed and approved by the operations team. It now requires your final approval.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nApproved by: ${user?.name || 'Unknown'}\n\nPlease log in to provide final approval.\n\nBest regards,\n${firmName}`,
-            bodyHtml: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px;">
-                <div style="background-color: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin-bottom: 20px;">
-                  <h2 style="margin: 0; color: #0c5460;">CFO Approval Required</h2>
-                </div>
-                <p>Dear ${cfo.name},</p>
-                <p>A capital call has been reviewed and approved by the operations team. It now requires your final approval.</p>
-                <div style="background-color: #d4edda; padding: 10px; border-radius: 4px; margin: 15px 0;">
-                  <p style="margin: 0; color: #155724;"><strong>Initial Approval:</strong> Approved by ${user?.name || 'Unknown'}</p>
-                </div>
-                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                  <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
-                  <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
-                  <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
-                </div>
-                <p>Please log in to the portal to provide final approval.</p>
-                <p>Best regards,<br/>${firmName}</p>
-              </div>
-            `
-          });
-        }
-      }
-    } else {
-      // Notify submitter that it's approved
-      const creator = await User.findById(capitalCall.createdBy);
-      if (creator?.email) {
-        await sendEmail(userId, {
-          to: [creator.email],
-          subject: `Approved: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
-          bodyText: `Dear ${creator.name},\n\nGreat news! Your capital call has been approved.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nApproved by: ${user?.name || 'Unknown'}\n\nYou can now proceed to send notices to investors.\n\nBest regards,\n${firmName}`,
-          bodyHtml: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px;">
-              <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #155724;">Capital Call Approved</h2>
-              </div>
-              <p>Dear ${creator.name},</p>
-              <p>Great news! Your capital call has been approved and is ready for the next step.</p>
-              <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
-                <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
-                <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
-                <p style="margin: 5px 0;"><strong>Approved by:</strong> ${user?.name || 'Unknown'}</p>
-              </div>
-              <p><strong>Next Steps:</strong> You can now send capital call notices to investors.</p>
-              <p>Best regards,<br/>${firmName}</p>
+    if (creator?.email) {
+      await sendEmail(userId, {
+        to: [creator.email],
+        subject: `Approved: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
+        bodyText: `Dear ${creator.name},\n\nGreat news! Your capital call has been approved.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nApproved by: ${user?.name || 'Unknown'}\n\nYou can now proceed to send notices to investors.\n\nBest regards,\n${firmName}`,
+        bodyHtml: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 20px;">
+              <h2 style="margin: 0; color: #155724;">Capital Call Approved</h2>
             </div>
-          `
-        });
-      }
+            <p>Dear ${creator.name},</p>
+            <p>Great news! Your capital call has been approved and is ready for the next step.</p>
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
+              <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
+              <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
+              <p style="margin: 5px 0;"><strong>Approved by:</strong> ${user?.name || 'Unknown'}</p>
+            </div>
+            <p><strong>Next Steps:</strong> You can now send capital call notices to investors.</p>
+            <p>Best regards,<br/>${firmName}</p>
+          </div>
+        `
+      });
     }
   } catch (emailError) {
     console.warn('Failed to send approval notification:', emailError.message);
@@ -937,7 +905,7 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
 
   res.status(200).json({
     success: true,
-    message: requireCFO ? 'Capital call sent to CFO for approval' : 'Capital call approved',
+    message: 'Capital call approved',
     data: updatedCapitalCall
   });
 }));
@@ -1044,14 +1012,12 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
     validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
   }
   validate(
-    ['pending_review', 'pending_cfo'].includes(capitalCall.approvalStatus),
-    'Capital call must be pending to reject'
+    capitalCall.approvalStatus === 'pending_cfo',
+    'Capital call must be pending CFO approval to reject'
   );
 
-  // If pending CFO, only Root can reject
-  if (capitalCall.approvalStatus === 'pending_cfo') {
-    validate(userRole === ROLES.ROOT, 'Only CFO can reject at this stage');
-  }
+  // Only Root (CFO) can reject
+  validate(userRole === ROLES.ROOT, 'Only CFO can reject capital calls');
 
   // Get user details for history
   const user = await User.findById(userId);
@@ -1139,14 +1105,12 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
     validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
   }
   validate(
-    ['pending_review', 'pending_cfo'].includes(capitalCall.approvalStatus),
-    'Capital call must be pending to request changes'
+    capitalCall.approvalStatus === 'pending_cfo',
+    'Capital call must be pending CFO approval to request changes'
   );
 
-  // If pending CFO, only Root can request changes
-  if (capitalCall.approvalStatus === 'pending_cfo') {
-    validate(userRole === ROLES.ROOT, 'Only CFO can request changes at this stage');
-  }
+  // Only Root (CFO) can request changes
+  validate(userRole === ROLES.ROOT, 'Only CFO can request changes on capital calls');
 
   // Get user details for history
   const user = await User.findById(userId);
