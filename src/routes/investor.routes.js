@@ -875,14 +875,10 @@ router.get('/me/capital-calls-summary', authenticate, catchAsync(async (req, res
 /**
  * @route   GET /api/investors/me/capital-calls
  * @desc    Get authenticated user's capital calls with structures and summary
- * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
+ * @access  Private (requires authentication, all roles - users can only access their own data)
  */
 router.get('/me/capital-calls', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth?.userId || req.user?.id;
-  const { userRole } = getUserContext(req);
-
-  // Block INVESTOR role from accessing this endpoint
-  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   const user = await User.findById(userId);
   validate(user, 'User not found');
