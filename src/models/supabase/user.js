@@ -628,9 +628,9 @@ class User {
   static async getCapitalCallsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all structures for this user from investments
-    const { data: investments, error: invError } = await supabase
-      .from('investments')
+    // Get all structures for this user from structure_investors (investor-structure relationships)
+    const { data: structureInvestors, error: siError } = await supabase
+      .from('structure_investors')
       .select(`
         structure_id,
         structures:structure_id (
@@ -642,13 +642,13 @@ class User {
       `)
       .eq('user_id', userId);
 
-    if (invError) throw invError;
+    if (siError) throw siError;
 
-    // Get unique structures from investments
+    // Get unique structures from structure_investors
     const uniqueStructuresMap = new Map();
-    (investments || []).forEach(inv => {
-      if (inv.structures && !uniqueStructuresMap.has(inv.structure_id)) {
-        uniqueStructuresMap.set(inv.structure_id, inv.structures);
+    (structureInvestors || []).forEach(si => {
+      if (si.structures && !uniqueStructuresMap.has(si.structure_id)) {
+        uniqueStructuresMap.set(si.structure_id, si.structures);
       }
     });
 
