@@ -920,7 +920,7 @@ router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (r
   const user = await User.findById(userId);
   validate(user, 'User not found');
 
-  // Get the capital call with full structure info (including bank details for payment)
+  // Get the capital call with full structure info (including bank details and crypto for payment)
   const { data: capitalCall, error: ccError } = await supabase
     .from('capital_calls')
     .select(`
@@ -940,7 +940,9 @@ router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (r
         international_holder_name,
         international_account_bank,
         international_swift,
-        international_bank_address
+        international_bank_address,
+        wallet_address,
+        blockchain_network
       )
     `)
     .eq('id', capitalCallId)
@@ -998,7 +1000,7 @@ router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (r
     vatRate: capitalCall.vat_rate,
     vatApplicable: capitalCall.vat_applicable,
     feePeriod: capitalCall.fee_period,
-    // Structure with bank details for payment
+    // Structure with bank details and crypto for payment
     structure: struct ? {
       id: struct.id,
       name: struct.name,
@@ -1016,7 +1018,10 @@ router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (r
       internationalHolderName: struct.international_holder_name,
       internationalAccountBank: struct.international_account_bank,
       internationalSwift: struct.international_swift,
-      internationalBankAddress: struct.international_bank_address
+      internationalBankAddress: struct.international_bank_address,
+      // Stablecoin payment details
+      walletAddress: struct.wallet_address,
+      blockchainNetwork: struct.blockchain_network
     } : null,
     // Investor's allocation details
     allocation: {
@@ -1118,15 +1123,12 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
     newStatus = 'Partially Paid';
   }
 
-  // Update the allocation
+  // Update the allocation (only update columns that exist in the table)
   const { data: updatedAllocation, error: updateError } = await supabase
     .from('capital_call_allocations')
     .update({
       paid_amount: newPaidAmount,
       status: newStatus,
-      payment_method: paymentMethod,
-      payment_reference: paymentReference || null,
-      payment_date: paymentDate || new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
     .eq('id', allocation.id)
@@ -1136,6 +1138,9 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
   if (updateError) {
     throw new Error(`Error recording payment: ${updateError.message}`);
   }
+
+  // Log payment details for audit purposes (columns don't exist in table yet)
+  console.log(`[Payment] Allocation ${allocation.id} updated: method=${paymentMethod}, reference=${paymentReference}, date=${paymentDate}`);
 
   // Update the capital call totals
   const { data: allAllocations } = await supabase
