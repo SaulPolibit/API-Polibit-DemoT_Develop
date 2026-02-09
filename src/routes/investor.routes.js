@@ -900,6 +900,285 @@ router.get('/me/capital-calls', authenticate, catchAsync(async (req, res) => {
 }));
 
 /**
+ * @route   GET /api/investors/me/capital-calls/:capitalCallId
+ * @desc    Get specific capital call details for the authenticated investor (LP Portal payment page)
+ * @access  Private (requires authentication, Investor role only)
+ */
+router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const { userRole } = getUserContext(req);
+  const { capitalCallId } = req.params;
+  const supabase = getSupabase();
+
+  // Allow only INVESTOR role to access this endpoint
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  validate(uuidRegex.test(capitalCallId), 'Invalid capital call ID format');
+
+  const user = await User.findById(userId);
+  validate(user, 'User not found');
+
+  // Get the capital call with full structure info (including bank details for payment)
+  const { data: capitalCall, error: ccError } = await supabase
+    .from('capital_calls')
+    .select(`
+      *,
+      structures:structure_id (
+        id,
+        name,
+        type,
+        base_currency,
+        local_bank_name,
+        local_account_holder,
+        local_account_bank,
+        local_routing_bank,
+        local_tax_id,
+        local_bank_address,
+        international_bank_name,
+        international_holder_name,
+        international_account_bank,
+        international_swift,
+        international_bank_address
+      )
+    `)
+    .eq('id', capitalCallId)
+    .single();
+
+  if (ccError) {
+    if (ccError.code === 'PGRST116') {
+      return res.status(404).json({
+        success: false,
+        message: 'Capital call not found'
+      });
+    }
+    throw new Error(`Error fetching capital call: ${ccError.message}`);
+  }
+
+  // Get the investor's allocation for this capital call
+  const { data: allocation, error: allocError } = await supabase
+    .from('capital_call_allocations')
+    .select('*')
+    .eq('capital_call_id', capitalCallId)
+    .eq('user_id', userId)
+    .single();
+
+  if (allocError && allocError.code !== 'PGRST116') {
+    throw new Error(`Error fetching allocation: ${allocError.message}`);
+  }
+
+  // Verify the investor has access to this capital call (has an allocation)
+  if (!allocation) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. You do not have an allocation for this capital call.'
+    });
+  }
+
+  // Build response with capital call details and investor's allocation
+  const struct = capitalCall.structures;
+  const response = {
+    id: capitalCall.id,
+    structureId: capitalCall.structure_id,
+    structureName: struct?.name || 'Unknown Structure',
+    structureType: struct?.type,
+    currency: struct?.base_currency || 'USD',
+    callNumber: capitalCall.call_number,
+    callDate: capitalCall.call_date,
+    dueDate: capitalCall.due_date,
+    noticeDate: capitalCall.notice_date,
+    deadlineDate: capitalCall.deadline_date,
+    status: capitalCall.status,
+    purpose: capitalCall.purpose,
+    notes: capitalCall.notes,
+    // Fee configuration
+    managementFeeBase: capitalCall.management_fee_base,
+    managementFeeRate: capitalCall.management_fee_rate,
+    vatRate: capitalCall.vat_rate,
+    vatApplicable: capitalCall.vat_applicable,
+    feePeriod: capitalCall.fee_period,
+    // Structure with bank details for payment
+    structure: struct ? {
+      id: struct.id,
+      name: struct.name,
+      type: struct.type,
+      baseCurrency: struct.base_currency,
+      // Local bank details
+      localBankName: struct.local_bank_name,
+      localAccountHolder: struct.local_account_holder,
+      localAccountBank: struct.local_account_bank,
+      localRoutingBank: struct.local_routing_bank,
+      localTaxId: struct.local_tax_id,
+      localBankAddress: struct.local_bank_address,
+      // International bank details
+      internationalBankName: struct.international_bank_name,
+      internationalHolderName: struct.international_holder_name,
+      internationalAccountBank: struct.international_account_bank,
+      internationalSwift: struct.international_swift,
+      internationalBankAddress: struct.international_bank_address
+    } : null,
+    // Investor's allocation details
+    allocation: {
+      id: allocation.id,
+      allocatedAmount: parseFloat(allocation.allocated_amount) || 0,
+      capitalAmount: parseFloat(allocation.capital_amount) || 0,
+      managementFee: parseFloat(allocation.management_fee) || 0,
+      vatAmount: parseFloat(allocation.vat_amount) || 0,
+      totalDue: parseFloat(allocation.total_due) || 0,
+      paidAmount: parseFloat(allocation.paid_amount) || 0,
+      outstanding: (parseFloat(allocation.total_due) || 0) - (parseFloat(allocation.paid_amount) || 0),
+      status: allocation.status,
+      ownershipPercent: parseFloat(allocation.ownership_percent) || 0,
+      feeDiscount: parseFloat(allocation.fee_discount) || 0,
+      vatExempt: allocation.vat_exempt || false
+    },
+    // Investor info
+    investor: {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      displayName: User.getDisplayName(user)
+    }
+  };
+
+  res.status(200).json({
+    success: true,
+    data: response
+  });
+}));
+
+/**
+ * @route   POST /api/investors/me/capital-calls/:capitalCallId/pay
+ * @desc    Record a payment for a capital call allocation (LP Portal payment)
+ * @access  Private (requires authentication, Investor role only)
+ */
+router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const { userRole } = getUserContext(req);
+  const { capitalCallId } = req.params;
+  const { amount, paymentMethod, paymentReference, paymentDate } = req.body;
+  const supabase = getSupabase();
+
+  // Allow only INVESTOR role to access this endpoint
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  validate(uuidRegex.test(capitalCallId), 'Invalid capital call ID format');
+
+  // Validate required fields
+  validate(amount && amount > 0, 'Valid payment amount is required');
+  validate(paymentMethod, 'Payment method is required');
+
+  const user = await User.findById(userId);
+  validate(user, 'User not found');
+
+  // Get the capital call
+  const { data: capitalCall, error: ccError } = await supabase
+    .from('capital_calls')
+    .select('*')
+    .eq('id', capitalCallId)
+    .single();
+
+  if (ccError || !capitalCall) {
+    return res.status(404).json({
+      success: false,
+      message: 'Capital call not found'
+    });
+  }
+
+  // Get the investor's allocation for this capital call
+  const { data: allocation, error: allocError } = await supabase
+    .from('capital_call_allocations')
+    .select('*')
+    .eq('capital_call_id', capitalCallId)
+    .eq('user_id', userId)
+    .single();
+
+  if (allocError || !allocation) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. You do not have an allocation for this capital call.'
+    });
+  }
+
+  // Calculate new paid amount
+  const currentPaid = parseFloat(allocation.paid_amount) || 0;
+  const totalDue = parseFloat(allocation.total_due) || 0;
+  const newPaidAmount = currentPaid + parseFloat(amount);
+  const newOutstanding = totalDue - newPaidAmount;
+
+  // Determine new status
+  let newStatus = allocation.status;
+  if (newOutstanding <= 0) {
+    newStatus = 'Paid';
+  } else if (newPaidAmount > 0) {
+    newStatus = 'Partially Paid';
+  }
+
+  // Update the allocation
+  const { data: updatedAllocation, error: updateError } = await supabase
+    .from('capital_call_allocations')
+    .update({
+      paid_amount: newPaidAmount,
+      status: newStatus,
+      payment_method: paymentMethod,
+      payment_reference: paymentReference || null,
+      payment_date: paymentDate || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', allocation.id)
+    .select()
+    .single();
+
+  if (updateError) {
+    throw new Error(`Error recording payment: ${updateError.message}`);
+  }
+
+  // Update the capital call totals
+  const { data: allAllocations } = await supabase
+    .from('capital_call_allocations')
+    .select('paid_amount, total_due')
+    .eq('capital_call_id', capitalCallId);
+
+  const totalPaid = allAllocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
+  const totalAmount = allAllocations.reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+  // Determine capital call status
+  let ccStatus = capitalCall.status;
+  if (totalPaid >= totalAmount) {
+    ccStatus = 'Paid';
+  } else if (totalPaid > 0 && capitalCall.status !== 'Paid') {
+    ccStatus = 'Partially Paid';
+  }
+
+  await supabase
+    .from('capital_calls')
+    .update({
+      total_paid_amount: totalPaid,
+      total_unpaid_amount: totalAmount - totalPaid,
+      status: ccStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', capitalCallId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment recorded successfully',
+    data: {
+      allocationId: updatedAllocation.id,
+      paidAmount: newPaidAmount,
+      outstanding: newOutstanding,
+      status: newStatus,
+      paymentMethod,
+      paymentReference: paymentReference || null
+    }
+  });
+}));
+
+/**
  * @route   GET /api/investors/:id/capital-calls/summary
  * @desc    Get investor capital calls summary (Total Called, Total Paid, Outstanding, Total Calls)
  * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
