@@ -68,6 +68,7 @@ class CapitalCall {
       totalCallAmount: dbData.total_call_amount,
       totalPaidAmount: dbData.total_paid_amount,
       totalUnpaidAmount: dbData.total_unpaid_amount,
+      totalOutstandingAmount: dbData.total_unpaid_amount, // Alias for frontend compatibility
       status: dbData.status,
       purpose: dbData.purpose,
       notes: dbData.notes,
@@ -136,7 +137,15 @@ class CapitalCall {
     const supabase = getSupabase();
     const dbFilter = this._toDbFields(filter);
 
-    let query = supabase.from('capital_calls').select('*');
+    // Include structure data in the query
+    let query = supabase.from('capital_calls').select(`
+      *,
+      structures:structure_id (
+        id,
+        name,
+        type
+      )
+    `);
 
     // Apply filters
     for (const [key, value] of Object.entries(dbFilter)) {
@@ -153,7 +162,15 @@ class CapitalCall {
       throw new Error(`Error finding capital calls: ${error.message}`);
     }
 
-    return data.map(item => this._toModel(item));
+    // Map to model format and include structure
+    return data.map(item => ({
+      ...this._toModel(item),
+      structure: item.structures ? {
+        id: item.structures.id,
+        name: item.structures.name,
+        type: item.structures.type
+      } : null
+    }));
   }
 
   /**
