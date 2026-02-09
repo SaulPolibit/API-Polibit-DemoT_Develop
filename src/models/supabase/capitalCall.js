@@ -415,9 +415,9 @@ class CapitalCall {
   static async createAllocationsForStructure(capitalCallId, structureId) {
     const supabase = getSupabase();
 
-    // Get all investors for this structure from the investors table (LP commitments + fee settings)
+    // Get all investors for this structure from structure_investors table (LP commitments + fee settings)
     const { data: investors, error: invError } = await supabase
-      .from('investors')
+      .from('structure_investors')
       .select('user_id, ownership_percent, commitment, fee_discount, vat_exempt')
       .eq('structure_id', structureId);
 
