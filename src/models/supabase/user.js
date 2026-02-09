@@ -637,7 +637,8 @@ class User {
           id,
           name,
           type,
-          status
+          status,
+          base_currency
         )
       `)
       .eq('user_id', userId);
@@ -656,7 +657,8 @@ class User {
       id: structure.id,
       name: structure.name,
       type: structure.type,
-      status: structure.status
+      status: structure.status,
+      baseCurrency: structure.base_currency
     }));
 
     // Get all capital call allocations for this user with capital call details
@@ -695,6 +697,7 @@ class User {
           id: alloc.capital_call.id,
           structureId: alloc.capital_call.structure_id,
           structureName: structure?.name || 'Unknown Structure',
+          currency: structure?.baseCurrency || 'USD',
           callNumber: alloc.capital_call.call_number,
           callDate: alloc.capital_call.call_date,
           dueDate: alloc.capital_call.due_date,
