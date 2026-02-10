@@ -1055,7 +1055,12 @@ class CapitalCall {
           status,
           nic_fee_amount,
           unfunded_fee_amount,
-          fee_offset_amount
+          fee_offset_amount,
+          users:user_id (
+            first_name,
+            last_name,
+            email
+          )
         )
       `)
       .eq('structure_id', structureId)
@@ -1080,6 +1085,9 @@ class CapitalCall {
       allocations: (call.capital_call_allocations || []).map(a => ({
         id: a.id,
         userId: a.user_id,
+        investorName: a.users
+          ? `${a.users.first_name || ''} ${a.users.last_name || ''}`.trim() || a.users.email
+          : 'Unknown',
         principalAmount: a.principal_amount,
         managementFeeGross: a.management_fee_gross,
         managementFeeDiscount: a.management_fee_discount,
