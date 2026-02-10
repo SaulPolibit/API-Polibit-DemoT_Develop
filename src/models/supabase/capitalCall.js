@@ -137,13 +137,23 @@ class CapitalCall {
     const supabase = getSupabase();
     const dbFilter = this._toDbFields(filter);
 
-    // Include structure data in the query
+    // Include structure data and allocations for breakdown in the query
     let query = supabase.from('capital_calls').select(`
       *,
       structures:structure_id (
         id,
         name,
         type
+      ),
+      capital_call_allocations (
+        principal_amount,
+        management_fee_net,
+        vat_amount,
+        total_due,
+        paid_amount,
+        capital_paid,
+        fees_paid,
+        vat_paid
       )
     `);
 
@@ -162,15 +172,48 @@ class CapitalCall {
       throw new Error(`Error finding capital calls: ${error.message}`);
     }
 
-    // Map to model format and include structure
-    return data.map(item => ({
-      ...this._toModel(item),
-      structure: item.structures ? {
-        id: item.structures.id,
-        name: item.structures.name,
-        type: item.structures.type
-      } : null
-    }));
+    // Map to model format and include structure with payment breakdown
+    return data.map(item => {
+      const allocations = item.capital_call_allocations || [];
+
+      // Calculate breakdown aggregates from allocations
+      const totalPrincipal = allocations.reduce((sum, a) => sum + (parseFloat(a.principal_amount) || 0), 0);
+      const totalFees = allocations.reduce((sum, a) => sum + (parseFloat(a.management_fee_net) || 0), 0);
+      const totalVat = allocations.reduce((sum, a) => sum + (parseFloat(a.vat_amount) || 0), 0);
+      const totalDue = allocations.reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+      // Payment breakdown
+      const capitalPaid = allocations.reduce((sum, a) => sum + (parseFloat(a.capital_paid) || 0), 0);
+      const feesPaid = allocations.reduce((sum, a) => sum + (parseFloat(a.fees_paid) || 0), 0);
+      const vatPaid = allocations.reduce((sum, a) => sum + (parseFloat(a.vat_paid) || 0), 0);
+      const totalPaid = allocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
+
+      return {
+        ...this._toModel(item),
+        structure: item.structures ? {
+          id: item.structures.id,
+          name: item.structures.name,
+          type: item.structures.type
+        } : null,
+        // Payment breakdown fields
+        breakdown: {
+          principal: totalPrincipal,
+          fees: totalFees,
+          vat: totalVat,
+          totalDue: totalDue || (totalPrincipal + totalFees + totalVat),
+          // Paid breakdown
+          capitalPaid,
+          feesPaid,
+          vatPaid,
+          totalPaid,
+          // Outstanding breakdown
+          capitalOutstanding: totalPrincipal - capitalPaid,
+          feesOutstanding: totalFees - feesPaid,
+          vatOutstanding: totalVat - vatPaid,
+          totalOutstanding: (totalDue || (totalPrincipal + totalFees + totalVat)) - totalPaid
+        }
+      };
+    });
   }
 
   /**
