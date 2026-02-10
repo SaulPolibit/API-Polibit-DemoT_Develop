@@ -4,7 +4,7 @@
  */
 const express = require('express');
 const apiManager = require('../services/apiManager');
-const { authenticate, createToken } = require('../middleware/auth');
+const { authenticate, createToken, rateLimit } = require('../middleware/auth');
 const {
   catchAsync,
   validate,
@@ -14,6 +14,13 @@ const { User, MFAFactor, SmartContract } = require('../models/supabase');
 const { getSupabase } = require('../config/database');
 
 const router = express.Router();
+
+// Rate limiter for MFA verification endpoints
+// Limit: 5 attempts per 15 minutes per IP to prevent brute force attacks
+const mfaVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5 // 5 attempts
+});
 
 // ===== HELPER FUNCTIONS =====
 
@@ -317,7 +324,7 @@ router.post('/login', catchAsync(async (req, res) => {
  *            code: string - 6-digit TOTP code from authenticator app
  *          }
  */
-router.post('/mfa/login-verify', catchAsync(async (req, res) => {
+router.post('/mfa/login-verify', mfaVerifyLimiter, catchAsync(async (req, res) => {
   const { userId, code } = req.body;
 
   // Validate required fields
@@ -548,24 +555,21 @@ router.post('/mfa/enroll', authenticate, catchAsync(async (req, res) => {
     });
   }
 
-  // Save MFA factor to database
+  // Save MFA factor to database as PENDING (is_active defaults to false)
   await MFAFactor.upsert({
     userId,
     factorId: data.id,
     factorType,
     friendlyName: friendlyName || 'Authenticator App',
-    isActive: true,
+    // isActive will default to false in database (pending state)
     enrolledAt: new Date().toISOString()
   });
 
-  // Save factorId to user model
-  await User.findByIdAndUpdate(userId, {
-    mfaFactorId: data.id
-  });
+  // DO NOT update user.mfaFactorId yet - wait for verification
 
   res.status(200).json({
     success: true,
-    message: `MFA enrollment initiated using ${factorType.toUpperCase()}. Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.).`,
+    message: `MFA enrollment initiated. Scan the QR code with your authenticator app and verify to activate.`,
     info: !wasFactorTypeProvided ? 'Using default factorType: totp' : undefined,
     data: {
       factorId: data.id,
@@ -575,6 +579,201 @@ router.post('/mfa/enroll', authenticate, catchAsync(async (req, res) => {
       uri: data.totp.uri // otpauth:// URI
     }
   });
+}));
+
+
+/**
+ * @route   POST /api/custom/mfa/verify-enrollment
+ * @desc    Verify MFA enrollment code and activate MFA
+ * @access  Private
+ * @body    {
+ *            supabaseAccessToken: string - Supabase access token
+ *            supabaseRefreshToken: string - Supabase refresh token
+ *            factorId: string - Factor ID from enrollment
+ *            code: string - 6-digit TOTP code from authenticator app
+ *          }
+ */
+router.post('/mfa/verify-enrollment', authenticate, mfaVerifyLimiter, catchAsync(async (req, res) => {
+  const { id: userId } = req.user;
+  const {
+    factorId,
+    code,
+    supabaseAccessToken: bodyAccessToken,
+    supabaseRefreshToken: bodyRefreshToken
+  } = req.body || {};
+
+  // Validate required fields
+  if (!factorId || !code) {
+    return res.status(400).json({
+      success: false,
+      message: 'Factor ID and verification code are required'
+    });
+  }
+
+  // Validate code format (6 digits)
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid code format. Code must be 6 digits.'
+    });
+  }
+
+  // Get Supabase tokens
+  const supabaseAccessToken = bodyAccessToken || req.headers['x-supabase-access-token'];
+  const supabaseRefreshToken = bodyRefreshToken || req.headers['x-supabase-refresh-token'];
+
+  if (!supabaseAccessToken || !supabaseRefreshToken) {
+    return res.status(400).json({
+      success: false,
+      message: 'Supabase access and refresh tokens are required',
+      hint: 'Send both supabaseAccessToken and supabaseRefreshToken in request body'
+    });
+  }
+
+  const supabase = getSupabase();
+
+  // Set the Supabase session
+  const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+    access_token: supabaseAccessToken,
+    refresh_token: supabaseRefreshToken
+  });
+
+  if (sessionError || !sessionData.session) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired Supabase session',
+      hint: 'Please login again to get fresh tokens'
+    });
+  }
+
+  try {
+    // Step 1: Verify the factor exists and belongs to this user
+    const factor = await MFAFactor.findByFactorId(factorId);
+
+    if (!factor) {
+      return res.status(404).json({
+        success: false,
+        message: 'MFA enrollment not found. Please start enrollment again.'
+      });
+    }
+
+    if (factor.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'This MFA factor does not belong to your account'
+      });
+    }
+
+    if (factor.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'MFA is already active. No verification needed.'
+      });
+    }
+
+    // Step 2: Create MFA challenge
+    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId
+    });
+
+    if (challengeError) {
+      console.error('MFA challenge error:', challengeError);
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to create MFA challenge',
+        error: challengeError.message
+      });
+    }
+
+    // Step 3: Verify the code
+    const { data: verifyData, error: verifyError } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challengeData.id,
+      code
+    });
+
+    if (verifyError) {
+      console.error('MFA verification error:', verifyError);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid verification code. Please try again.',
+        error: verifyError.message
+      });
+    }
+
+    // Step 4: Activate the MFA factor in our database
+    await MFAFactor.activate(factorId);
+
+    // Step 5: Set mfaFactorId on user model
+    await User.findByIdAndUpdate(userId, {
+      mfaFactorId: factorId
+    });
+
+    // Step 6: Send security email notification if user has securityAlerts enabled
+    const NotificationSettings = require('../models/supabase/notificationSettings');
+    const user = await User.findById(userId);
+
+    try {
+      const notifSettings = await NotificationSettings.findByUserId(userId);
+
+      if (notifSettings?.securityAlerts && user?.email) {
+        const { sendEmail } = require('../utils/emailSender');
+
+        await sendEmail(userId, {
+          to: [user.email],
+          subject: 'Multi-Factor Authentication Enabled',
+          bodyHtml: `
+            <h2>MFA Enabled Successfully</h2>
+            <p>Hello ${user.firstName || 'User'},</p>
+            <p>Two-factor authentication (MFA) has been successfully enabled on your account.</p>
+            <p>This adds an extra layer of security to protect your account.</p>
+            <p><strong>If you did not make this change, please contact support immediately.</strong></p>
+            <p>Date: ${new Date().toLocaleString()}</p>
+            <br>
+            <p>Best regards,<br>Security Team</p>
+          `,
+          bodyText: `
+MFA Enabled Successfully
+
+Hello ${user.firstName || 'User'},
+
+Two-factor authentication (MFA) has been successfully enabled on your account.
+
+This adds an extra layer of security to protect your account.
+
+If you did not make this change, please contact support immediately.
+
+Date: ${new Date().toLocaleString()}
+
+Best regards,
+Security Team
+          `
+        });
+
+        console.log(`[MFA] Security notification sent to ${user.email}`);
+      }
+    } catch (emailError) {
+      console.error('[MFA] Failed to send security notification:', emailError);
+      // Don't fail the request if email fails
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'MFA enrollment verified and activated successfully',
+      data: {
+        factorId,
+        mfaEnabled: true,
+        activatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('MFA enrollment verification error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'An error occurred during MFA verification',
+      error: error.message
+    });
+  }
 }));
 
 
@@ -594,9 +793,27 @@ router.post('/mfa/unenroll', authenticate, catchAsync(async (req, res) => {
   const {
     factorId,
     factorType = 'totp',
+    code,
     supabaseAccessToken: bodyAccessToken,
     supabaseRefreshToken: bodyRefreshToken
   } = req.body || {};
+
+  // Require verification code for security
+  if (!code) {
+    return res.status(400).json({
+      success: false,
+      message: 'Verification code is required to disable MFA',
+      hint: 'Please provide the 6-digit code from your authenticator app'
+    });
+  }
+
+  // Validate code format
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid code format. Code must be 6 digits.'
+    });
+  }
 
   // Get Supabase tokens from body or headers
   const supabaseAccessToken = bodyAccessToken || req.headers['x-supabase-access-token'];
@@ -649,6 +866,46 @@ router.post('/mfa/unenroll', authenticate, catchAsync(async (req, res) => {
     });
   }
 
+  // Verify MFA code before allowing unenroll (CRITICAL SECURITY STEP)
+  try {
+    // Create MFA challenge
+    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId: factorIdToRemove
+    });
+
+    if (challengeError) {
+      console.error('MFA challenge error:', challengeError);
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to create MFA challenge for verification',
+        error: challengeError.message
+      });
+    }
+
+    // Verify the code
+    const { data: verifyData, error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: factorIdToRemove,
+      challengeId: challengeData.id,
+      code
+    });
+
+    if (verifyError) {
+      console.error('MFA verification error:', verifyError);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid verification code. Cannot disable MFA without valid code.',
+        error: verifyError.message
+      });
+    }
+  } catch (verifyError) {
+    console.error('MFA code verification failed:', verifyError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify MFA code',
+      error: verifyError.message
+    });
+  }
+
   // Unenroll from Supabase Auth
   const { data, error } = await supabase.auth.mfa.unenroll({
     factorId: factorIdToRemove
@@ -670,6 +927,51 @@ router.post('/mfa/unenroll', authenticate, catchAsync(async (req, res) => {
   await User.findByIdAndUpdate(userId, {
     mfaFactorId: null
   });
+
+  // Send security email notification
+  const NotificationSettings = require('../models/supabase/notificationSettings');
+  const user = await User.findById(userId);
+
+  try {
+    const notifSettings = await NotificationSettings.findByUserId(userId);
+
+    if (notifSettings?.securityAlerts && user?.email) {
+      const { sendEmail } = require('../utils/emailSender');
+
+      await sendEmail(userId, {
+        to: [user.email],
+        subject: 'Multi-Factor Authentication Disabled',
+        bodyHtml: `
+          <h2>MFA Disabled</h2>
+          <p>Hello ${user.firstName || 'User'},</p>
+          <p>Two-factor authentication (MFA) has been disabled on your account.</p>
+          <p><strong>If you did not make this change, please contact support immediately to secure your account.</strong></p>
+          <p>Date: ${new Date().toLocaleString()}</p>
+          <br>
+          <p>Best regards,<br>Security Team</p>
+        `,
+        bodyText: `
+MFA Disabled
+
+Hello ${user.firstName || 'User'},
+
+Two-factor authentication (MFA) has been disabled on your account.
+
+If you did not make this change, please contact support immediately to secure your account.
+
+Date: ${new Date().toLocaleString()}
+
+Best regards,
+Security Team
+        `
+      });
+
+      console.log(`[MFA] Security notification sent to ${user.email}`);
+    }
+  } catch (emailError) {
+    console.error('[MFA] Failed to send security notification:', emailError);
+    // Don't fail the request if email fails
+  }
 
   res.status(200).json({
     success: true,
@@ -717,6 +1019,14 @@ router.get('/mfa/status', authenticate, catchAsync(async (req, res) => {
 
   // Get user from database
   const user = await User.findById(userId);
+
+  // Clean up any pending (unverified) enrollments older than 1 hour
+  try {
+    await MFAFactor.cleanupPendingEnrollments(userId);
+  } catch (cleanupError) {
+    console.error('[MFA Status] Cleanup error:', cleanupError);
+    // Don't fail the request if cleanup fails
+  }
 
   // Check if user has active MFA
   const hasActiveMFA = await MFAFactor.hasActiveMFA(userId);
@@ -852,7 +1162,7 @@ router.get('/mfa/factors', authenticate, catchAsync(async (req, res) => {
  *            code: string - 6-digit TOTP code
  *          }
  */
-router.post('/mfa/verify', authenticate, catchAsync(async (req, res) => {
+router.post('/mfa/verify', authenticate, mfaVerifyLimiter, catchAsync(async (req, res) => {
   const {
     factorId,
     challengeId,

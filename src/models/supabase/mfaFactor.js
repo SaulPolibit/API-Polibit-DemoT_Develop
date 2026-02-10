@@ -205,6 +205,67 @@ class MFAFactor {
 
     return data && data.length > 0;
   }
+
+  /**
+   * Delete pending (unverified) MFA enrollments older than 1 hour
+   * This cleans up abandoned enrollment attempts
+   * @param {string} userId - User ID to clean up pending enrollments for
+   * @returns {Promise<number>} Number of deleted records
+   */
+  static async cleanupPendingEnrollments(userId) {
+    const supabase = getSupabase();
+
+    // Calculate cutoff time (1 hour ago)
+    const oneHourAgo = new Date();
+    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+
+    const { data, error } = await supabase
+      .from('user_mfa_factors')
+      .delete()
+      .eq('user_id', userId)
+      .eq('is_active', false)
+      .lt('created_at', oneHourAgo.toISOString())
+      .select();
+
+    if (error) {
+      console.error('Error cleaning up pending MFA enrollments:', error);
+      // Don't throw - this is a cleanup operation, not critical
+      return 0;
+    }
+
+    const deletedCount = data ? data.length : 0;
+    if (deletedCount > 0) {
+      console.log(`Cleaned up ${deletedCount} pending MFA enrollment(s) for user ${userId}`);
+    }
+
+    return deletedCount;
+  }
+
+  /**
+   * Activate MFA factor (set is_active to true)
+   * Called after successful enrollment verification
+   * @param {string} factorId - Factor ID to activate
+   * @returns {Promise<Object>} Updated factor record
+   */
+  static async activate(factorId) {
+    const supabase = getSupabase();
+
+    const { data, error } = await supabase
+      .from('user_mfa_factors')
+      .update({
+        is_active: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('factor_id', factorId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Error activating MFA factor: ${error.message}`);
+    }
+
+    return this._toModel(data);
+  }
 }
 
 module.exports = MFAFactor;

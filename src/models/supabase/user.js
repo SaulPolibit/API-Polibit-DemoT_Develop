@@ -290,12 +290,17 @@ class User {
       .from('users')
       .update(dbData)
       .eq('id', id)
-      .select()
-      .single();
+      .select();
 
     if (error) throw error;
 
-    return this._toModel(data);
+    // Handle case when no rows were updated (user doesn't exist)
+    if (!data || data.length === 0) {
+      throw new Error(`User with id ${id} not found`);
+    }
+
+    // Return the first (and should be only) result
+    return this._toModel(data[0]);
   }
 
   /**
@@ -310,12 +315,17 @@ class User {
       .from('users')
       .delete()
       .eq('id', id)
-      .select()
-      .single();
+      .select();
 
     if (error) throw error;
 
-    return this._toModel(data);
+    // Handle case when no rows were deleted (user doesn't exist)
+    if (!data || data.length === 0) {
+      throw new Error(`User with id ${id} not found`);
+    }
+
+    // Return the first (and should be only) result
+    return this._toModel(data[0]);
   }
 
   /**
