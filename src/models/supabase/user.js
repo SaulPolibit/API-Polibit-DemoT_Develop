@@ -559,11 +559,14 @@ class User {
     }
 
     // Get all capital call allocations for this user with structure info
+    // Include principal_amount and capital_paid for commitment tracking (excludes fees/VAT)
     const { data: allocations, error: allocError } = await supabase
       .from('capital_call_allocations')
       .select(`
         allocated_amount,
         paid_amount,
+        principal_amount,
+        capital_paid,
         capital_call:capital_calls (
           structure_id
         )
@@ -572,9 +575,10 @@ class User {
 
     if (allocError) throw allocError;
 
-    // Calculate total called capital (sum of allocated amounts)
+    // Calculate total called capital using principal_amount (capital-only, excludes fees/VAT)
+    // This is the amount that counts toward commitment
     const calledCapital = allocations?.reduce((sum, alloc) =>
-      sum + (parseFloat(alloc.allocated_amount) || 0), 0) || 0;
+      sum + (parseFloat(alloc.principal_amount) || parseFloat(alloc.allocated_amount) || 0), 0) || 0;
 
     // Process structures
     const structures = structureInvestors
@@ -585,8 +589,9 @@ class User {
           a.capital_call?.structure_id === si.structure_id
         ) || [];
 
+        // Use principal_amount for called capital (capital-only, excludes fees/VAT)
         const structureCalledCapital = structureAllocations.reduce((sum, alloc) =>
-          sum + (parseFloat(alloc.allocated_amount) || 0), 0);
+          sum + (parseFloat(alloc.principal_amount) || parseFloat(alloc.allocated_amount) || 0), 0);
 
         const commitment = parseFloat(si.commitment) || 0;
         const uncalledCapital = commitment - structureCalledCapital;
