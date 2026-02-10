@@ -137,7 +137,7 @@ class CapitalCall {
     const supabase = getSupabase();
     const dbFilter = this._toDbFields(filter);
 
-    // Include structure data and allocations for breakdown in the query
+    // Include structure data and allocations with user info for breakdown in the query
     let query = supabase.from('capital_calls').select(`
       *,
       structures:structure_id (
@@ -146,14 +146,24 @@ class CapitalCall {
         type
       ),
       capital_call_allocations (
+        id,
+        user_id,
         principal_amount,
         management_fee_net,
         vat_amount,
         total_due,
+        allocated_amount,
         paid_amount,
         capital_paid,
         fees_paid,
-        vat_paid
+        vat_paid,
+        status,
+        users:user_id (
+          id,
+          email,
+          first_name,
+          last_name
+        )
       )
     `);
 
@@ -188,6 +198,27 @@ class CapitalCall {
       const vatPaid = allocations.reduce((sum, a) => sum + (parseFloat(a.vat_paid) || 0), 0);
       const totalPaid = allocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
 
+      // Map allocations to investorAllocations format for frontend
+      const investorAllocations = allocations.map(a => ({
+        id: a.id,
+        investorId: a.user_id,
+        email: a.users?.email || null,
+        investorName: a.users ? `${a.users.first_name || ''} ${a.users.last_name || ''}`.trim() : null,
+        // Call amounts
+        callAmount: parseFloat(a.allocated_amount) || 0,
+        principalAmount: parseFloat(a.principal_amount) || 0,
+        managementFee: parseFloat(a.management_fee_net) || 0,
+        vatAmount: parseFloat(a.vat_amount) || 0,
+        totalDue: parseFloat(a.total_due) || 0,
+        // Paid amounts
+        amountPaid: parseFloat(a.paid_amount) || 0,
+        capitalPaid: parseFloat(a.capital_paid) || 0,
+        feesPaid: parseFloat(a.fees_paid) || 0,
+        vatPaid: parseFloat(a.vat_paid) || 0,
+        // Status
+        status: a.status || 'Pending'
+      }));
+
       return {
         ...this._toModel(item),
         structure: item.structures ? {
@@ -195,7 +226,9 @@ class CapitalCall {
           name: item.structures.name,
           type: item.structures.type
         } : null,
-        // Payment breakdown fields
+        // Per-investor allocations for commitment tracking
+        investorAllocations,
+        // Payment breakdown fields (aggregate totals)
         breakdown: {
           principal: totalPrincipal,
           fees: totalFees,
