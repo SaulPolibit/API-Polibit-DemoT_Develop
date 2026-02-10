@@ -668,6 +668,13 @@ class User {
         id,
         allocated_amount,
         paid_amount,
+        principal_amount,
+        management_fee_net,
+        vat_amount,
+        total_due,
+        capital_paid,
+        fees_paid,
+        vat_paid,
         status,
         capital_call:capital_calls (
           id,
@@ -693,6 +700,17 @@ class User {
       })
       .map(alloc => {
         const structure = structures.find(s => s.id === alloc.capital_call.structure_id);
+
+        // Parse amounts
+        const principalAmount = parseFloat(alloc.principal_amount) || 0;
+        const managementFee = parseFloat(alloc.management_fee_net) || 0;
+        const vatAmount = parseFloat(alloc.vat_amount) || 0;
+        const totalDue = parseFloat(alloc.total_due) || parseFloat(alloc.allocated_amount) || 0;
+        const paidAmount = parseFloat(alloc.paid_amount) || 0;
+        const capitalPaid = parseFloat(alloc.capital_paid) || 0;
+        const feesPaid = parseFloat(alloc.fees_paid) || 0;
+        const vatPaid = parseFloat(alloc.vat_paid) || 0;
+
         return {
           id: alloc.capital_call.id,
           structureId: alloc.capital_call.structure_id,
@@ -701,26 +719,51 @@ class User {
           callNumber: alloc.capital_call.call_number,
           callDate: alloc.capital_call.call_date,
           dueDate: alloc.capital_call.due_date,
-          allocatedAmount: parseFloat(alloc.allocated_amount) || 0,
-          paidAmount: parseFloat(alloc.paid_amount) || 0,
-          outstanding: (parseFloat(alloc.allocated_amount) || 0) - (parseFloat(alloc.paid_amount) || 0),
+          // Original amounts due (breakdown)
+          principalAmount,
+          managementFee,
+          vatAmount,
+          totalDue,
+          // Legacy field for backwards compatibility
+          allocatedAmount: totalDue,
+          // Total paid
+          paidAmount,
+          outstanding: totalDue - paidAmount,
+          // Payment breakdown (for commitment tracking)
+          capitalPaid,
+          feesPaid,
+          vatPaid,
+          // Outstanding breakdown
+          capitalOutstanding: principalAmount - capitalPaid,
+          feesOutstanding: managementFee - feesPaid,
+          vatOutstanding: vatAmount - vatPaid,
+          // Status
           status: alloc.status || alloc.capital_call.status,
           purpose: alloc.capital_call.purpose
         };
       });
 
-    // Calculate summary
-    const totalCalled = capitalCalls.reduce((sum, call) => sum + call.allocatedAmount, 0);
+    // Calculate summary - use capital amounts for commitment tracking
+    const totalCalled = capitalCalls.reduce((sum, call) => sum + call.totalDue, 0);
     const totalPaid = capitalCalls.reduce((sum, call) => sum + call.paidAmount, 0);
     const outstanding = totalCalled - totalPaid;
     const totalCalls = capitalCalls.length;
+
+    // Capital-only summary (for commitment tracking - excludes fees/VAT)
+    const capitalCalled = capitalCalls.reduce((sum, call) => sum + call.principalAmount, 0);
+    const capitalPaidTotal = capitalCalls.reduce((sum, call) => sum + call.capitalPaid, 0);
+    const capitalOutstanding = capitalCalled - capitalPaidTotal;
 
     return {
       summary: {
         totalCalled,
         totalPaid,
         outstanding: outstanding > 0 ? outstanding : 0,
-        totalCalls
+        totalCalls,
+        // Capital-only amounts (for commitment tracking - excludes fees/VAT)
+        capitalCalled,
+        capitalPaidTotal,
+        capitalOutstanding: capitalOutstanding > 0 ? capitalOutstanding : 0
       },
       structures: structures.filter(s => s.status === 'Active'),
       capitalCalls

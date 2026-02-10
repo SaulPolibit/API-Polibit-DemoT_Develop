@@ -565,6 +565,10 @@ class CapitalCall {
           management_fee_net: managementFeeNet,
           vat_amount: vatAmount,
           total_due: totalDue,
+          // Payment breakdown (separate tracking for commitment vs fees)
+          capital_paid: 0,
+          fees_paid: 0,
+          vat_paid: 0,
           // Dual-rate breakdown columns
           nic_fee_amount: f.nicFee,
           unfunded_fee_amount: f.unfundedFee,
@@ -623,7 +627,11 @@ class CapitalCall {
           management_fee_discount: managementFeeDiscountAmount,
           management_fee_net: managementFeeNet,
           vat_amount: vatAmount,
-          total_due: totalDue
+          total_due: totalDue,
+          // Payment breakdown (separate tracking for commitment vs fees)
+          capital_paid: 0,
+          fees_paid: 0,
+          vat_paid: 0
         };
       });
     }

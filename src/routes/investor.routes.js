@@ -1026,13 +1026,24 @@ router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (r
     // Investor's allocation details
     allocation: {
       id: allocation.id,
+      // Original amounts due
       allocatedAmount: parseFloat(allocation.allocated_amount) || 0,
-      capitalAmount: parseFloat(allocation.capital_amount) || 0,
-      managementFee: parseFloat(allocation.management_fee) || 0,
+      capitalAmount: parseFloat(allocation.principal_amount) || 0,
+      managementFee: parseFloat(allocation.management_fee_net) || 0,
       vatAmount: parseFloat(allocation.vat_amount) || 0,
       totalDue: parseFloat(allocation.total_due) || 0,
+      // Total paid
       paidAmount: parseFloat(allocation.paid_amount) || 0,
       outstanding: (parseFloat(allocation.total_due) || 0) - (parseFloat(allocation.paid_amount) || 0),
+      // Payment breakdown (for commitment tracking)
+      capitalPaid: parseFloat(allocation.capital_paid) || 0,
+      feesPaid: parseFloat(allocation.fees_paid) || 0,
+      vatPaid: parseFloat(allocation.vat_paid) || 0,
+      // Outstanding breakdown
+      capitalOutstanding: (parseFloat(allocation.principal_amount) || 0) - (parseFloat(allocation.capital_paid) || 0),
+      feesOutstanding: (parseFloat(allocation.management_fee_net) || 0) - (parseFloat(allocation.fees_paid) || 0),
+      vatOutstanding: (parseFloat(allocation.vat_amount) || 0) - (parseFloat(allocation.vat_paid) || 0),
+      // Status and other
       status: allocation.status,
       ownershipPercent: parseFloat(allocation.ownership_percent) || 0,
       feeDiscount: parseFloat(allocation.fee_discount) || 0,
@@ -1109,25 +1120,63 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
     });
   }
 
-  // Calculate new paid amount
-  const currentPaid = parseFloat(allocation.paid_amount) || 0;
+  // Get current amounts
+  const principalAmount = parseFloat(allocation.principal_amount) || 0;
+  const feesAmount = parseFloat(allocation.management_fee_net) || 0;
+  const vatAmount = parseFloat(allocation.vat_amount) || 0;
   const totalDue = parseFloat(allocation.total_due) || 0;
-  const newPaidAmount = currentPaid + parseFloat(amount);
+
+  // Current paid amounts
+  const currentPaid = parseFloat(allocation.paid_amount) || 0;
+  const currentCapitalPaid = parseFloat(allocation.capital_paid) || 0;
+  const currentFeesPaid = parseFloat(allocation.fees_paid) || 0;
+  const currentVatPaid = parseFloat(allocation.vat_paid) || 0;
+
+  // Calculate remaining amounts for each category
+  const capitalRemaining = principalAmount - currentCapitalPaid;
+  const feesRemaining = feesAmount - currentFeesPaid;
+  const vatRemaining = vatAmount - currentVatPaid;
+  const totalRemaining = capitalRemaining + feesRemaining + vatRemaining;
+
+  // Distribute payment proportionally across capital/fees/vat
+  const paymentAmount = parseFloat(amount);
+  let newCapitalPaid = currentCapitalPaid;
+  let newFeesPaid = currentFeesPaid;
+  let newVatPaid = currentVatPaid;
+
+  if (totalRemaining > 0 && paymentAmount > 0) {
+    // Calculate proportional distribution based on remaining amounts
+    const paymentRatio = Math.min(paymentAmount / totalRemaining, 1);
+
+    newCapitalPaid = currentCapitalPaid + (capitalRemaining * paymentRatio);
+    newFeesPaid = currentFeesPaid + (feesRemaining * paymentRatio);
+    newVatPaid = currentVatPaid + (vatRemaining * paymentRatio);
+
+    // Round to 2 decimal places
+    newCapitalPaid = Math.round(newCapitalPaid * 100) / 100;
+    newFeesPaid = Math.round(newFeesPaid * 100) / 100;
+    newVatPaid = Math.round(newVatPaid * 100) / 100;
+  }
+
+  const newPaidAmount = newCapitalPaid + newFeesPaid + newVatPaid;
   const newOutstanding = totalDue - newPaidAmount;
 
   // Determine new status
   let newStatus = allocation.status;
-  if (newOutstanding <= 0) {
+  if (newOutstanding <= 0.01) { // Allow for small rounding differences
     newStatus = 'Paid';
   } else if (newPaidAmount > 0) {
     newStatus = 'Partially Paid';
   }
 
-  // Update the allocation (only update columns that exist in the table)
+  // Update the allocation with payment breakdown
   const { data: updatedAllocation, error: updateError } = await supabase
     .from('capital_call_allocations')
     .update({
       paid_amount: newPaidAmount,
+      capital_paid: newCapitalPaid,
+      fees_paid: newFeesPaid,
+      vat_paid: newVatPaid,
       status: newStatus,
       updated_at: new Date().toISOString()
     })
@@ -1139,13 +1188,13 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
     throw new Error(`Error recording payment: ${updateError.message}`);
   }
 
-  // Log payment details for audit purposes (columns don't exist in table yet)
-  console.log(`[Payment] Allocation ${allocation.id} updated: method=${paymentMethod}, reference=${paymentReference}, date=${paymentDate}`);
+  // Log payment details for audit
+  console.log(`[Payment] Allocation ${allocation.id} updated: capital=${newCapitalPaid}, fees=${newFeesPaid}, vat=${newVatPaid}, method=${paymentMethod}, reference=${paymentReference}`);
 
   // Update the capital call totals
   const { data: allAllocations } = await supabase
     .from('capital_call_allocations')
-    .select('paid_amount, total_due')
+    .select('paid_amount, total_due, capital_paid, fees_paid, vat_paid')
     .eq('capital_call_id', capitalCallId);
 
   const totalPaid = allAllocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
@@ -1174,9 +1223,19 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
     message: 'Payment recorded successfully',
     data: {
       allocationId: updatedAllocation.id,
+      // Total amounts
       paidAmount: newPaidAmount,
       outstanding: newOutstanding,
       status: newStatus,
+      // Payment breakdown (for commitment tracking)
+      capitalPaid: newCapitalPaid,
+      feesPaid: newFeesPaid,
+      vatPaid: newVatPaid,
+      // Original amounts for reference
+      principalAmount,
+      feesAmount,
+      vatAmount: vatAmount,
+      // Payment info
       paymentMethod,
       paymentReference: paymentReference || null
     }
