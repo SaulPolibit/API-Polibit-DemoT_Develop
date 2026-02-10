@@ -405,9 +405,34 @@ class CapitalCall {
       .from('capital_calls')
       .select(`
         *,
+        structures:structure_id (
+          id,
+          name,
+          type,
+          base_currency
+        ),
         capital_call_allocations (
-          *,
-          user:users (*)
+          id,
+          user_id,
+          allocated_amount,
+          principal_amount,
+          management_fee_net,
+          vat_amount,
+          total_due,
+          paid_amount,
+          capital_paid,
+          fees_paid,
+          vat_paid,
+          ownership_percent,
+          status,
+          notice_sent,
+          users:user_id (
+            id,
+            email,
+            first_name,
+            last_name,
+            type
+          )
         )
       `)
       .eq('id', capitalCallId)
@@ -417,7 +442,67 @@ class CapitalCall {
       throw new Error(`Error finding capital call with allocations: ${error.message}`);
     }
 
-    return this._toModel(data);
+    // Get the base model
+    const capitalCall = this._toModel(data);
+
+    // Add structure info
+    capitalCall.structure = data.structures ? {
+      id: data.structures.id,
+      name: data.structures.name,
+      type: data.structures.type,
+      baseCurrency: data.structures.base_currency
+    } : null;
+
+    // Map allocations to investorAllocations format
+    const allocations = data.capital_call_allocations || [];
+    capitalCall.capital_call_allocations = allocations.map(a => ({
+      id: a.id,
+      user_id: a.user_id,
+      investorId: a.user_id,
+      investorName: a.users ? `${a.users.first_name || ''} ${a.users.last_name || ''}`.trim() || a.users.email : 'Unknown',
+      investorType: a.users?.type || 'Individual',
+      email: a.users?.email || null,
+      // Call amounts
+      allocated_amount: parseFloat(a.allocated_amount) || 0,
+      call_amount: parseFloat(a.allocated_amount) || 0,
+      callAmount: parseFloat(a.allocated_amount) || 0,
+      principal_amount: parseFloat(a.principal_amount) || 0,
+      principalAmount: parseFloat(a.principal_amount) || 0,
+      management_fee_net: parseFloat(a.management_fee_net) || 0,
+      managementFee: parseFloat(a.management_fee_net) || 0,
+      vat_amount: parseFloat(a.vat_amount) || 0,
+      vatAmount: parseFloat(a.vat_amount) || 0,
+      total_due: parseFloat(a.total_due) || 0,
+      totalDue: parseFloat(a.total_due) || 0,
+      // Paid amounts
+      paid_amount: parseFloat(a.paid_amount) || 0,
+      amount_paid: parseFloat(a.paid_amount) || 0,
+      amountPaid: parseFloat(a.paid_amount) || 0,
+      capital_paid: parseFloat(a.capital_paid) || 0,
+      capitalPaid: parseFloat(a.capital_paid) || 0,
+      fees_paid: parseFloat(a.fees_paid) || 0,
+      feesPaid: parseFloat(a.fees_paid) || 0,
+      vat_paid: parseFloat(a.vat_paid) || 0,
+      vatPaid: parseFloat(a.vat_paid) || 0,
+      // Outstanding
+      amount_outstanding: (parseFloat(a.total_due) || 0) - (parseFloat(a.paid_amount) || 0),
+      amountOutstanding: (parseFloat(a.total_due) || 0) - (parseFloat(a.paid_amount) || 0),
+      // Ownership and status
+      ownership_percent: parseFloat(a.ownership_percent) || 0,
+      ownershipPercent: parseFloat(a.ownership_percent) || 0,
+      status: a.status || 'Pending',
+      notice_sent: a.notice_sent || false,
+      noticeSent: a.notice_sent || false,
+      // User data for reference
+      user: a.users ? {
+        id: a.users.id,
+        email: a.users.email,
+        name: `${a.users.first_name || ''} ${a.users.last_name || ''}`.trim(),
+        type: a.users.type
+      } : null
+    }));
+
+    return capitalCall;
   }
 
   /**
