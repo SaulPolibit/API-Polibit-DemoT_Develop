@@ -993,7 +993,7 @@ class CapitalCall {
       .from('capital_calls')
       .select('id')
       .eq('structure_id', structureId)
-      .in('status', ['Sent', 'Paid', 'Partially Paid']);
+      .in('status', ['Sent', 'Paid', 'Fully Paid', 'Partially Paid']);
 
     if (excludeCallId) {
       query = query.neq('id', excludeCallId);
@@ -1059,7 +1059,7 @@ class CapitalCall {
         )
       `)
       .eq('structure_id', structureId)
-      .in('status', ['Sent', 'Paid', 'Partially Paid'])
+      .in('status', ['Sent', 'Paid', 'Fully Paid', 'Partially Paid'])
       .order('call_date', { ascending: true });
 
     if (callsError) {
@@ -1110,7 +1110,7 @@ class CapitalCall {
       .from('capital_calls')
       .select('id')
       .eq('structure_id', structureId)
-      .in('status', ['Sent', 'Paid', 'Partially Paid']);
+      .in('status', ['Sent', 'Paid', 'Fully Paid', 'Partially Paid']);
 
     if (excludeCallId) {
       query = query.neq('id', excludeCallId);
