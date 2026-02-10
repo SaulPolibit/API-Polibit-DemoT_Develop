@@ -19,6 +19,7 @@ const { isDevelopment } = require('./utils/helpers');
 
 
 const { connectDB } = require('./config/database');
+const { initCapitalCallRemindersCron } = require('./jobs/capitalCallReminders');
 
 // Initialize Express app
 const app = express();
@@ -297,6 +298,10 @@ app.listen(PORT, async () => {
   
   await connectDB();
   console.log('✅ Database connected');
+
+  // Initialize cron jobs
+  initCapitalCallRemindersCron();
+  console.log('✅ Cron jobs initialized');
   // Log environment variables status (without exposing values)
   if (isDevelopment()) {
     console.log('🔑 Environment Variables:');

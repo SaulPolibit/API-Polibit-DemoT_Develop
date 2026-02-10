@@ -42,6 +42,11 @@ const kycSessionRoutes = require('./kycSession.routes');
 // Firm Settings routes
 const firmSettingsRoutes = require('./firmSettings.routes');
 
+// ILPA Reporting routes
+const capitalAccountRoutes = require('./capitalAccount.routes');
+const feeReportRoutes = require('./feeReport.routes');
+const ilpaReportRoutes = require('./ilpaReport.routes');
+
 const router = express.Router();
 
 // Mount route modules
@@ -89,6 +94,11 @@ router.use('/kyc-sessions', kycSessionRoutes);
 // Mount Firm Settings routes
 router.use('/firm-settings', firmSettingsRoutes);
 
+// Mount ILPA Reporting routes
+router.use('/capital-account', capitalAccountRoutes);
+router.use('/fee-reports', feeReportRoutes);
+router.use('/ilpa-reports', ilpaReportRoutes);
+
 // Root API endpoint
 router.get('/', (_req, res) => {
   res.json({
@@ -131,6 +141,10 @@ router.get('/', (_req, res) => {
       kycSessions: '/api/kyc-sessions',
       // Firm Settings endpoints
       firmSettings: '/api/firm-settings',
+      // ILPA Reporting endpoints
+      capitalAccount: '/api/capital-account',
+      feeReports: '/api/fee-reports',
+      ilpaReports: '/api/ilpa-reports',
     },
   });
 });

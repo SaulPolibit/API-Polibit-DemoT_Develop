@@ -11,7 +11,8 @@ const SmartContract = require('./smartContract');
 // Investment Manager models
 const Structure = require('./structure');
 const StructureAdmin = require('./structureAdmin');
-const Investor = require('./investor');
+const StructureInvestor = require('./structureInvestor');
+const Investor = require('./investor'); // Deprecated - use StructureInvestor
 const Investment = require('./investment');
 const CapitalCall = require('./capitalCall');
 const Distribution = require('./distribution');
@@ -60,7 +61,8 @@ module.exports = {
   // Investment Manager models
   Structure,
   StructureAdmin,
-  Investor,
+  StructureInvestor,
+  Investor, // Deprecated - use StructureInvestor
   Investment,
   CapitalCall,
   Distribution,

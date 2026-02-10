@@ -1052,6 +1052,7 @@ router.get('/investors', authenticate, catchAsync(async (req, res) => {
       email: user.email,
       phoneNumber: user.phoneNumber,
       country: user.country,
+      kycId: user.kycId,
       kycStatus: user.kycStatus || 'Not Started',
       walletAddress: user.walletAddress,
       investorType: user.investorType || 'Individual',

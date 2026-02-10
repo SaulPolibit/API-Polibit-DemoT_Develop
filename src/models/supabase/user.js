@@ -125,6 +125,16 @@ class User {
       // Tax fields
       tax_classification: userData.taxClassification || null,
       w9_form: userData.w9Form || null,
+      // ILPA Fee Settings
+      fee_discount: userData.feeDiscount || 0,
+      vat_exempt: userData.vatExempt || false,
+      // Closing Tranche (Proximity Parks)
+      closing_tranche: userData.closingTranche || null,
+      closing_date: userData.closingDate || null,
+      closing_tranche_custom_name: userData.closingTrancheCustomName || null,
+      // Mexican Banking (Bank Planilla)
+      clabe: userData.clabe || null,
+      rfc: userData.rfc || null,
     };
 
     // Include ID if provided (for Supabase Auth integration)
@@ -524,13 +534,16 @@ class User {
   static async getCommitmentsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all investments for this user with structure details
-    const { data: investments, error: invError } = await supabase
-      .from('investments')
+    // Get all structure_investors records for this user with structure details
+    const { data: structureInvestors, error: siError } = await supabase
+      .from('structure_investors')
       .select(`
+        id,
         structure_id,
-        ownership_percentage,
-        equity_ownership_percent,
+        commitment,
+        ownership_percent,
+        status,
+        created_at,
         structures:structure_id (
           id,
           name,
@@ -540,25 +553,10 @@ class User {
           base_currency
         )
       `)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('status', 'active');
 
-    if (invError) throw invError;
-
-    // Get unique structures from investments
-    const uniqueStructures = new Map();
-    investments?.forEach(inv => {
-      if (inv.structures && !uniqueStructures.has(inv.structure_id)) {
-        const ownershipPercent = inv.ownership_percentage || inv.equity_ownership_percent || 0;
-        uniqueStructures.set(inv.structure_id, {
-          structure_id: inv.structure_id,
-          user_id: userId,
-          ownership_percent: ownershipPercent,
-          structure: inv.structures
-        });
-      }
-    });
-
-    const structureInvestors = Array.from(uniqueStructures.values());
+    if (siError) throw siError;
 
     if (!structureInvestors || structureInvestors.length === 0) {
       return {
@@ -571,11 +569,14 @@ class User {
     }
 
     // Get all capital call allocations for this user with structure info
+    // Include principal_amount and capital_paid for commitment tracking (excludes fees/VAT)
     const { data: allocations, error: allocError } = await supabase
       .from('capital_call_allocations')
       .select(`
         allocated_amount,
         paid_amount,
+        principal_amount,
+        capital_paid,
         capital_call:capital_calls (
           structure_id
         )
@@ -584,37 +585,41 @@ class User {
 
     if (allocError) throw allocError;
 
-    // Calculate total called capital (sum of allocated amounts)
+    // Calculate total called capital using principal_amount (capital-only, excludes fees/VAT)
+    // This is the amount that counts toward commitment
     const calledCapital = allocations?.reduce((sum, alloc) =>
-      sum + (parseFloat(alloc.allocated_amount) || 0), 0) || 0;
+      sum + (parseFloat(alloc.principal_amount) || parseFloat(alloc.allocated_amount) || 0), 0) || 0;
 
     // Process structures
-    const structures = structureInvestors.map(si => {
-      // Filter allocations for this specific structure
-      const structureAllocations = allocations?.filter(a =>
-        a.capital_call?.structure_id === si.structure_id
-      ) || [];
+    const structures = structureInvestors
+      .filter(si => si.structures) // Only include records with valid structure data
+      .map(si => {
+        // Filter allocations for this specific structure
+        const structureAllocations = allocations?.filter(a =>
+          a.capital_call?.structure_id === si.structure_id
+        ) || [];
 
-      const structureCalledCapital = structureAllocations.reduce((sum, alloc) =>
-        sum + (parseFloat(alloc.allocated_amount) || 0), 0);
+        // Use principal_amount for called capital (capital-only, excludes fees/VAT)
+        const structureCalledCapital = structureAllocations.reduce((sum, alloc) =>
+          sum + (parseFloat(alloc.principal_amount) || parseFloat(alloc.allocated_amount) || 0), 0);
 
-      const commitment = parseFloat(si.commitment_amount) || 0;
-      const uncalledCapital = commitment - structureCalledCapital;
+        const commitment = parseFloat(si.commitment) || 0;
+        const uncalledCapital = commitment - structureCalledCapital;
 
-      return {
-        id: si.structure.id,
-        name: si.structure.name,
-        type: si.structure.type,
-        commitment: commitment,
-        calledCapital: structureCalledCapital,
-        uncalledCapital: uncalledCapital > 0 ? uncalledCapital : 0,
-        ownershipPercent: parseFloat(si.ownership_percent) || 0,
-        status: si.structure.status,
-        investedDate: si.invested_at,
-        onboardingStatus: 'Complete',
-        currency: si.structure.base_currency || 'USD'
-      };
-    });
+        return {
+          id: si.structures.id,
+          name: si.structures.name,
+          type: si.structures.type,
+          commitment: commitment,
+          calledCapital: structureCalledCapital,
+          uncalledCapital: uncalledCapital > 0 ? uncalledCapital : 0,
+          ownershipPercent: parseFloat(si.ownership_percent) || 0,
+          status: si.structures.status,
+          investedDate: si.created_at,
+          onboardingStatus: 'Complete',
+          currency: si.structures.base_currency || 'USD'
+        };
+      });
 
     // Calculate totals
     const totalCommitment = structures.reduce((sum, s) => sum + s.commitment, 0);
@@ -626,7 +631,7 @@ class User {
       calledCapital,
       uncalledCapital: totalUncalledCapital > 0 ? totalUncalledCapital : 0,
       activeFunds,
-      structures: structures.filter(s => s.status === 'Active')
+      structures
     };
   }
 
@@ -638,27 +643,28 @@ class User {
   static async getCapitalCallsSummary(userId) {
     const supabase = getSupabase();
 
-    // Get all structures for this user from investments
-    const { data: investments, error: invError } = await supabase
-      .from('investments')
+    // Get all structures for this user from structure_investors (investor-structure relationships)
+    const { data: structureInvestors, error: siError } = await supabase
+      .from('structure_investors')
       .select(`
         structure_id,
         structures:structure_id (
           id,
           name,
           type,
-          status
+          status,
+          base_currency
         )
       `)
       .eq('user_id', userId);
 
-    if (invError) throw invError;
+    if (siError) throw siError;
 
-    // Get unique structures from investments
+    // Get unique structures from structure_investors
     const uniqueStructuresMap = new Map();
-    (investments || []).forEach(inv => {
-      if (inv.structures && !uniqueStructuresMap.has(inv.structure_id)) {
-        uniqueStructuresMap.set(inv.structure_id, inv.structures);
+    (structureInvestors || []).forEach(si => {
+      if (si.structures && !uniqueStructuresMap.has(si.structure_id)) {
+        uniqueStructuresMap.set(si.structure_id, si.structures);
       }
     });
 
@@ -666,7 +672,8 @@ class User {
       id: structure.id,
       name: structure.name,
       type: structure.type,
-      status: structure.status
+      status: structure.status,
+      baseCurrency: structure.base_currency
     }));
 
     // Get all capital call allocations for this user with capital call details
@@ -676,6 +683,13 @@ class User {
         id,
         allocated_amount,
         paid_amount,
+        principal_amount,
+        management_fee_net,
+        vat_amount,
+        total_due,
+        capital_paid,
+        fees_paid,
+        vat_paid,
         status,
         capital_call:capital_calls (
           id,
@@ -701,33 +715,70 @@ class User {
       })
       .map(alloc => {
         const structure = structures.find(s => s.id === alloc.capital_call.structure_id);
+
+        // Parse amounts
+        const principalAmount = parseFloat(alloc.principal_amount) || 0;
+        const managementFee = parseFloat(alloc.management_fee_net) || 0;
+        const vatAmount = parseFloat(alloc.vat_amount) || 0;
+        const totalDue = parseFloat(alloc.total_due) || parseFloat(alloc.allocated_amount) || 0;
+        const paidAmount = parseFloat(alloc.paid_amount) || 0;
+        const capitalPaid = parseFloat(alloc.capital_paid) || 0;
+        const feesPaid = parseFloat(alloc.fees_paid) || 0;
+        const vatPaid = parseFloat(alloc.vat_paid) || 0;
+
         return {
           id: alloc.capital_call.id,
           structureId: alloc.capital_call.structure_id,
           structureName: structure?.name || 'Unknown Structure',
+          currency: structure?.baseCurrency || 'USD',
           callNumber: alloc.capital_call.call_number,
           callDate: alloc.capital_call.call_date,
           dueDate: alloc.capital_call.due_date,
-          allocatedAmount: parseFloat(alloc.allocated_amount) || 0,
-          paidAmount: parseFloat(alloc.paid_amount) || 0,
-          outstanding: (parseFloat(alloc.allocated_amount) || 0) - (parseFloat(alloc.paid_amount) || 0),
+          // Original amounts due (breakdown)
+          principalAmount,
+          managementFee,
+          vatAmount,
+          totalDue,
+          // Legacy field for backwards compatibility
+          allocatedAmount: totalDue,
+          // Total paid
+          paidAmount,
+          outstanding: totalDue - paidAmount,
+          // Payment breakdown (for commitment tracking)
+          capitalPaid,
+          feesPaid,
+          vatPaid,
+          // Outstanding breakdown
+          capitalOutstanding: principalAmount - capitalPaid,
+          feesOutstanding: managementFee - feesPaid,
+          vatOutstanding: vatAmount - vatPaid,
+          // Status
           status: alloc.status || alloc.capital_call.status,
           purpose: alloc.capital_call.purpose
         };
       });
 
-    // Calculate summary
-    const totalCalled = capitalCalls.reduce((sum, call) => sum + call.allocatedAmount, 0);
+    // Calculate summary - use capital amounts for commitment tracking
+    const totalCalled = capitalCalls.reduce((sum, call) => sum + call.totalDue, 0);
     const totalPaid = capitalCalls.reduce((sum, call) => sum + call.paidAmount, 0);
     const outstanding = totalCalled - totalPaid;
     const totalCalls = capitalCalls.length;
+
+    // Capital-only summary (for commitment tracking - excludes fees/VAT)
+    const capitalCalled = capitalCalls.reduce((sum, call) => sum + call.principalAmount, 0);
+    const capitalPaidTotal = capitalCalls.reduce((sum, call) => sum + call.capitalPaid, 0);
+    const capitalOutstanding = capitalCalled - capitalPaidTotal;
 
     return {
       summary: {
         totalCalled,
         totalPaid,
         outstanding: outstanding > 0 ? outstanding : 0,
-        totalCalls
+        totalCalls,
+        // Capital-only amounts (for commitment tracking - excludes fees/VAT)
+        capitalCalled,
+        capitalPaidTotal,
+        capitalOutstanding: capitalOutstanding > 0 ? capitalOutstanding : 0
       },
       structures: structures.filter(s => s.status === 'Active'),
       capitalCalls
@@ -808,6 +859,16 @@ class User {
       w9Form: dbUser.w9_form,
       // MFA
       mfaFactorId: dbUser.mfa_factor_id,
+      // ILPA Fee Settings
+      feeDiscount: dbUser.fee_discount,
+      vatExempt: dbUser.vat_exempt,
+      // Closing Tranche (Proximity Parks)
+      closingTranche: dbUser.closing_tranche,
+      closingDate: dbUser.closing_date,
+      closingTrancheCustomName: dbUser.closing_tranche_custom_name,
+      // Mexican Banking (Bank Planilla)
+      clabe: dbUser.clabe,
+      rfc: dbUser.rfc,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -895,6 +956,16 @@ class User {
       w9Form: 'w9_form',
       // MFA
       mfaFactorId: 'mfa_factor_id',
+      // ILPA Fee Settings
+      feeDiscount: 'fee_discount',
+      vatExempt: 'vat_exempt',
+      // Closing Tranche (Proximity Parks)
+      closingTranche: 'closing_tranche',
+      closingDate: 'closing_date',
+      closingTrancheCustomName: 'closing_tranche_custom_name',
+      // Mexican Banking (Bank Planilla)
+      clabe: 'clabe',
+      rfc: 'rfc',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {

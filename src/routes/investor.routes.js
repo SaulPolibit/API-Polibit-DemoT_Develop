@@ -8,10 +8,13 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const User = require('../models/supabase/user');
 const Investor = require('../models/supabase/investor');
 const Structure = require('../models/supabase/structure');
+const StructureInvestor = require('../models/supabase/structureInvestor');
 const DocusealSubmission = require('../models/supabase/docusealSubmission');
 const Payment = require('../models/supabase/payment');
 const { requireInvestmentManagerAccess, ROLES, getUserContext } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
+const { sendEmail } = require('../utils/emailSender');
+const { FirmSettings } = require('../models/supabase');
 
 const router = express.Router();
 
@@ -40,7 +43,14 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   const { userId: requestingUserId, userRole: requestingUserRole } = req.auth || req.user || {};
 
   const {
-    userId,
+    // User creation fields (when createUser is true)
+    createUser,
+    firstName,
+    lastName,
+    password,
+    sendWelcomeEmail,
+    // Existing fields
+    userId: providedUserId,
     structureId,
     investorType,
     email,
@@ -74,33 +84,167 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     officeName,
     familyName,
     principalContact,
-    assetsUnderManagement
+    assetsUnderManagement,
+    // Structure Allocation
+    commitment,
+    ownershipPercent,
+    // ILPA Fee Settings
+    feeDiscount,
+    vatExempt,
+    // Custom terms (per-investor overrides)
+    customTerms
   } = req.body;
 
   // Validate required fields
-  validate(userId, 'User ID is required');
   validate(structureId, 'Structure ID is required');
-  validate(investorType, 'Investor type is required');
-  validate(['Individual', 'Institution', 'Fund of Funds', 'Family Office'].includes(investorType), 'Invalid investor type');
+  // investorType is required only when creating a new user (existing users already have it)
+  if (createUser) {
+    validate(investorType, 'Investor type is required');
+    validate(['Individual', 'Institution', 'Fund of Funds', 'Family Office'].includes(investorType), 'Invalid investor type');
+  }
 
-  // Validate UUID format
+  // Validate UUID format for structureId
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  validate(uuidRegex.test(userId), 'Invalid user ID format');
   validate(uuidRegex.test(structureId), 'Invalid structure ID format');
 
-  // Verify user exists
-  const existingUser = await User.findById(userId);
-  validate(existingUser, 'User not found');
+  let userId;
+  let existingUser;
+  let newUserCreated = false;
+  let plainPassword = null;
 
-  // Validate type-specific required fields
-  if (investorType === 'Individual') {
-    validate(fullName, 'Full name is required for individual investors');
-  } else if (investorType === 'Institution') {
-    validate(institutionName, 'Institution name is required');
-  } else if (investorType === 'Fund of Funds') {
-    validate(fundName, 'Fund name is required');
-  } else if (investorType === 'Family Office') {
-    validate(officeName, 'Office name is required');
+  if (createUser) {
+    // --- Create new user inline with role 3 (INVESTOR) ---
+    validate(email, 'Email is required when creating a new user');
+    validate(password, 'Password is required when creating a new user');
+    validate(firstName, 'First name is required when creating a new user');
+
+    // Check if user already exists
+    const existingByEmail = await User.findByEmail(email);
+    if (existingByEmail) {
+      return res.status(409).json({
+        success: false,
+        message: 'A user with this email already exists. Use "Select Existing User" instead.'
+      });
+    }
+
+    // Create user in Supabase Auth
+    const { createClient } = require('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName || ''
+      }
+    });
+
+    if (authError) {
+      console.error('[Investor Route] Supabase Auth error:', authError);
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to create user account',
+        error: authError.message
+      });
+    }
+
+    if (!authData?.user) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create user account - no user returned'
+      });
+    }
+
+    // Create user in users table with role 3 (INVESTOR) and all profile data
+    try {
+      const userCreateData = {
+        id: authData.user.id,
+        email,
+        password,
+        firstName,
+        lastName: lastName || '',
+        role: ROLES.INVESTOR, // role 3
+        // Profile data stored on users table
+        investorType,
+        phoneNumber: phoneNumber?.trim() || null,
+        country: country?.trim() || null,
+        taxId: taxId?.trim() || null,
+        kycStatus: kycStatus || 'Not Started',
+        accreditedInvestor: accreditedInvestor || false,
+        riskTolerance: riskTolerance?.trim() || null,
+        investmentPreferences: investmentPreferences || null,
+      };
+
+      // Add type-specific fields to user record
+      if (investorType === 'Individual') {
+        userCreateData.fullName = fullName?.trim() || `${firstName} ${lastName || ''}`.trim();
+        userCreateData.dateOfBirth = dateOfBirth || null;
+        userCreateData.nationality = nationality?.trim() || null;
+        userCreateData.passportNumber = passportNumber?.trim() || null;
+        userCreateData.addressLine1 = addressLine1?.trim() || null;
+        userCreateData.addressLine2 = addressLine2?.trim() || null;
+        userCreateData.city = city?.trim() || null;
+        userCreateData.state = state?.trim() || null;
+        userCreateData.postalCode = postalCode?.trim() || null;
+      } else if (investorType === 'Institution') {
+        userCreateData.institutionName = institutionName?.trim() || null;
+        userCreateData.institutionType = institutionType?.trim() || null;
+        userCreateData.registrationNumber = registrationNumber?.trim() || null;
+        userCreateData.legalRepresentative = legalRepresentative?.trim() || null;
+      } else if (investorType === 'Fund of Funds') {
+        userCreateData.fundName = fundName?.trim() || null;
+        userCreateData.fundManager = fundManager?.trim() || null;
+        userCreateData.aum = aum || null;
+      } else if (investorType === 'Family Office') {
+        userCreateData.officeName = officeName?.trim() || null;
+        userCreateData.familyName = familyName?.trim() || null;
+        userCreateData.principalContact = principalContact?.trim() || null;
+        userCreateData.assetsUnderManagement = assetsUnderManagement || null;
+      }
+
+      existingUser = await User.create(userCreateData);
+      userId = existingUser.id;
+      newUserCreated = true;
+      plainPassword = password;
+      console.log('[Investor Route] New investor user created with full profile:', userId);
+    } catch (createError) {
+      console.error('[Investor Route] Error creating user in users table:', createError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create user profile',
+        error: createError.message
+      });
+    }
+  } else {
+    // --- Select existing user ---
+    userId = providedUserId;
+    validate(userId, 'User ID is required');
+    validate(uuidRegex.test(userId), 'Invalid user ID format');
+
+    existingUser = await User.findById(userId);
+    validate(existingUser, 'User not found');
+  }
+
+  // Validate type-specific required fields (only for new user creation)
+  if (createUser) {
+    if (investorType === 'Individual') {
+      validate(fullName || firstName, 'Full name or first name is required for individual investors');
+    } else if (investorType === 'Institution') {
+      validate(institutionName, 'Institution name is required');
+    } else if (investorType === 'Fund of Funds') {
+      validate(fundName, 'Fund name is required');
+    } else if (investorType === 'Family Office') {
+      validate(officeName, 'Office name is required');
+    }
   }
 
   // Check if investor profile already exists for this user-structure combination
@@ -112,56 +256,99 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     });
   }
 
-  // Prepare investor data
+  // Prepare investor data (junction: user-structure relationship + per-structure settings)
+  // Personal/profile data is stored on the users table, not here
   const investorData = {
     userId,
     structureId,
-    investorType,
+    investorType: investorType || existingUser.investorType || 'Individual',
     email: email?.toLowerCase() || existingUser.email,
-    phoneNumber: phoneNumber?.trim() || '',
-    country: country?.trim() || '',
-    taxId: taxId?.trim() || '',
-    kycStatus: kycStatus || 'Not Started',
-    accreditedInvestor: accreditedInvestor || false,
-    riskTolerance: riskTolerance?.trim() || '',
-    investmentPreferences: investmentPreferences || {},
+    // Structure allocation
+    commitment: commitment || null,
+    ownershipPercent: ownershipPercent || null,
+    // ILPA Fee Settings (per-structure)
+    feeDiscount: feeDiscount !== undefined ? feeDiscount : 0,
+    vatExempt: vatExempt !== undefined ? vatExempt : false,
+    // Custom terms (per-investor overrides)
+    customTerms: customTerms || null,
     createdBy: requestingUserId
   };
 
-  // Add type-specific fields
-  if (investorType === 'Individual') {
-    investorData.fullName = fullName?.trim() || '';
-    investorData.dateOfBirth = dateOfBirth || null;
-    investorData.nationality = nationality?.trim() || '';
-    investorData.passportNumber = passportNumber?.trim() || '';
-    investorData.addressLine1 = addressLine1?.trim() || '';
-    investorData.addressLine2 = addressLine2?.trim() || '';
-    investorData.city = city?.trim() || '';
-    investorData.state = state?.trim() || '';
-    investorData.postalCode = postalCode?.trim() || '';
-  } else if (investorType === 'Institution') {
-    investorData.institutionName = institutionName?.trim() || '';
-    investorData.institutionType = institutionType?.trim() || '';
-    investorData.registrationNumber = registrationNumber?.trim() || '';
-    investorData.legalRepresentative = legalRepresentative?.trim() || '';
-  } else if (investorType === 'Fund of Funds') {
-    investorData.fundName = fundName?.trim() || '';
-    investorData.fundManager = fundManager?.trim() || '';
-    investorData.aum = aum || null;
-  } else if (investorType === 'Family Office') {
-    investorData.officeName = officeName?.trim() || '';
-    investorData.familyName = familyName?.trim() || '';
-    investorData.principalContact = principalContact?.trim() || '';
-    investorData.assetsUnderManagement = assetsUnderManagement || null;
+  // Create new investor profile (junction record in legacy investors table)
+  const investor = await Investor.create(investorData);
+
+  // Also create a record in structure_investors junction table (new architecture)
+  // This ensures compatibility with capital calls and other features using the new table
+  try {
+    await StructureInvestor.upsert({
+      userId,
+      structureId,
+      commitment: commitment || 0,
+      ownershipPercent: ownershipPercent || 0,
+      feeDiscount: feeDiscount !== undefined ? feeDiscount : 0,
+      vatExempt: vatExempt !== undefined ? vatExempt : false,
+      customTerms: customTerms || null,
+      status: 'active'
+    });
+    console.log('[Investor Route] Structure investor record created/updated for userId:', userId, 'structureId:', structureId);
+  } catch (siError) {
+    console.error('[Investor Route] Failed to create structure_investor record:', siError.message);
+    // Don't fail the request - the legacy investor record was still created
   }
 
-  // Create new investor profile
-  const investor = await Investor.create(investorData);
+  // Send welcome email if a new user was created and sendWelcomeEmail is true
+  let emailSent = false;
+  if (newUserCreated && sendWelcomeEmail !== false) {
+    try {
+      // Get firm name for whitelabeling
+      let firmName = 'Investment Manager';
+      try {
+        const firmSettings = await FirmSettings.findByUserId(requestingUserId);
+        if (firmSettings?.firmName) firmName = firmSettings.firmName;
+      } catch (e) {
+        console.warn('[Investor Route] Could not fetch firm settings for email:', e.message);
+      }
+
+      // Get structure name
+      const structure = await Structure.findById(structureId);
+      const structureName = structure?.name || 'a fund structure';
+
+      const loginUrl = process.env.LP_PORTAL_URL || process.env.FRONTEND_URL || 'https://app.polibit.com';
+
+      await sendEmail(requestingUserId, {
+        to: [investorData.email],
+        subject: `Welcome to ${firmName} - Your Investor Account`,
+        bodyHtml: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Welcome to ${firmName}</h2>
+            <p>Your investor account has been created. You have been assigned to <strong>${structureName}</strong>.</p>
+            <p>You can access the LP Portal using the following credentials:</p>
+            <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+              <p style="margin: 4px 0;"><strong>Email:</strong> ${investorData.email}</p>
+              <p style="margin: 4px 0;"><strong>Password:</strong> ${plainPassword}</p>
+            </div>
+            <p><a href="${loginUrl}/lp-portal/login" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Login to LP Portal</a></p>
+            <p style="color: #666; font-size: 12px; margin-top: 24px;">For security, we recommend changing your password after your first login.</p>
+          </div>
+        `,
+        bodyText: `Welcome to ${firmName}\n\nYour investor account has been created. You have been assigned to ${structureName}.\n\nEmail: ${investorData.email}\nPassword: ${plainPassword}\n\nLogin at: ${loginUrl}/lp-portal/login\n\nFor security, we recommend changing your password after your first login.`
+      });
+      emailSent = true;
+      console.log('[Investor Route] Welcome email sent to:', investorData.email);
+    } catch (emailError) {
+      console.error('[Investor Route] Failed to send welcome email:', emailError.message);
+      // Don't fail the request if email fails - investor was still created
+    }
+  }
 
   res.status(201).json({
     success: true,
-    message: 'Investor profile created successfully',
-    data: investor
+    message: newUserCreated
+      ? `Investor profile and user account created successfully${emailSent ? '. Welcome email sent.' : '.'}`
+      : 'Investor profile created successfully',
+    data: investor,
+    userCreated: newUserCreated,
+    emailSent
   });
 }));
 
@@ -487,7 +674,9 @@ router.get('/:id/with-structures', authenticate, catchAsync(async (req, res) => 
       lastName: user.lastName,
       email: user.email,
       role: user.role,
-      isActive: user.isActive
+      isActive: user.isActive,
+      kycId: user.kycId,
+      kycStatus: user.kycStatus
     },
     structure: structure ? {
       id: structure.id,
@@ -539,14 +728,16 @@ router.get('/:id/portfolio', authenticate, catchAsync(async (req, res) => {
 /**
  * @route   GET /api/investors/:id/commitments
  * @desc    Get investor commitments with detailed structure information
- * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
+ * @access  Private (requires authentication, Investors can only access their own data)
  */
 router.get('/:id/commitments', authenticate, catchAsync(async (req, res) => {
   const { id } = req.params;
-  const { userRole } = getUserContext(req);
+  const { userRole, userId } = getUserContext(req);
 
-  // Block INVESTOR role from accessing this endpoint
-  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
+  // Investors can only access their own commitments data
+  if (userRole === ROLES.INVESTOR) {
+    validate(id === userId, 'Access denied. You can only view your own commitments.');
+  }
 
   // Validate UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -684,14 +875,10 @@ router.get('/me/capital-calls-summary', authenticate, catchAsync(async (req, res
 /**
  * @route   GET /api/investors/me/capital-calls
  * @desc    Get authenticated user's capital calls with structures and summary
- * @access  Private (requires authentication, Root/Admin/Support/Guest only - Investor role blocked)
+ * @access  Private (requires authentication, all roles - users can only access their own data)
  */
 router.get('/me/capital-calls', authenticate, catchAsync(async (req, res) => {
   const userId = req.auth?.userId || req.user?.id;
-  const { userRole } = getUserContext(req);
-
-  // Block INVESTOR role from accessing this endpoint
-  validate(userRole !== ROLES.INVESTOR, 'Access denied. Investor role cannot access this endpoint.');
 
   const user = await User.findById(userId);
   validate(user, 'User not found');
@@ -708,6 +895,349 @@ router.get('/me/capital-calls', authenticate, catchAsync(async (req, res) => {
       userName: investorName,
       userEmail: user.email,
       ...capitalCallsData
+    }
+  });
+}));
+
+/**
+ * @route   GET /api/investors/me/capital-calls/:capitalCallId
+ * @desc    Get specific capital call details for the authenticated investor (LP Portal payment page)
+ * @access  Private (requires authentication, Investor role only)
+ */
+router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const { userRole } = getUserContext(req);
+  const { capitalCallId } = req.params;
+  const supabase = getSupabase();
+
+  // Allow only INVESTOR role to access this endpoint
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  validate(uuidRegex.test(capitalCallId), 'Invalid capital call ID format');
+
+  const user = await User.findById(userId);
+  validate(user, 'User not found');
+
+  // Get the capital call with full structure info (including bank details and crypto for payment)
+  const { data: capitalCall, error: ccError } = await supabase
+    .from('capital_calls')
+    .select(`
+      *,
+      structures:structure_id (
+        id,
+        name,
+        type,
+        base_currency,
+        local_bank_name,
+        local_account_holder,
+        local_account_bank,
+        local_routing_bank,
+        local_tax_id,
+        local_bank_address,
+        international_bank_name,
+        international_holder_name,
+        international_account_bank,
+        international_swift,
+        international_bank_address,
+        wallet_address,
+        blockchain_network
+      )
+    `)
+    .eq('id', capitalCallId)
+    .single();
+
+  if (ccError) {
+    if (ccError.code === 'PGRST116') {
+      return res.status(404).json({
+        success: false,
+        message: 'Capital call not found'
+      });
+    }
+    throw new Error(`Error fetching capital call: ${ccError.message}`);
+  }
+
+  // Get the investor's allocation for this capital call
+  const { data: allocation, error: allocError } = await supabase
+    .from('capital_call_allocations')
+    .select('*')
+    .eq('capital_call_id', capitalCallId)
+    .eq('user_id', userId)
+    .single();
+
+  if (allocError && allocError.code !== 'PGRST116') {
+    throw new Error(`Error fetching allocation: ${allocError.message}`);
+  }
+
+  // Verify the investor has access to this capital call (has an allocation)
+  if (!allocation) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. You do not have an allocation for this capital call.'
+    });
+  }
+
+  // Build response with capital call details and investor's allocation
+  const struct = capitalCall.structures;
+  const response = {
+    id: capitalCall.id,
+    structureId: capitalCall.structure_id,
+    structureName: struct?.name || 'Unknown Structure',
+    structureType: struct?.type,
+    currency: struct?.base_currency || 'USD',
+    callNumber: capitalCall.call_number,
+    callDate: capitalCall.call_date,
+    dueDate: capitalCall.due_date,
+    noticeDate: capitalCall.notice_date,
+    deadlineDate: capitalCall.deadline_date,
+    status: capitalCall.status,
+    purpose: capitalCall.purpose,
+    notes: capitalCall.notes,
+    // Fee configuration
+    managementFeeBase: capitalCall.management_fee_base,
+    managementFeeRate: capitalCall.management_fee_rate,
+    vatRate: capitalCall.vat_rate,
+    vatApplicable: capitalCall.vat_applicable,
+    feePeriod: capitalCall.fee_period,
+    // Structure with bank details and crypto for payment
+    structure: struct ? {
+      id: struct.id,
+      name: struct.name,
+      type: struct.type,
+      baseCurrency: struct.base_currency,
+      // Local bank details
+      localBankName: struct.local_bank_name,
+      localAccountHolder: struct.local_account_holder,
+      localAccountBank: struct.local_account_bank,
+      localRoutingBank: struct.local_routing_bank,
+      localTaxId: struct.local_tax_id,
+      localBankAddress: struct.local_bank_address,
+      // International bank details
+      internationalBankName: struct.international_bank_name,
+      internationalHolderName: struct.international_holder_name,
+      internationalAccountBank: struct.international_account_bank,
+      internationalSwift: struct.international_swift,
+      internationalBankAddress: struct.international_bank_address,
+      // Stablecoin payment details
+      walletAddress: struct.wallet_address,
+      blockchainNetwork: struct.blockchain_network
+    } : null,
+    // Investor's allocation details
+    allocation: {
+      id: allocation.id,
+      // Original amounts due
+      allocatedAmount: parseFloat(allocation.allocated_amount) || 0,
+      capitalAmount: parseFloat(allocation.principal_amount) || 0,
+      managementFee: parseFloat(allocation.management_fee_net) || 0,
+      vatAmount: parseFloat(allocation.vat_amount) || 0,
+      totalDue: parseFloat(allocation.total_due) || 0,
+      // Total paid
+      paidAmount: parseFloat(allocation.paid_amount) || 0,
+      outstanding: (parseFloat(allocation.total_due) || 0) - (parseFloat(allocation.paid_amount) || 0),
+      // Payment breakdown (for commitment tracking)
+      capitalPaid: parseFloat(allocation.capital_paid) || 0,
+      feesPaid: parseFloat(allocation.fees_paid) || 0,
+      vatPaid: parseFloat(allocation.vat_paid) || 0,
+      // Outstanding breakdown
+      capitalOutstanding: (parseFloat(allocation.principal_amount) || 0) - (parseFloat(allocation.capital_paid) || 0),
+      feesOutstanding: (parseFloat(allocation.management_fee_net) || 0) - (parseFloat(allocation.fees_paid) || 0),
+      vatOutstanding: (parseFloat(allocation.vat_amount) || 0) - (parseFloat(allocation.vat_paid) || 0),
+      // Status and other
+      status: allocation.status,
+      ownershipPercent: parseFloat(allocation.ownership_percent) || 0,
+      feeDiscount: parseFloat(allocation.fee_discount) || 0,
+      vatExempt: allocation.vat_exempt || false
+    },
+    // Investor info
+    investor: {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      displayName: User.getDisplayName(user)
+    }
+  };
+
+  res.status(200).json({
+    success: true,
+    data: response
+  });
+}));
+
+/**
+ * @route   POST /api/investors/me/capital-calls/:capitalCallId/pay
+ * @desc    Record a payment for a capital call allocation (LP Portal payment)
+ * @access  Private (requires authentication, Investor role only)
+ */
+router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const { userRole } = getUserContext(req);
+  const { capitalCallId } = req.params;
+  const { amount, paymentMethod, paymentReference, paymentDate } = req.body;
+  const supabase = getSupabase();
+
+  // Allow only INVESTOR role to access this endpoint
+  validate(userRole === ROLES.INVESTOR, 'Access denied. This endpoint is only accessible to investors (role 3)');
+
+  // Validate UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  validate(uuidRegex.test(capitalCallId), 'Invalid capital call ID format');
+
+  // Validate required fields
+  validate(amount && amount > 0, 'Valid payment amount is required');
+  validate(paymentMethod, 'Payment method is required');
+
+  const user = await User.findById(userId);
+  validate(user, 'User not found');
+
+  // Get the capital call
+  const { data: capitalCall, error: ccError } = await supabase
+    .from('capital_calls')
+    .select('*')
+    .eq('id', capitalCallId)
+    .single();
+
+  if (ccError || !capitalCall) {
+    return res.status(404).json({
+      success: false,
+      message: 'Capital call not found'
+    });
+  }
+
+  // Get the investor's allocation for this capital call
+  const { data: allocation, error: allocError } = await supabase
+    .from('capital_call_allocations')
+    .select('*')
+    .eq('capital_call_id', capitalCallId)
+    .eq('user_id', userId)
+    .single();
+
+  if (allocError || !allocation) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. You do not have an allocation for this capital call.'
+    });
+  }
+
+  // Get current amounts
+  const principalAmount = parseFloat(allocation.principal_amount) || 0;
+  const feesAmount = parseFloat(allocation.management_fee_net) || 0;
+  const vatAmount = parseFloat(allocation.vat_amount) || 0;
+  const totalDue = parseFloat(allocation.total_due) || 0;
+
+  // Current paid amounts
+  const currentPaid = parseFloat(allocation.paid_amount) || 0;
+  const currentCapitalPaid = parseFloat(allocation.capital_paid) || 0;
+  const currentFeesPaid = parseFloat(allocation.fees_paid) || 0;
+  const currentVatPaid = parseFloat(allocation.vat_paid) || 0;
+
+  // Calculate remaining amounts for each category
+  const capitalRemaining = principalAmount - currentCapitalPaid;
+  const feesRemaining = feesAmount - currentFeesPaid;
+  const vatRemaining = vatAmount - currentVatPaid;
+  const totalRemaining = capitalRemaining + feesRemaining + vatRemaining;
+
+  // Distribute payment proportionally across capital/fees/vat
+  const paymentAmount = parseFloat(amount);
+  let newCapitalPaid = currentCapitalPaid;
+  let newFeesPaid = currentFeesPaid;
+  let newVatPaid = currentVatPaid;
+
+  if (totalRemaining > 0 && paymentAmount > 0) {
+    // Calculate proportional distribution based on remaining amounts
+    const paymentRatio = Math.min(paymentAmount / totalRemaining, 1);
+
+    newCapitalPaid = currentCapitalPaid + (capitalRemaining * paymentRatio);
+    newFeesPaid = currentFeesPaid + (feesRemaining * paymentRatio);
+    newVatPaid = currentVatPaid + (vatRemaining * paymentRatio);
+
+    // Round to 2 decimal places
+    newCapitalPaid = Math.round(newCapitalPaid * 100) / 100;
+    newFeesPaid = Math.round(newFeesPaid * 100) / 100;
+    newVatPaid = Math.round(newVatPaid * 100) / 100;
+  }
+
+  const newPaidAmount = newCapitalPaid + newFeesPaid + newVatPaid;
+  const newOutstanding = totalDue - newPaidAmount;
+
+  // Determine new status
+  let newStatus = allocation.status;
+  if (newOutstanding <= 0.01) { // Allow for small rounding differences
+    newStatus = 'Paid';
+  } else if (newPaidAmount > 0) {
+    newStatus = 'Partially Paid';
+  }
+
+  // Update the allocation with payment breakdown
+  const { data: updatedAllocation, error: updateError } = await supabase
+    .from('capital_call_allocations')
+    .update({
+      paid_amount: newPaidAmount,
+      capital_paid: newCapitalPaid,
+      fees_paid: newFeesPaid,
+      vat_paid: newVatPaid,
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', allocation.id)
+    .select()
+    .single();
+
+  if (updateError) {
+    throw new Error(`Error recording payment: ${updateError.message}`);
+  }
+
+  // Log payment details for audit
+  console.log(`[Payment] Allocation ${allocation.id} updated: capital=${newCapitalPaid}, fees=${newFeesPaid}, vat=${newVatPaid}, method=${paymentMethod}, reference=${paymentReference}`);
+
+  // Update the capital call totals
+  const { data: allAllocations } = await supabase
+    .from('capital_call_allocations')
+    .select('paid_amount, total_due, capital_paid, fees_paid, vat_paid')
+    .eq('capital_call_id', capitalCallId);
+
+  const totalPaid = allAllocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
+  const totalAmount = allAllocations.reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+  // Determine capital call status
+  let ccStatus = capitalCall.status;
+  if (totalPaid >= totalAmount) {
+    ccStatus = 'Paid';
+  } else if (totalPaid > 0 && capitalCall.status !== 'Paid') {
+    ccStatus = 'Partially Paid';
+  }
+
+  await supabase
+    .from('capital_calls')
+    .update({
+      total_paid_amount: totalPaid,
+      total_unpaid_amount: totalAmount - totalPaid,
+      status: ccStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', capitalCallId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment recorded successfully',
+    data: {
+      allocationId: updatedAllocation.id,
+      // Total amounts
+      paidAmount: newPaidAmount,
+      outstanding: newOutstanding,
+      status: newStatus,
+      // Payment breakdown (for commitment tracking)
+      capitalPaid: newCapitalPaid,
+      feesPaid: newFeesPaid,
+      vatPaid: newVatPaid,
+      // Original amounts for reference
+      principalAmount,
+      feesAmount,
+      vatAmount: vatAmount,
+      // Payment info
+      paymentMethod,
+      paymentReference: paymentReference || null
     }
   });
 }));
@@ -892,13 +1422,17 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
     // Fund of Funds fields
     'fundName', 'fundManager', 'aum',
     // Family Office fields
-    'officeName', 'familyName', 'principalContact', 'assetsUnderManagement'
+    'officeName', 'familyName', 'principalContact', 'assetsUnderManagement',
+    // ILPA Fee Settings (stored in User table)
+    'feeDiscount', 'vatExempt',
+    // Custom terms (per-investor overrides, stored in investors table)
+    'customTerms'
   ];
 
   // Define field types for proper handling
   const booleanFields = ['accreditedInvestor'];
   const numberFields = ['aum', 'assetsUnderManagement'];
-  const jsonFields = ['investmentPreferences'];
+  const jsonFields = ['investmentPreferences', 'customTerms'];
 
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
@@ -939,8 +1473,27 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
 
   validate(Object.keys(updateData).length > 0, 'No valid fields provided for update');
 
-  // Update investor record
-  const updatedInvestor = await Investor.findByIdAndUpdate(id, updateData);
+  // Extract ILPA fields for User update (these are stored in users table, not investors)
+  const userIlpaFields = {};
+  if (updateData.feeDiscount !== undefined) {
+    userIlpaFields.feeDiscount = updateData.feeDiscount;
+    delete updateData.feeDiscount;
+  }
+  if (updateData.vatExempt !== undefined) {
+    userIlpaFields.vatExempt = updateData.vatExempt;
+    delete updateData.vatExempt;
+  }
+
+  // Update User record with ILPA fee settings if provided
+  if (Object.keys(userIlpaFields).length > 0 && investor.userId) {
+    await User.findByIdAndUpdate(investor.userId, userIlpaFields);
+  }
+
+  // Update investor record (if there are remaining fields)
+  let updatedInvestor = investor;
+  if (Object.keys(updateData).length > 0) {
+    updatedInvestor = await Investor.findByIdAndUpdate(id, updateData);
+  }
 
   // Build response with investor and user data
   const investorWithUser = {

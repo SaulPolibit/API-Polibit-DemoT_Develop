@@ -1172,18 +1172,66 @@ console.log('****** BODY:', body);
   async getDiditPDF(context, variables) {
     const { sessionID } = variables;
 
-    return httpClient.makeApiRequest({
-      method: 'get',
-      url: `https://verification.didit.me/v2/session/${sessionID}/generate-pdf/`,
-      headers: {
-        'Content-Type': 'application/json',
-        'accept': 'application/json',
-        'x-api-key': process.env.DIDIT_API_KEY,
-      },
-      params: {},
-      returnBody: true,
-      isStreamingApi: false,
-    });
+    // Use v1 endpoint with x-api-key - request binary PDF directly
+    try {
+      console.log('[DiDit PDF] Requesting PDF for session:', sessionID);
+
+      const response = await axios({
+        method: 'GET',
+        url: `https://verification.didit.me/v1/session/${sessionID}/generate-pdf/`,
+        headers: {
+          'x-api-key': process.env.DIDIT_API_KEY,
+        },
+        responseType: 'arraybuffer', // Request binary data directly
+        validateStatus: () => true,
+      });
+
+      console.log('[DiDit PDF] Response status:', response.status);
+      console.log('[DiDit PDF] Response content-type:', response.headers['content-type']);
+      console.log('[DiDit PDF] Response data length:', response.data?.length || 0);
+
+      if (response.status >= 400) {
+        // Try to parse error message from binary response
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorText = Buffer.from(response.data).toString('utf8');
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorJson.message || errorMessage;
+        } catch (e) {
+          // Not JSON, use status code
+        }
+
+        console.error('[DiDit PDF] Error response:', response.status, errorMessage);
+
+        return {
+          statusCode: response.status,
+          headers: response.headers,
+          body: null,
+          error: errorMessage,
+          success: false,
+        };
+      }
+
+      console.log('[DiDit PDF] PDF retrieved successfully, size:', response.data.length, 'bytes');
+
+      return {
+        statusCode: response.status,
+        headers: response.headers,
+        body: response.data, // Binary PDF data as Buffer
+        contentType: response.headers['content-type'],
+        success: true,
+        error: null,
+      };
+    } catch (error) {
+      console.error('[DiDit PDF] Request error:', error.message);
+      return {
+        statusCode: error.response?.status || 500,
+        headers: error.response?.headers,
+        body: null,
+        error: error.message,
+        success: false,
+      };
+    }
   }
 
   async deployContractERC20(context, variables) {

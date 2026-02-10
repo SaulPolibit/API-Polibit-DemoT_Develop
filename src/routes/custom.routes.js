@@ -1381,7 +1381,7 @@ router.get('/didit/session/:sessionId', authenticate, catchAsync(async (req, res
 /**
  * @route   GET /api/custom/didit/session/:sessionId/pdf
  * @desc    Get DiDit session PDF report
- * @access  Public
+ * @access  Private (Admin/Root only)
  * @params  sessionId - The DiDit session ID
  */
 router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req, res) => {
@@ -1389,31 +1389,56 @@ router.get('/didit/session/:sessionId/pdf', authenticate, catchAsync(async (req,
 
   validate(sessionId, 'sessionId is required');
 
+  // Check if user has admin permissions (role 0 or 1)
+  const userRole = req.user?.role ?? req.auth?.role;
+  if (userRole !== 0 && userRole !== 1) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Admin privileges required.'
+    });
+  }
+
+  console.log('[DiDit PDF] Fetching PDF for session:', sessionId);
+
   const context = { auth: req.auth };
   const variables = {
-    ...req.query,
     sessionID: sessionId
   };
 
   const result = await apiManager.getDiditPDF(context, variables);
 
   if (result.error) {
+    console.error('[DiDit PDF] Error:', result.error);
+
     if (result.statusCode === 404) {
       throw new NotFoundError(`PDF for session ${sessionId} not found`);
     }
-    
+
     return res.status(result.statusCode || 500).json({
       error: result.error,
-      message: 'Failed to fetch DiDit PDF',
-      details: result.body,
+      message: 'Failed to fetch PDF',
     });
   }
 
-  res.status(result.statusCode || 200).json({
-    success: true,
-    sessionId,
-    data: result.body,
-  });
+  // The response body is binary PDF data (arraybuffer from axios)
+  const pdfData = result.body;
+
+  if (!pdfData || pdfData.length === 0) {
+    return res.status(500).json({
+      error: 'Empty PDF response',
+      message: 'No PDF data received'
+    });
+  }
+
+  console.log('[DiDit PDF] Sending PDF, size:', pdfData.length, 'bytes');
+
+  // Send binary PDF directly
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="kyc-report-${sessionId}.pdf"`);
+  res.setHeader('Content-Length', pdfData.length);
+
+  // Send the raw buffer directly - no conversion needed
+  return res.end(pdfData);
 }));
 
 /**
@@ -2191,11 +2216,9 @@ router.post('/wallet/register', authenticate, catchAsync(async (req, res) => {
     // In production, you might want to add additional verification
   }
 
-  // Update user with new wallet address and type
-  const updatedUser = await User.update(req.auth.userId, {
-    wallet_address: walletAddress,
-    wallet_type: walletType,
-    signer_type: signerType
+  // Update user with new wallet address
+  const updatedUser = await User.findByIdAndUpdate(req.auth.userId, {
+    walletAddress: walletAddress
   });
 
   console.log('[Wallet Register] Wallet registered successfully for user:', req.auth.userId);
