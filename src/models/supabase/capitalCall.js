@@ -37,6 +37,11 @@ class CapitalCall {
       // Proximity Dual-Rate Fee Fields
       feeRateOnNic: 'fee_rate_on_nic',
       feeRateOnUnfunded: 'fee_rate_on_unfunded',
+      // ProximityParks Breakdown Fields (header totals)
+      totalInvestments: 'total_investments',
+      totalFundExpenses: 'total_fund_expenses',
+      totalReserves: 'total_reserves',
+      totalDrawdown: 'total_drawdown',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -84,6 +89,11 @@ class CapitalCall {
       // Proximity Dual-Rate Fee Fields
       feeRateOnNic: dbData.fee_rate_on_nic,
       feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
+      // ProximityParks Breakdown Fields (header totals)
+      totalInvestments: dbData.total_investments,
+      totalFundExpenses: dbData.total_fund_expenses,
+      totalReserves: dbData.total_reserves,
+      totalDrawdown: dbData.total_drawdown,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
@@ -711,6 +721,20 @@ class CapitalCall {
 
         const totalDue = f.principalAmount + managementFeeNet + vatAmount;
 
+        // ProximityParks breakdown: investments = principal (when not explicitly set)
+        // Fund expenses and reserves come from the capital call header if set
+        const investmentsAmount = capitalCall.totalInvestments
+          ? (capitalCall.totalInvestments * (f.si.ownership_percent / 100))
+          : f.principalAmount;
+        const fundExpensesAmount = capitalCall.totalFundExpenses
+          ? (capitalCall.totalFundExpenses * (f.si.ownership_percent / 100))
+          : 0;
+        const reservesAmount = capitalCall.totalReserves
+          ? (capitalCall.totalReserves * (f.si.ownership_percent / 100))
+          : 0;
+        // Total drawdown = investments + expenses + reserves + fees + VAT (counts toward commitment)
+        const totalDrawdown = investmentsAmount + fundExpensesAmount + reservesAmount + managementFeeNet + vatAmount;
+
         return {
           capital_call_id: capitalCallId,
           user_id: f.si.user_id,
@@ -734,7 +758,12 @@ class CapitalCall {
           nic_fee_amount: f.nicFee,
           unfunded_fee_amount: f.unfundedFee,
           fee_offset_amount: feeOffset,
-          deemed_gp_contribution: deemedGpContribution
+          deemed_gp_contribution: deemedGpContribution,
+          // ProximityParks breakdown fields
+          investments_amount: investmentsAmount,
+          fund_expenses_amount: fundExpensesAmount,
+          reserves_amount: reservesAmount,
+          total_drawdown: totalDrawdown
         };
       });
     } else {
@@ -774,6 +803,20 @@ class CapitalCall {
 
         const totalDue = principalAmount + managementFeeNet + vatAmount;
 
+        // ProximityParks breakdown: investments = principal (when not explicitly set)
+        // Fund expenses and reserves come from the capital call header if set
+        const investmentsAmount = capitalCall.totalInvestments
+          ? (capitalCall.totalInvestments * (si.ownership_percent / 100))
+          : principalAmount;
+        const fundExpensesAmount = capitalCall.totalFundExpenses
+          ? (capitalCall.totalFundExpenses * (si.ownership_percent / 100))
+          : 0;
+        const reservesAmount = capitalCall.totalReserves
+          ? (capitalCall.totalReserves * (si.ownership_percent / 100))
+          : 0;
+        // Total drawdown = investments + expenses + reserves + fees + VAT (counts toward commitment)
+        const totalDrawdown = investmentsAmount + fundExpensesAmount + reservesAmount + managementFeeNet + vatAmount;
+
         return {
           capital_call_id: capitalCallId,
           user_id: si.user_id,
@@ -792,7 +835,12 @@ class CapitalCall {
           // Payment breakdown (separate tracking for commitment vs fees)
           capital_paid: 0,
           fees_paid: 0,
-          vat_paid: 0
+          vat_paid: 0,
+          // ProximityParks breakdown fields
+          investments_amount: investmentsAmount,
+          fund_expenses_amount: fundExpensesAmount,
+          reserves_amount: reservesAmount,
+          total_drawdown: totalDrawdown
         };
       });
     }
@@ -1012,9 +1060,10 @@ class CapitalCall {
     const callIds = calls.map(c => c.id);
 
     // Get all allocations for this investor across these calls
+    // Use total_drawdown for ProximityParks methodology (counts toward commitment)
     const { data: allocations, error: allocError } = await supabase
       .from('capital_call_allocations')
-      .select('principal_amount')
+      .select('total_drawdown, total_due, principal_amount')
       .eq('user_id', userId)
       .in('capital_call_id', callIds);
 
@@ -1022,8 +1071,11 @@ class CapitalCall {
       throw new Error(`Error fetching allocations: ${allocError.message}`);
     }
 
-    // Sum the principal amounts
-    const cumulativeCalled = allocations?.reduce((sum, a) => sum + (a.principal_amount || 0), 0) || 0;
+    // Sum using total_drawdown (ProximityParks methodology)
+    // Fallback chain: total_drawdown > total_due > principal_amount
+    const cumulativeCalled = allocations?.reduce((sum, a) => {
+      return sum + (a.total_drawdown || a.total_due || a.principal_amount || 0);
+    }, 0) || 0;
 
     return cumulativeCalled;
   }
@@ -1056,6 +1108,10 @@ class CapitalCall {
           nic_fee_amount,
           unfunded_fee_amount,
           fee_offset_amount,
+          investments_amount,
+          fund_expenses_amount,
+          reserves_amount,
+          total_drawdown,
           users:user_id (
             first_name,
             last_name,
@@ -1099,7 +1155,12 @@ class CapitalCall {
         status: a.status,
         nicFeeAmount: a.nic_fee_amount,
         unfundedFeeAmount: a.unfunded_fee_amount,
-        feeOffsetAmount: a.fee_offset_amount
+        feeOffsetAmount: a.fee_offset_amount,
+        // ProximityParks breakdown fields
+        investmentsAmount: a.investments_amount,
+        fundExpensesAmount: a.fund_expenses_amount,
+        reservesAmount: a.reserves_amount,
+        totalDrawdown: a.total_drawdown
       }))
     }));
   }
@@ -1137,23 +1198,26 @@ class CapitalCall {
     const callIds = calls.map(c => c.id);
 
     // Get all allocations across these calls
+    // Use total_drawdown for ProximityParks methodology (counts toward commitment)
     const { data: allocations, error: allocError } = await supabase
       .from('capital_call_allocations')
-      .select('user_id, principal_amount')
+      .select('user_id, total_drawdown, total_due, principal_amount')
       .in('capital_call_id', callIds);
 
     if (allocError) {
       throw new Error(`Error fetching allocations: ${allocError.message}`);
     }
 
-    // Aggregate by user
+    // Aggregate by user using total_drawdown (ProximityParks methodology)
+    // Fallback chain: total_drawdown > total_due > principal_amount
     const cumulativeMap = {};
     allocations?.forEach(a => {
       const userId = a.user_id;
       if (!cumulativeMap[userId]) {
         cumulativeMap[userId] = 0;
       }
-      cumulativeMap[userId] += a.principal_amount || 0;
+      // ProximityParks: use total_drawdown which includes investments + expenses + reserves + fees + VAT
+      cumulativeMap[userId] += a.total_drawdown || a.total_due || a.principal_amount || 0;
     });
 
     return cumulativeMap;
