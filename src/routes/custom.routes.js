@@ -531,6 +531,33 @@ router.post('/mfa/enroll', authenticate, catchAsync(async (req, res) => {
     });
   }
 
+  // Clean up any pending enrollments before starting new enrollment
+  try {
+    const pendingFactors = await MFAFactor.findByUserId(userId, false); // Get all factors
+    const pendingUnverified = pendingFactors.filter(f => !f.isActive && f.factorType === factorType);
+
+    if (pendingUnverified.length > 0) {
+      console.log(`[MFA Enroll] Found ${pendingUnverified.length} pending unverified factor(s), cleaning up...`);
+
+      // Unenroll from Supabase Auth first, then delete from our database
+      for (const factor of pendingUnverified) {
+        try {
+          // Try to unenroll from Supabase (might fail if factor doesn't exist there anymore)
+          await supabase.auth.mfa.unenroll({ factorId: factor.factorId });
+          console.log(`[MFA Enroll] Unenrolled pending factor ${factor.factorId} from Supabase Auth`);
+        } catch (unenrollError) {
+          console.log(`[MFA Enroll] Failed to unenroll factor from Supabase (might not exist): ${unenrollError.message}`);
+        }
+
+        // Delete from our database
+        await MFAFactor.delete(factor.factorId);
+        console.log(`[MFA Enroll] Deleted pending factor ${factor.factorId} from database`);
+      }
+    }
+  } catch (cleanupError) {
+    console.error('[MFA Enroll] Error cleaning up pending factors:', cleanupError);
+  }
+
   // Enroll in MFA with Supabase Auth
   const { data, error } = await supabase.auth.mfa.enroll({
     factorType,
