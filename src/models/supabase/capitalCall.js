@@ -37,6 +37,8 @@ class CapitalCall {
       // Proximity Dual-Rate Fee Fields
       feeRateOnNic: 'fee_rate_on_nic',
       feeRateOnUnfunded: 'fee_rate_on_unfunded',
+      feeRateOnInvested: 'fee_rate_on_invested',
+      feeRateOnCommitted: 'fee_rate_on_committed',
       // ProximityParks Breakdown Fields (header totals)
       totalInvestments: 'total_investments',
       totalFundExpenses: 'total_fund_expenses',
@@ -89,6 +91,8 @@ class CapitalCall {
       // Proximity Dual-Rate Fee Fields
       feeRateOnNic: dbData.fee_rate_on_nic,
       feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
+      feeRateOnInvested: dbData.fee_rate_on_invested,
+      feeRateOnCommitted: dbData.fee_rate_on_committed,
       // ProximityParks Breakdown Fields (header totals)
       totalInvestments: dbData.total_investments,
       totalFundExpenses: dbData.total_fund_expenses,
