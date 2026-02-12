@@ -233,7 +233,6 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     // Proximity Dual-Rate Fee Fields
     feeRateOnNic,
     feeRateOnUnfunded,
-    feeRateOnCommitted,
     gpPercentage
   } = req.body;
 
@@ -390,7 +389,6 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     // Proximity Dual-Rate Fee Fields
     feeRateOnNic: sanitizeNumber(feeRateOnNic, null),
     feeRateOnUnfunded: sanitizeNumber(feeRateOnUnfunded, null),
-    feeRateOnCommitted: sanitizeNumber(feeRateOnCommitted, null),
     gpPercentage: sanitizeNumber(gpPercentage, null),
     createdBy: userId
   };
@@ -721,7 +719,7 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     // ILPA Fee Configuration
     'managementFeeBase', 'gpCatchUpRate',
     // Proximity Dual-Rate Fee Fields
-    'feeRateOnNic', 'feeRateOnUnfunded', 'feeRateOnCommitted', 'gpPercentage'
+    'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage'
   ];
 
   // Fields that are numeric in the database and must not receive empty strings
@@ -738,7 +736,7 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'incomeDebtTaxRateNaturalPersons', 'incomeEquityTaxRateNaturalPersons',
     'incomeDebtTaxRateLegalEntities', 'incomeEquityTaxRateLegalEntities',
     'gpCatchUpRate',
-    'feeRateOnNic', 'feeRateOnUnfunded', 'feeRateOnCommitted', 'gpPercentage'
+    'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage'
   ]);
 
   const sanitizeUpdateNumber = (value) => {

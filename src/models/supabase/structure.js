@@ -125,7 +125,6 @@ class Structure {
       // Proximity Dual-Rate Fee Fields
       feeRateOnNic: 'fee_rate_on_nic',
       feeRateOnUnfunded: 'fee_rate_on_unfunded',
-      feeRateOnCommitted: 'fee_rate_on_committed',
       gpPercentage: 'gp_percentage',
       createdBy: 'created_by',
       createdAt: 'created_at',
@@ -261,7 +260,6 @@ class Structure {
       // Proximity Dual-Rate Fee Fields
       feeRateOnNic: dbData.fee_rate_on_nic,
       feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
-      feeRateOnCommitted: dbData.fee_rate_on_committed,
       gpPercentage: dbData.gp_percentage,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
