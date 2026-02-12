@@ -42,6 +42,9 @@ const kycSessionRoutes = require('./kycSession.routes');
 // Firm Settings routes
 const firmSettingsRoutes = require('./firmSettings.routes');
 
+// Stripe routes
+const stripeRoutes = require('./stripe.routes');
+
 // ILPA Reporting routes
 const capitalAccountRoutes = require('./capitalAccount.routes');
 const feeReportRoutes = require('./feeReport.routes');
@@ -94,6 +97,9 @@ router.use('/kyc-sessions', kycSessionRoutes);
 // Mount Firm Settings routes
 router.use('/firm-settings', firmSettingsRoutes);
 
+// Mount Stripe routes
+router.use('/stripe', stripeRoutes);
+
 // Mount ILPA Reporting routes
 router.use('/capital-account', capitalAccountRoutes);
 router.use('/fee-reports', feeReportRoutes);
@@ -141,6 +147,8 @@ router.get('/', (_req, res) => {
       kycSessions: '/api/kyc-sessions',
       // Firm Settings endpoints
       firmSettings: '/api/firm-settings',
+      // Stripe endpoints
+      stripe: '/api/stripe',
       // ILPA Reporting endpoints
       capitalAccount: '/api/capital-account',
       feeReports: '/api/fee-reports',

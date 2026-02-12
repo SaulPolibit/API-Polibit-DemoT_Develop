@@ -863,6 +863,10 @@ class User {
       w9Form: dbUser.w9_form,
       // MFA
       mfaFactorId: dbUser.mfa_factor_id,
+      // Stripe Subscription
+      stripeCustomerId: dbUser.stripe_customer_id,
+      stripeSubscriptionId: dbUser.stripe_subscription_id,
+      subscriptionStatus: dbUser.subscription_status,
       // ILPA Fee Settings
       feeDiscount: dbUser.fee_discount,
       vatExempt: dbUser.vat_exempt,
@@ -960,6 +964,10 @@ class User {
       w9Form: 'w9_form',
       // MFA
       mfaFactorId: 'mfa_factor_id',
+      // Stripe Subscription
+      stripeCustomerId: 'stripe_customer_id',
+      stripeSubscriptionId: 'stripe_subscription_id',
+      subscriptionStatus: 'subscription_status',
       // ILPA Fee Settings
       feeDiscount: 'fee_discount',
       vatExempt: 'vat_exempt',
