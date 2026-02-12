@@ -678,19 +678,21 @@ class CapitalCall {
         const unfundedCommitment = commitment; // pre-call unfunded (simplified: full commitment for first call)
         const nicBase = commitment - unfundedCommitment; // prior NIC (0 for first call)
 
-        // Fee discount is subtracted from the rate per Proximity formula
-        const effectiveNicRate = Math.max(0, nicRate - feeDiscount);
-        const effectiveUnfundedRate = Math.max(0, unfundedRate - feeDiscount);
+        // Calculate individual fees at full rates (before discount)
+        const nicFeeGross = nicBase * periodFraction * (nicRate / 100);
+        const unfundedFeeGross = unfundedCommitment * periodFraction * (unfundedRate / 100);
+        const managementFeeGross = nicFeeGross + unfundedFeeGross;
 
-        // Calculate individual fees
-        const nicFee = nicBase * periodFraction * (effectiveNicRate / 100);
-        const unfundedFee = unfundedCommitment * periodFraction * (effectiveUnfundedRate / 100);
-        const managementFeeGross = nicFee + unfundedFee;
+        // Apply fee discount as multiplicative percentage: netFees = grossFees × (1 - discount/100)
+        const investorDiscountAmount = managementFeeGross * (feeDiscount / 100);
+        const nicFee = nicFeeGross * (1 - feeDiscount / 100);
+        const unfundedFee = unfundedFeeGross * (1 - feeDiscount / 100);
 
         return {
           si,
           principalAmount,
           feeDiscount,
+          investorDiscountAmount,
           vatExempt,
           nicFee,
           unfundedFee,
@@ -702,16 +704,19 @@ class CapitalCall {
       const totalFundFeeGross = investorFees.reduce((sum, f) => sum + f.managementFeeGross, 0);
 
       allocations = investorFees.map((f) => {
-        // Fee offset: proportional share of GP fee offset
+        // Management fee after investor discount (before GP offset)
+        const managementFeeAfterDiscount = f.managementFeeGross - f.investorDiscountAmount;
+
+        // Fee offset: proportional share of GP fee offset (applied after investor discount)
         let feeOffset = 0;
         let deemedGpContribution = 0;
         if (gpPercentage > 0 && totalFundFeeGross > 0) {
           // GP offset = investor's pro-rata share of fees * GP ownership percentage
-          feeOffset = f.managementFeeGross * (gpPercentage / 100);
+          feeOffset = managementFeeAfterDiscount * (gpPercentage / 100);
           deemedGpContribution = -feeOffset;
         }
 
-        const managementFeeNet = f.managementFeeGross - feeOffset;
+        const managementFeeNet = managementFeeAfterDiscount - feeOffset;
 
         // Calculate VAT if applicable
         let vatAmount = 0;
@@ -746,7 +751,7 @@ class CapitalCall {
           // ILPA Fee Breakdown
           principal_amount: f.principalAmount,
           management_fee_gross: f.managementFeeGross,
-          management_fee_discount: feeOffset,
+          management_fee_discount: f.investorDiscountAmount,
           management_fee_net: managementFeeNet,
           vat_amount: vatAmount,
           total_due: totalDue,
