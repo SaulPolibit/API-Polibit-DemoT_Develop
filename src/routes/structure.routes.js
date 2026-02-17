@@ -68,8 +68,14 @@ async function enrichStructureWithCapitalCallSummary(structure) {
     // Get all capital calls for this structure
     const capitalCalls = await CapitalCall.findByStructureId(structure.id);
 
-    // Calculate summary metrics
-    const totalCalled = capitalCalls.reduce((sum, cc) => sum + (cc.totalCallAmount || 0), 0);
+    // Calculate summary metrics using total_drawdown from allocations (includes fees + VAT for ProximityParks methodology)
+    const totalCalled = capitalCalls.reduce((sum, cc) => {
+      // Sum total_drawdown from all allocations, fallback to total_due, then totalCallAmount
+      const callDrawdown = (cc.allocations || []).reduce((allocSum, alloc) => {
+        return allocSum + (alloc.total_drawdown || alloc.totalDrawdown || alloc.total_due || alloc.totalDue || 0);
+      }, 0);
+      return sum + (callDrawdown || cc.totalCallAmount || 0);
+    }, 0);
     const totalPaid = capitalCalls.reduce((sum, cc) => sum + (cc.totalPaidAmount || 0), 0);
     const callCount = capitalCalls.length;
     const lastCall = capitalCalls[0]; // Already sorted by date desc from findByStructureId

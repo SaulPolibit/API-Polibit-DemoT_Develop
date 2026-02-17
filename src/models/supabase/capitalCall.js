@@ -162,6 +162,7 @@ class CapitalCall {
         management_fee_net,
         vat_amount,
         total_due,
+        total_drawdown,
         allocated_amount,
         paid_amount,
         capital_paid,

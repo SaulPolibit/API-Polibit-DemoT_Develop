@@ -241,8 +241,14 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
   // Get cumulative called amounts per investor
   const cumulativeCalled = await CapitalCall.getCumulativeCalledByStructure(structureId);
 
-  // Calculate totals
-  const totalCalled = history.reduce((sum, call) => sum + (call.totalCallAmount || 0), 0);
+  // Calculate totals using total_drawdown from allocations (includes fees + VAT for ProximityParks methodology)
+  const totalCalled = history.reduce((sum, call) => {
+    // Sum total_drawdown from all allocations, fallback to totalDue, then totalCallAmount
+    const callDrawdown = (call.allocations || []).reduce((allocSum, alloc) => {
+      return allocSum + (alloc.totalDrawdown || alloc.totalDue || 0);
+    }, 0);
+    return sum + (callDrawdown || call.totalCallAmount || 0);
+  }, 0);
   const totalPaid = history.reduce((sum, call) => sum + (call.totalPaidAmount || 0), 0);
 
   res.status(200).json({
