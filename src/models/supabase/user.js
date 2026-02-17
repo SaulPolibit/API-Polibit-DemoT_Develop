@@ -867,6 +867,10 @@ class User {
       stripeCustomerId: dbUser.stripe_customer_id,
       stripeSubscriptionId: dbUser.stripe_subscription_id,
       subscriptionStatus: dbUser.subscription_status,
+      // Stripe Connect fields (for investors)
+      stripeAccountId: dbUser.stripe_account_id,
+      stripeOnboardingComplete: dbUser.stripe_onboarding_complete,
+      stripeAccountStatus: dbUser.stripe_account_status,
       // ILPA Fee Settings
       feeDiscount: dbUser.fee_discount,
       vatExempt: dbUser.vat_exempt,
@@ -968,6 +972,10 @@ class User {
       stripeCustomerId: 'stripe_customer_id',
       stripeSubscriptionId: 'stripe_subscription_id',
       subscriptionStatus: 'subscription_status',
+      // Stripe Connect fields (for investors)
+      stripeAccountId: 'stripe_account_id',
+      stripeOnboardingComplete: 'stripe_onboarding_complete',
+      stripeAccountStatus: 'stripe_account_status',
       // ILPA Fee Settings
       feeDiscount: 'fee_discount',
       vatExempt: 'vat_exempt',

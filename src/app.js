@@ -125,10 +125,16 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(path.join(__dirname, '../uploads')));
 
 // ===== BODY PARSING MIDDLEWARE =====
-// Handle Stripe webhook with raw body (must be before JSON parser)
+// Handle Stripe webhooks with raw body (must be before JSON parser)
+// Stripe webhooks need raw body for signature verification
 app.use((req, res, next) => {
-  if (req.originalUrl === '/api/stripe/webhook') {
-    next();
+  const webhookRoutes = [
+    '/api/stripe/webhook',           // Stripe Subscriptions webhook
+    '/api/stripe/webhook-connect'    // Stripe Connect webhook
+  ];
+
+  if (webhookRoutes.some(route => req.originalUrl.startsWith(route))) {
+    express.raw({ type: 'application/json' })(req, res, next);
   } else {
     express.json({ limit: '10mb', strict: true })(req, res, next);
   }
