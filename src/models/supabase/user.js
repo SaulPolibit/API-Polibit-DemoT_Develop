@@ -135,6 +135,10 @@ class User {
       // Mexican Banking (Bank Planilla)
       clabe: userData.clabe || null,
       rfc: userData.rfc || null,
+      // Bank Account Details (for distributions)
+      bank_name: userData.bankName || null,
+      bank_account_number: userData.bankAccountNumber || null,
+      bank_routing_number: userData.bankRoutingNumber || null,
     };
 
     // Include ID if provided (for Supabase Auth integration)
@@ -881,6 +885,10 @@ class User {
       // Mexican Banking (Bank Planilla)
       clabe: dbUser.clabe,
       rfc: dbUser.rfc,
+      // Bank Account Details (for distributions)
+      bankName: dbUser.bank_name,
+      bankAccountNumber: dbUser.bank_account_number,
+      bankRoutingNumber: dbUser.bank_routing_number,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -986,6 +994,10 @@ class User {
       // Mexican Banking (Bank Planilla)
       clabe: 'clabe',
       rfc: 'rfc',
+      // Bank Account Details (for distributions)
+      bankName: 'bank_name',
+      bankAccountNumber: 'bank_account_number',
+      bankRoutingNumber: 'bank_routing_number',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {

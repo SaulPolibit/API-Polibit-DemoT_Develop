@@ -327,6 +327,10 @@ router.get('/profile', authenticate, catchAsync(async (req, res) => {
       // Tax fields
       taxClassification: user.taxClassification,
       w9Form: user.w9Form,
+      // Bank Account Details (for distributions)
+      bankName: user.bankName,
+      bankAccountNumber: user.bankAccountNumber,
+      bankRoutingNumber: user.bankRoutingNumber,
     }
   });
 }));
@@ -379,7 +383,11 @@ router.put('/profile', authenticate, catchAsync(async (req, res) => {
     principalContact,
     assetsUnderManagement,
     // Tax fields
-    taxClassification
+    taxClassification,
+    // Bank Account Details (for distributions)
+    bankName,
+    bankAccountNumber,
+    bankRoutingNumber
   } = req.body;
 
   // Get user ID from authenticated token
@@ -629,6 +637,19 @@ router.put('/profile', authenticate, catchAsync(async (req, res) => {
     updateData.taxClassification = taxClassification;
   }
 
+  // Bank Account Details (for distributions)
+  if (bankName !== undefined && bankName !== null) {
+    updateData.bankName = bankName;
+  }
+
+  if (bankAccountNumber !== undefined && bankAccountNumber !== null) {
+    updateData.bankAccountNumber = bankAccountNumber;
+  }
+
+  if (bankRoutingNumber !== undefined && bankRoutingNumber !== null) {
+    updateData.bankRoutingNumber = bankRoutingNumber;
+  }
+
   // Update user in database
   const updatedUser = await User.findByIdAndUpdate(userId, updateData);
 
@@ -688,6 +709,10 @@ router.put('/profile', authenticate, catchAsync(async (req, res) => {
       // Tax fields
       taxClassification: updatedUser.taxClassification,
       w9Form: updatedUser.w9Form,
+      // Bank Account Details (for distributions)
+      bankName: updatedUser.bankName,
+      bankAccountNumber: updatedUser.bankAccountNumber,
+      bankRoutingNumber: updatedUser.bankRoutingNumber,
     }
   });
 }));
