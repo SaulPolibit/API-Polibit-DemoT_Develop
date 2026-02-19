@@ -1193,6 +1193,10 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
       // Tax fields
       taxClassification: user.taxClassification,
       w9Form: user.w9Form,
+      // Bank Account Details (for distributions)
+      bankName: user.bankName,
+      bankAccountNumber: user.bankAccountNumber,
+      bankRoutingNumber: user.bankRoutingNumber,
       // Timestamps
       lastLogin: user.lastLogin,
       createdAt: user.createdAt,
