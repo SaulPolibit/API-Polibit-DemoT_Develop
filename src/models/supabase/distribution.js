@@ -29,6 +29,7 @@ class Distribution {
       refinancingProceeds: 'refinancing_proceeds',
       bankInterest: 'bank_interest',
       assetDisposal: 'asset_disposal',
+      reinvestment: 'reinvestment',
       // Source breakdown
       sourceEquityGain: 'source_equity_gain',
       sourceDebtInterest: 'source_debt_interest',
@@ -84,6 +85,7 @@ class Distribution {
       refinancingProceeds: dbData.refinancing_proceeds,
       bankInterest: dbData.bank_interest,
       assetDisposal: dbData.asset_disposal,
+      reinvestment: dbData.reinvestment,
       // Source breakdown
       sourceEquityGain: dbData.source_equity_gain,
       sourceDebtInterest: dbData.source_debt_interest,
