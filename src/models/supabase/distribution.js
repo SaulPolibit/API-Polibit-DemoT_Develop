@@ -30,6 +30,11 @@ class Distribution {
       bankInterest: 'bank_interest',
       assetDisposal: 'asset_disposal',
       reinvestment: 'reinvestment',
+      // Notice and payment fields
+      dayOfNotice: 'day_of_notice',
+      businessDays: 'business_days',
+      paymentDateDeadline: 'payment_date_deadline',
+      description: 'description',
       // Source breakdown
       sourceEquityGain: 'source_equity_gain',
       sourceDebtInterest: 'source_debt_interest',
@@ -86,6 +91,11 @@ class Distribution {
       bankInterest: dbData.bank_interest,
       assetDisposal: dbData.asset_disposal,
       reinvestment: dbData.reinvestment,
+      // Notice and payment fields
+      dayOfNotice: dbData.day_of_notice,
+      businessDays: dbData.business_days,
+      paymentDateDeadline: dbData.payment_date_deadline,
+      description: dbData.description,
       // Source breakdown
       sourceEquityGain: dbData.source_equity_gain,
       sourceDebtInterest: dbData.source_debt_interest,
