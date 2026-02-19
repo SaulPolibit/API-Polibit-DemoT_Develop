@@ -21,6 +21,14 @@ class Distribution {
       source: 'source',
       notes: 'notes',
       investmentId: 'investment_id',
+      // Period fields
+      startOfPeriod: 'start_of_period',
+      endOfPeriod: 'end_of_period',
+      // Distribution breakdown fields
+      noi: 'noi',
+      refinancingProceeds: 'refinancing_proceeds',
+      bankInterest: 'bank_interest',
+      assetDisposal: 'asset_disposal',
       // Source breakdown
       sourceEquityGain: 'source_equity_gain',
       sourceDebtInterest: 'source_debt_interest',
@@ -68,6 +76,14 @@ class Distribution {
       source: dbData.source,
       notes: dbData.notes,
       investmentId: dbData.investment_id,
+      // Period fields
+      startOfPeriod: dbData.start_of_period,
+      endOfPeriod: dbData.end_of_period,
+      // Distribution breakdown fields
+      noi: dbData.noi,
+      refinancingProceeds: dbData.refinancing_proceeds,
+      bankInterest: dbData.bank_interest,
+      assetDisposal: dbData.asset_disposal,
       // Source breakdown
       sourceEquityGain: dbData.source_equity_gain,
       sourceDebtInterest: dbData.source_debt_interest,
