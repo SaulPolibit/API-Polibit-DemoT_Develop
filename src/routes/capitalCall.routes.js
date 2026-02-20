@@ -177,15 +177,14 @@ router.get('/:id/with-allocations', authenticate, requireInvestmentManagerAccess
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
-  const capitalCall = await CapitalCall.findById(id);
-  validate(capitalCall, 'Capital call not found');
+  // Use findWithAllocations directly (same join pattern as find() which works on list page)
+  const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
+  validate(capitalCallWithAllocations, 'Capital call not found');
 
   // Root can access any capital call, Admin can only access their own
   if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
+    validate(capitalCallWithAllocations.createdBy === userId, 'Unauthorized access to capital call');
   }
-
-  const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
 
   res.status(200).json({
     success: true,
