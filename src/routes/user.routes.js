@@ -5,13 +5,51 @@
 const express = require('express');
 const { authenticate, createToken } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { User } = require('../models/supabase');
+const { User, Notification, NotificationSettings } = require('../models/supabase');
 const { requireRootAccess, ROLES, getUserContext } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
 const { uploadProfileImage, uploadDocument } = require('../middleware/upload');
 const { uploadToSupabase, deleteFromSupabase } = require('../utils/fileUpload');
 
 const router = express.Router();
+
+/**
+ * Helper function to create security alert notification
+ * @param {string} userId - User ID
+ * @param {string} alertType - Type of security alert
+ * @param {string} title - Notification title
+ * @param {string} message - Notification message
+ */
+async function createSecurityAlertNotification(userId, alertType, title, message) {
+  try {
+    // Check if user has security alerts enabled
+    const settings = await NotificationSettings.findByUserId(userId);
+    // Default to sending if no settings found or securityAlerts is not explicitly false
+    const shouldSend = !settings || settings.securityAlerts !== false;
+
+    if (!shouldSend) {
+      console.log(`[Security Alert] User ${userId} has security alerts disabled, skipping notification`);
+      return;
+    }
+
+    await Notification.create({
+      userId,
+      notificationType: 'security_alert',
+      channel: 'portal',
+      title,
+      message,
+      priority: 'high',
+      metadata: {
+        alertType,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    console.log(`[Security Alert] Notification created for user ${userId} - ${alertType}`);
+  } catch (error) {
+    console.error('[Security Alert] Error creating notification:', error.message);
+  }
+}
 
 /**
  * @route   POST /api/users/register
@@ -469,6 +507,7 @@ router.put('/profile', authenticate, catchAsync(async (req, res) => {
 
     // Also update in users table for backward compatibility
     updateData.password = newPassword;
+    updateData._passwordChanged = true; // Flag to trigger notification
   }
 
   // Update other fields if provided and not empty
@@ -649,9 +688,22 @@ router.put('/profile', authenticate, catchAsync(async (req, res) => {
   if (bankRoutingNumber !== undefined && bankRoutingNumber !== null) {
     updateData.bankRoutingNumber = bankRoutingNumber;
   }
+  // Check if password was changed for notification
+  const passwordChanged = updateData._passwordChanged;
+  delete updateData._passwordChanged; // Remove flag before saving
 
   // Update user in database
   const updatedUser = await User.findByIdAndUpdate(userId, updateData);
+
+  // Send security notification if password was changed
+  if (passwordChanged) {
+    await createSecurityAlertNotification(
+      userId,
+      'password_changed',
+      'Password Changed',
+      'Your account password has been successfully changed. If you did not make this change, please contact support immediately.'
+    );
+  }
 
   res.status(200).json({
     success: true,

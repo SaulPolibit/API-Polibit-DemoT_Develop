@@ -10,7 +10,7 @@ const {
   validate,
   NotFoundError
 } = require('../middleware/errorHandler');
-const { User, MFAFactor, SmartContract } = require('../models/supabase');
+const { User, MFAFactor, SmartContract, Notification, NotificationSettings } = require('../models/supabase');
 const { getSupabase } = require('../config/database');
 
 const router = express.Router();
@@ -167,6 +167,44 @@ const getOrCreateSupabaseAuthUser = async (supabase, email, prosperaId) => {
     return { session: null, user: null, error };
   }
 };
+
+/**
+ * Helper function to create security alert notification
+ * @param {string} userId - User ID
+ * @param {string} alertType - Type of security alert (mfa_enabled, mfa_disabled, password_changed)
+ * @param {string} title - Notification title
+ * @param {string} message - Notification message
+ */
+async function createSecurityAlertNotification(userId, alertType, title, message) {
+  try {
+    // Check if user has security alerts enabled
+    const settings = await NotificationSettings.findByUserId(userId);
+    // Default to sending if no settings found or securityAlerts is not explicitly false
+    const shouldSend = !settings || settings.securityAlerts !== false;
+
+    if (!shouldSend) {
+      console.log(`[Security Alert] User ${userId} has security alerts disabled, skipping notification`);
+      return;
+    }
+
+    await Notification.create({
+      userId,
+      notificationType: 'security_alert',
+      channel: 'portal',
+      title,
+      message,
+      priority: 'high',
+      metadata: {
+        alertType,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    console.log(`[Security Alert] Notification created for user ${userId} - ${alertType}`);
+  } catch (error) {
+    console.error('[Security Alert] Error creating notification:', error.message);
+  }
+}
 
 // ===== LOGIN API ENDPOINTS =====
 
@@ -784,6 +822,14 @@ Security Team
       // Don't fail the request if email fails
     }
 
+    // Create in-app security notification
+    await createSecurityAlertNotification(
+      userId,
+      'mfa_enabled',
+      'Two-Factor Authentication Enabled',
+      'Two-factor authentication has been successfully enabled on your account. Your account is now more secure.'
+    );
+
     res.status(200).json({
       success: true,
       message: 'MFA enrollment verified and activated successfully',
@@ -999,6 +1045,14 @@ Security Team
     console.error('[MFA] Failed to send security notification:', emailError);
     // Don't fail the request if email fails
   }
+
+  // Create in-app security notification
+  await createSecurityAlertNotification(
+    userId,
+    'mfa_disabled',
+    'Two-Factor Authentication Disabled',
+    'Two-factor authentication has been disabled on your account. We recommend keeping 2FA enabled for better security.'
+  );
 
   res.status(200).json({
     success: true,

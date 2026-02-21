@@ -50,6 +50,9 @@ const KycSession = require('./kycSession');
 // Firm Settings models
 const FirmSettings = require('./firmSettings');
 
+// Notification System models
+const Notification = require('./notification');
+
 module.exports = {
   // Core models
   User,
@@ -99,4 +102,7 @@ module.exports = {
 
   // Firm Settings models
   FirmSettings,
+
+  // Notification System models
+  Notification,
 };

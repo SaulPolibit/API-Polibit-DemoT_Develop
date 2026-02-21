@@ -5,7 +5,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { Structure, StructureAdmin, User, CapitalCall, StructureInvestor } = require('../models/supabase');
+const { Structure, StructureAdmin, User, CapitalCall, StructureInvestor, Notification, NotificationSettings } = require('../models/supabase');
 const SmartContract = require('../models/supabase/smartContract');
 const {
   requireInvestmentManagerAccess,
@@ -403,6 +403,61 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
 
   // Enrich with smart contract data
   const enrichedStructure = await enrichStructureWithSmartContract(structure);
+
+  // Create notifications for investors (role 3) based on their notification settings
+  try {
+    const investors = await User.find({ role: ROLES.INVESTOR });
+    if (investors && investors.length > 0) {
+      // Filter investors based on their notification settings
+      const investorsToNotify = [];
+
+      for (const investor of investors) {
+        try {
+          const settings = await NotificationSettings.findByUserId(investor.id);
+          // Default to sending if no settings found or newStructureNotifications is not explicitly false
+          const shouldNotify = !settings || settings.newStructureNotifications !== false;
+
+          if (shouldNotify) {
+            investorsToNotify.push(investor);
+          } else {
+            console.log(`[Structure] User ${investor.id} has newStructureNotifications disabled, skipping`);
+          }
+        } catch (settingsError) {
+          // If error checking settings, include investor by default
+          console.log(`[Structure] Error checking settings for ${investor.id}, including by default`);
+          investorsToNotify.push(investor);
+        }
+      }
+
+      if (investorsToNotify.length > 0) {
+        console.log(`[Structure] Notifying ${investorsToNotify.length} of ${investors.length} investors about new structure`);
+
+        const notificationsData = investorsToNotify.map(investor => ({
+          userId: investor.id,
+          notificationType: 'new_investment',
+          channel: 'portal',
+          title: 'New Investment Opportunity',
+          message: `A new investment structure "${structure.name}" is now available. Check the marketplace for details.`,
+          priority: 'normal',
+          relatedEntityType: 'structure',
+          relatedEntityId: structure.id,
+          senderId: userId,
+          actionUrl: `/lp-portal/marketplace/${structure.id}`,
+          metadata: {
+            structureId: structure.id,
+            structureName: structure.name,
+            structureType: structure.type
+          }
+        }));
+
+        await Notification.createMany(notificationsData);
+        console.log(`[Structure] Created ${notificationsData.length} notifications for new structure ${structure.id}`);
+      }
+    }
+  } catch (notifyError) {
+    // Log error but don't fail structure creation
+    console.error('[Structure] Error creating notifications:', notifyError.message);
+  }
 
   res.status(201).json({
     success: true,
