@@ -580,7 +580,8 @@ router.get('/me/with-structures', authenticate, catchAsync(async (req, res) => {
           totalInvested: structure.totalInvested,
           description: structure.description,
           currentInvestors: structure.currentInvestors,
-          currentInvestments: structure.currentInvestments
+          currentInvestments: structure.currentInvestments,
+          enableCapitalCalls: structure.enableCapitalCalls || false
         } : null
       };
     })
