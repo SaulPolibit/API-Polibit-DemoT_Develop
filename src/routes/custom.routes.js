@@ -319,6 +319,14 @@ router.post('/login', catchAsync(async (req, res) => {
     role: user.role
   });
 
+  // Create security alert notification for new login
+  await createSecurityAlertNotification(
+    user.id,
+    'new_login',
+    'New Login Detected',
+    `A new login to your account was detected on ${new Date().toLocaleString()}.`
+  );
+
   res.status(200).json({
     success: true,
     message: 'Login successful',
@@ -451,6 +459,14 @@ router.post('/mfa/login-verify', mfaVerifyLimiter, catchAsync(async (req, res) =
       email: user.email,
       role: user.role
     });
+
+    // Create security alert notification for new login (with MFA)
+    await createSecurityAlertNotification(
+      user.id,
+      'new_login',
+      'New Login Detected',
+      `A new login to your account was detected on ${new Date().toLocaleString()} (MFA verified).`
+    );
 
     // Return success response with token and user data (same as login)
     res.status(200).json({
