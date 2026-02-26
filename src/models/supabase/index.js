@@ -18,6 +18,7 @@ const CapitalCall = require('./capitalCall');
 const Distribution = require('./distribution');
 const WaterfallTier = require('./waterfallTier');
 const Document = require('./document');
+const DrawdownNoticeTemplate = require('./drawdownNoticeTemplate');
 
 // Chat System models
 const Conversation = require('./conversation');
@@ -74,6 +75,7 @@ module.exports = {
   Distribution,
   WaterfallTier,
   Document,
+  DrawdownNoticeTemplate,
 
   // Chat System models
   Conversation,
