@@ -50,6 +50,9 @@ const capitalAccountRoutes = require('./capitalAccount.routes');
 const feeReportRoutes = require('./feeReport.routes');
 const ilpaReportRoutes = require('./ilpaReport.routes');
 
+// Presence routes
+const presenceRoutes = require('./presence.routes');
+
 const router = express.Router();
 
 // Mount route modules
@@ -105,6 +108,9 @@ router.use('/capital-account', capitalAccountRoutes);
 router.use('/fee-reports', feeReportRoutes);
 router.use('/ilpa-reports', ilpaReportRoutes);
 
+// Mount Presence routes
+router.use('/presence', presenceRoutes);
+
 // Root API endpoint
 router.get('/', (_req, res) => {
   res.json({
@@ -153,6 +159,8 @@ router.get('/', (_req, res) => {
       capitalAccount: '/api/capital-account',
       feeReports: '/api/fee-reports',
       ilpaReports: '/api/ilpa-reports',
+      // Presence endpoints
+      presence: '/api/presence',
     },
   });
 });

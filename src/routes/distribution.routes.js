@@ -10,6 +10,7 @@ const ApprovalHistory = require('../models/supabase/approvalHistory');
 const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
 const { generateDistributionNoticePDF, generateIndividualDistributionNoticePDF } = require('../services/documentGenerator');
 const { sendEmail } = require('../utils/emailSender');
+const { sendDistributionNotice } = require('../utils/notificationHelper');
 
 /**
  * Helper to get firm name for whitelabeling
@@ -286,7 +287,7 @@ router.post('/:id/apply-waterfall', authenticate, requireInvestmentManagerAccess
 
 /**
  * @route   PATCH /api/distributions/:id/mark-paid
- * @desc    Mark distribution as paid
+ * @desc    Mark distribution as paid and notify investors
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.patch('/:id/mark-paid', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
@@ -302,6 +303,18 @@ router.patch('/:id/mark-paid', authenticate, requireInvestmentManagerAccess, cat
   }
 
   const updatedDistribution = await Distribution.markAsPaid(id);
+
+  // Get structure for notification
+  const structure = await Structure.findById(distribution.structureId);
+
+  // Send notifications to all investors in the structure
+  sendDistributionNotice(updatedDistribution, structure, userId)
+    .then(notifications => {
+      console.log(`[Distribution] Sent ${notifications.length} notifications for distribution:`, id);
+    })
+    .catch(error => {
+      console.error('[Distribution] Error sending notifications:', error.message);
+    });
 
   res.status(200).json({
     success: true,

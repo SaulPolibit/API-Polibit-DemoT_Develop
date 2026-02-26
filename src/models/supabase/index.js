@@ -53,6 +53,9 @@ const FirmSettings = require('./firmSettings');
 // Notification System models
 const Notification = require('./notification');
 
+// Presence System models
+const { Presence, STATUSES: PRESENCE_STATUSES } = require('./presence');
+
 module.exports = {
   // Core models
   User,
@@ -105,4 +108,8 @@ module.exports = {
 
   // Notification System models
   Notification,
+
+  // Presence System models
+  Presence,
+  PRESENCE_STATUSES,
 };
