@@ -168,12 +168,6 @@ class ProsperapOAuthService {
 
       // Use the provided redirectUri or fallback to LP Portal login
       const callbackUri = redirectUri || `${process.env.FRONTEND_URL}/lp-portal/login`;
-      console.log('[Prospera OAuth] ==========================================');
-      console.log('[Prospera OAuth] TOKEN EXCHANGE - Redirect URI Debug:');
-      console.log('[Prospera OAuth] - Provided redirectUri:', redirectUri);
-      console.log('[Prospera OAuth] - Using callbackUri:', callbackUri);
-      console.log('[Prospera OAuth] - FRONTEND_URL env:', process.env.FRONTEND_URL);
-      console.log('[Prospera OAuth] ==========================================');
 
       // Exchange code for tokens
       const tokenSet = await this.client.callback(
@@ -187,8 +181,7 @@ class ProsperapOAuthService {
       // Get user information
       const userinfo = await this.client.userinfo(tokenSet.access_token);
 
-      console.log('[Prospera OAuth] ✓ User info retrieved');
-      console.log('[Prospera OAuth] User email:', userinfo.email);
+      console.log('[Prospera OAuth] User info retrieved');
 
       return {
         accessToken: tokenSet.access_token,
@@ -224,7 +217,7 @@ class ProsperapOAuthService {
 
       const tokenSet = await this.client.refresh(refreshToken);
 
-      console.log('[Prospera OAuth] ✓ Token refresh successful');
+      console.log('[Prospera OAuth] Token refresh successful');
 
       return {
         accessToken: tokenSet.access_token,

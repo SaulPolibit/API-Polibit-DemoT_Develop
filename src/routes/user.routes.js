@@ -5,51 +5,14 @@
 const express = require('express');
 const { authenticate, createToken } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { User, Notification, NotificationSettings } = require('../models/supabase');
+const { User } = require('../models/supabase');
 const { requireRootAccess, ROLES, getUserContext } = require('../middleware/rbac');
 const { getSupabase } = require('../config/database');
 const { uploadProfileImage, uploadDocument } = require('../middleware/upload');
 const { uploadToSupabase, deleteFromSupabase } = require('../utils/fileUpload');
+const { createSecurityAlertNotification } = require('../utils/notificationHelper');
 
 const router = express.Router();
-
-/**
- * Helper function to create security alert notification
- * @param {string} userId - User ID
- * @param {string} alertType - Type of security alert
- * @param {string} title - Notification title
- * @param {string} message - Notification message
- */
-async function createSecurityAlertNotification(userId, alertType, title, message) {
-  try {
-    // Check if user has security alerts enabled
-    const settings = await NotificationSettings.findByUserId(userId);
-    // Default to sending if no settings found or securityAlerts is not explicitly false
-    const shouldSend = !settings || settings.securityAlerts !== false;
-
-    if (!shouldSend) {
-      console.log(`[Security Alert] User ${userId} has security alerts disabled, skipping notification`);
-      return;
-    }
-
-    await Notification.create({
-      userId,
-      notificationType: 'security_alert',
-      channel: 'portal',
-      title,
-      message,
-      priority: 'high',
-      metadata: {
-        alertType,
-        timestamp: new Date().toISOString()
-      }
-    });
-
-    console.log(`[Security Alert] Notification created for user ${userId} - ${alertType}`);
-  } catch (error) {
-    console.error('[Security Alert] Error creating notification:', error.message);
-  }
-}
 
 /**
  * @route   POST /api/users/register

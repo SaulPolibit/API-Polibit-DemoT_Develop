@@ -18,20 +18,7 @@ const { FirmSettings } = require('../models/supabase');
 
 const router = express.Router();
 
-// Add CORS headers for all investor routes
-router.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  next();
-});
+// CORS is handled globally in app.js
 
 /**
  * @route   POST /api/investors
@@ -334,7 +321,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
         bodyText: `Welcome to ${firmName}\n\nYour investor account has been created. You have been assigned to ${structureName}.\n\nEmail: ${investorData.email}\nPassword: ${plainPassword}\n\nLogin at: ${loginUrl}/lp-portal/login\n\nFor security, we recommend changing your password after your first login.`
       });
       emailSent = true;
-      console.log('[Investor Route] Welcome email sent to:', investorData.email);
+      console.log('[Investor Route] Welcome email sent successfully');
     } catch (emailError) {
       console.error('[Investor Route] Failed to send welcome email:', emailError.message);
       // Don't fail the request if email fails - investor was still created

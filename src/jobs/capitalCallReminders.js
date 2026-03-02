@@ -263,7 +263,7 @@ async function sendCapitalCallNotices() {
             bodyText: template.getText(emailData)
           });
 
-          console.log(`[CapitalCallReminders] Sent notice to ${allocation.user.email}`);
+          console.log(`[CapitalCallReminders] Sent notice to user ${allocation.user.id}`);
         }
 
         // Update capital call status to 'Sent'
@@ -321,7 +321,7 @@ async function sendDeadlineReminders(daysBeforeDeadline, templateKey) {
             bodyText: template.getText(emailData)
           });
 
-          console.log(`[CapitalCallReminders] Sent ${daysBeforeDeadline}-day reminder to ${allocation.user.email}`);
+          console.log(`[CapitalCallReminders] Sent ${daysBeforeDeadline}-day reminder to user ${allocation.user.id}`);
         }
 
       } catch (err) {

@@ -62,8 +62,7 @@ class CrossmintWalletService {
     }
 
     try {
-      console.log('[Crossmint] Creating wallet for user:', userData.email);
-      console.log('[Crossmint] Chain:', this.chain);
+      console.log('[Crossmint] Creating wallet for user, chain:', this.chain);
 
       const response = await axios.post(
         `${this.baseUrl}/v1-alpha1/wallets`,
@@ -80,13 +79,10 @@ class CrossmintWalletService {
         }
       );
 
-      console.log('[Crossmint] Raw response:', JSON.stringify(response.data, null, 2));
-
       const wallet = response.data;
       const walletAddress = wallet.address || wallet.walletAddress || wallet.publicKey;
 
-      console.log('[Crossmint] ✓ Wallet created successfully');
-      console.log('[Crossmint] Wallet Address:', walletAddress);
+      console.log('[Crossmint] Wallet created successfully');
 
       return {
         walletAddress: walletAddress,
@@ -119,7 +115,7 @@ class CrossmintWalletService {
     }
 
     try {
-      console.log('[Crossmint] Retrieving wallet for user:', userData.email);
+      console.log('[Crossmint] Retrieving wallet for user');
 
       // For non-custodial wallets, use email and userId as separate params
       const response = await axios.get(
@@ -144,8 +140,7 @@ class CrossmintWalletService {
       const wallet = wallets[0]; // Get first wallet
       const walletAddress = wallet.address || wallet.walletAddress || wallet.publicKey;
 
-      console.log('[Crossmint] ✓ Wallet retrieved');
-      console.log('[Crossmint] Wallet Address:', walletAddress);
+      console.log('[Crossmint] Wallet retrieved');
 
       return {
         walletAddress: walletAddress,
@@ -192,9 +187,7 @@ class CrossmintWalletService {
       // Use provided chains or default to the environment chain
       const targetChains = chains || this.chain;
 
-      console.log('[Crossmint] Fetching balances for wallet:', walletLocator);
-      console.log('[Crossmint] Tokens:', tokens);
-      console.log('[Crossmint] Chains:', targetChains);
+      console.log('[Crossmint] Fetching balances, tokens:', tokens, 'chains:', targetChains);
 
       const params = { tokens };
       if (targetChains) {
@@ -211,8 +204,7 @@ class CrossmintWalletService {
         }
       );
 
-      console.log('[Crossmint] ✓ Balances retrieved');
-      console.log('[Crossmint] Balances:', JSON.stringify(response.data, null, 2));
+      console.log('[Crossmint] Balances retrieved');
 
       return response.data || [];
     } catch (error) {
@@ -235,11 +227,7 @@ class CrossmintWalletService {
     }
 
     try {
-      console.log('[Crossmint] Initiating transfer...');
-      console.log('[Crossmint] From wallet:', walletLocator);
-      console.log('[Crossmint] Token:', tokenLocator);
-      console.log('[Crossmint] To:', recipient);
-      console.log('[Crossmint] Amount:', amount);
+      console.log('[Crossmint] Initiating transfer, amount:', amount);
 
       const response = await axios.post(
         `${this.baseUrl}/2025-06-09/wallets/${walletLocator}/tokens/${tokenLocator}/transfers`,
@@ -255,8 +243,7 @@ class CrossmintWalletService {
         }
       );
 
-      console.log('[Crossmint] ✓ Transfer initiated successfully');
-      console.log('[Crossmint] Transfer response:', JSON.stringify(response.data, null, 2));
+      console.log('[Crossmint] Transfer initiated successfully');
 
       return {
         success: true,
@@ -323,7 +310,7 @@ class CrossmintWalletService {
     }
 
     try {
-      console.log('[Crossmint] Fetching NFTs for wallet:', walletId);
+      console.log('[Crossmint] Fetching NFTs for wallet');
 
       const response = await axios.get(
         `${this.baseUrl}/v1-alpha1/wallets/${walletId}/nfts`,

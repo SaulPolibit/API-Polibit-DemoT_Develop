@@ -546,7 +546,6 @@ class ApiManager {
       // }],
       identifying_information: identifyingInformation
     });
-console.log('****** BODY:', body);
     return httpClient.makeApiRequest({
       method: 'post',
       url: `${group.baseUrl}/v0/customers`,
@@ -731,9 +730,6 @@ console.log('****** BODY:', body);
         },
         validateStatus: () => true // Handle all status codes
       });
-
-      console.log('Response Status:', response.status);
-      console.log('Response Body:', JSON.stringify(response.data, null, 2));
 
       if (response.status >= 400) {
         return {

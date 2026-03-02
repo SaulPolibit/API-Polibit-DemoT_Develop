@@ -685,7 +685,6 @@ router.post('/connect/admin/send-invite/:investorId', authenticate, catchAsync(a
   );
 
   // TODO: Send email with onboarding link using your email service
-  console.log(`[Stripe Connect Admin] Onboarding link for ${investor.email}: ${accountLink.url}`);
 
   res.json({
     success: true,

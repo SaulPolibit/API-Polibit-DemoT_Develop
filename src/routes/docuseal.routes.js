@@ -430,27 +430,23 @@ router.get('/submissions/stats', authenticate, catchAsync(async (req, res) => {
  * @body    Webhook payload from DocuSeal
  */
 router.post('/webhook', catchAsync(async (req, res) => {
-  // Log incoming webhook request for debugging
-  console.log('[DocuSeal Webhook] Received webhook request');
-  console.log('[DocuSeal Webhook] Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('[DocuSeal Webhook] Body:', JSON.stringify(req.body, null, 2));
-
   // Validate X-PoliBit-Signature header
   const signature = req.headers['x-polibit-signature'];
-  const expectedSignature = '2900f56566097c95876078f8ebed731a374a888d7f5a5a518e2e5d9f518775d8';
+  const expectedSignature = process.env.DOCUSEAL_WEBHOOK_SIGNATURE;
 
-  console.log('[DocuSeal Webhook] Signature validation:', {
-    received: signature,
-    expected: expectedSignature,
-    isValid: signature === expectedSignature
-  });
+  if (!expectedSignature) {
+    console.error('[DocuSeal Webhook] DOCUSEAL_WEBHOOK_SIGNATURE not configured');
+    return res.status(500).json({ success: false, message: 'Webhook configuration error' });
+  }
 
-  if (signature !== expectedSignature) {
-    console.log('[DocuSeal Webhook] Invalid signature - rejecting request');
+  const isValidSignature = signature && expectedSignature &&
+    signature.length === expectedSignature.length &&
+    require('crypto').timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+
+  if (!isValidSignature) {
     return res.status(401).json({
       success: false,
-      message: 'Invalid signature',
-      signature: signature
+      message: 'Invalid signature'
     });
   }
 
@@ -481,7 +477,6 @@ router.post('/webhook', catchAsync(async (req, res) => {
 
     console.log('[DocuSeal Webhook] Extracted data:', {
       submissionId,
-      email,
       slug,
       submissionURL,
       auditLogUrl,
@@ -497,7 +492,7 @@ router.post('/webhook', catchAsync(async (req, res) => {
       });
     }
 
-    console.log('[DocuSeal Webhook] Creating new submission:', { email, submissionId, submissionURL, auditLogUrl, status });
+    console.log('[DocuSeal Webhook] Creating new submission:', { submissionId, submissionURL, auditLogUrl, status });
 
     // Create new submission record
     const newSubmission = await DocusealSubmission.create({
@@ -536,7 +531,6 @@ router.post('/webhook', catchAsync(async (req, res) => {
 
     console.log('[DocuSeal Webhook] Extracted data:', {
       submissionId,
-      email,
       slug,
       submissionURL,
       auditLogUrl,
@@ -635,7 +629,6 @@ router.get('/verifyUserSignature', authenticate, catchAsync(async (req, res) => 
   const userPayments = await Payment.findByEmail(user.email);
 
   // Debug logging
-  console.log('[verifyUserSignature] User email:', user.email);
   console.log('[verifyUserSignature] Total payments found:', userPayments.length);
   console.log('[verifyUserSignature] Payment submission IDs:', userPayments.map(p => ({
     submissionId: p.submissionId,

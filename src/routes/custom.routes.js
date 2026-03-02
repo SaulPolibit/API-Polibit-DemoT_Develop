@@ -10,7 +10,7 @@ const {
   validate,
   NotFoundError
 } = require('../middleware/errorHandler');
-const { User, MFAFactor, SmartContract, Notification, NotificationSettings } = require('../models/supabase');
+const { User, MFAFactor, SmartContract, NotificationSettings } = require('../models/supabase');
 const { getSupabase } = require('../config/database');
 
 const router = express.Router();
@@ -32,11 +32,8 @@ const ensureBodyParsed = (req) => {
   return new Promise((resolve, reject) => {
     // If body is already parsed AND has content, return it
     if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
-      console.log('[Body Parser] Body already parsed:', Object.keys(req.body));
       return resolve(req.body);
     }
-
-    console.log('[Body Parser] Body not parsed or empty, reading raw body...');
 
     // Otherwise, manually parse the raw body
     let data = '';
@@ -46,7 +43,6 @@ const ensureBodyParsed = (req) => {
     req.on('end', () => {
       try {
         req.body = data ? JSON.parse(data) : {};
-        console.log('[Body Parser] Parsed body:', Object.keys(req.body));
         resolve(req.body);
       } catch (error) {
         console.error('[Body Parser] Failed to parse body:', error);
@@ -71,10 +67,9 @@ const ensureBodyParsed = (req) => {
  */
 const deriveSupabasePassword = (prosperaId) => {
   const crypto = require('crypto');
-  const secret = process.env.SUPABASE_USER_SECRET || 'default-secret-change-in-production';
-
-  if (!process.env.SUPABASE_USER_SECRET) {
-    console.warn('[Supabase Auth] WARNING: SUPABASE_USER_SECRET not set, using default. Set this in production!');
+  const secret = process.env.SUPABASE_USER_SECRET;
+  if (!secret) {
+    throw new Error('SUPABASE_USER_SECRET environment variable is required');
   }
 
   return crypto
@@ -102,7 +97,7 @@ const getOrCreateSupabaseAuthUser = async (supabase, email, prosperaId) => {
   });
 
   if (signInData?.session) {
-    console.log('[Supabase Auth] Signed in existing user:', email);
+    console.log('[Supabase Auth] Signed in existing user');
     return { session: signInData.session, user: signInData.user, error: null };
   }
 
@@ -146,7 +141,7 @@ const getOrCreateSupabaseAuthUser = async (supabase, email, prosperaId) => {
       return { session: null, user: null, error: adminError };
     }
 
-    console.log('[Supabase Auth] Created user via Admin API:', email);
+    console.log('[Supabase Auth] Created user via Admin API');
 
     // Now sign in the newly created user to get a session
     const { data: newSignIn, error: newSignInError } = await supabase.auth.signInWithPassword({
@@ -168,43 +163,7 @@ const getOrCreateSupabaseAuthUser = async (supabase, email, prosperaId) => {
   }
 };
 
-/**
- * Helper function to create security alert notification
- * @param {string} userId - User ID
- * @param {string} alertType - Type of security alert (mfa_enabled, mfa_disabled, password_changed)
- * @param {string} title - Notification title
- * @param {string} message - Notification message
- */
-async function createSecurityAlertNotification(userId, alertType, title, message) {
-  try {
-    // Check if user has security alerts enabled
-    const settings = await NotificationSettings.findByUserId(userId);
-    // Default to sending if no settings found or securityAlerts is not explicitly false
-    const shouldSend = !settings || settings.securityAlerts !== false;
-
-    if (!shouldSend) {
-      console.log(`[Security Alert] User ${userId} has security alerts disabled, skipping notification`);
-      return;
-    }
-
-    await Notification.create({
-      userId,
-      notificationType: 'security_alert',
-      channel: 'portal',
-      title,
-      message,
-      priority: 'high',
-      metadata: {
-        alertType,
-        timestamp: new Date().toISOString()
-      }
-    });
-
-    console.log(`[Security Alert] Notification created for user ${userId} - ${alertType}`);
-  } catch (error) {
-    console.error('[Security Alert] Error creating notification:', error.message);
-  }
-}
+const { createSecurityAlertNotification } = require('../utils/notificationHelper');
 
 // ===== LOGIN API ENDPOINTS =====
 
@@ -228,63 +187,23 @@ router.post('/login', catchAsync(async (req, res) => {
   });
 
   if (authError || !authData.user) {
-    console.error('Supabase Auth Error:', authError);
+    console.error('[Login] Authentication failed');
     return res.status(401).json({
       success: false,
-      message: 'Invalid email or password',
-      debug: process.env.NODE_ENV === 'development' ? authError?.message : undefined
+      message: 'Invalid email or password'
     });
   }
-
-  // Check if user exists in users table
-  console.log('[Login] Authenticated user ID:', authData.user.id, 'Email:', authData.user.email);
 
   // Use service role client for DB queries (bypasses RLS)
   const serviceSupabase = getSupabase();
 
-  // Debug: Try to query directly (without .single() to see all results)
-  let directQuery = null;
-  try {
-    const { data, error, count } = await serviceSupabase
-      .from('users')
-      .select('*', { count: 'exact' })
-      .eq('id', authData.user.id);
-
-    directQuery = {
-      found: data && data.length > 0,
-      count: data?.length || 0,
-      error: error?.message
-    };
-    console.log('[Login] Direct query result:', directQuery);
-    if (data && data.length > 0) {
-      console.log('[Login] Found users:', data.map(u => ({ id: u.id, email: u.email })));
-    }
-  } catch (e) {
-    console.error('[Login] Direct query error:', e);
-    directQuery = { found: false, error: e.message };
-  }
-
   const user = await User.findById(authData.user.id);
-  console.log('[Login] User.findById result:', user ? 'found' : 'not found');
 
   if (!user) {
-    console.error('[Login] User exists in Auth but not in users table:', {
-      authUserId: authData.user.id,
-      email: authData.user.email,
-      createdAt: authData.user.created_at,
-      directQueryWorked: directQuery?.found
-    });
+    console.error('[Login] User exists in Auth but not in users table');
     return res.status(404).json({
       success: false,
-      message: 'User not found in system. Please contact administrator.',
-      debug: process.env.NODE_ENV === 'development' ? {
-        authUserId: authData.user.id,
-        email: authData.user.email,
-        hint: 'User exists in Supabase Auth but not in users table',
-        directQueryWorked: directQuery?.found,
-        directQueryCount: directQuery?.count,
-        directQueryError: directQuery?.error
-      } : undefined
+      message: 'User not found in system. Please contact administrator.'
     });
   }
 
@@ -831,7 +750,7 @@ Security Team
           `
         });
 
-        console.log(`[MFA] Security notification sent to ${user.email}`);
+        console.log('[MFA] Security notification sent');
       }
     } catch (emailError) {
       console.error('[MFA] Failed to send security notification:', emailError);
@@ -1055,7 +974,7 @@ Security Team
         `
       });
 
-      console.log(`[MFA] Security notification sent to ${user.email}`);
+      console.log('[MFA] Security notification sent');
     }
   } catch (emailError) {
     console.error('[MFA] Failed to send security notification:', emailError);
@@ -1622,10 +1541,6 @@ router.post('/prospera/auth-url', catchAsync(async (req, res) => {
   const { redirectUri } = req.body || {};
 
   console.log('[Prospera] Generating authorization URL...');
-  console.log('[Prospera] Request body:', req.body);
-  if (redirectUri) {
-    console.log('[Prospera] Requested redirect URI:', redirectUri);
-  }
 
   // Ensure Prospera is initialized (lazy initialization)
   try {
@@ -1679,7 +1594,6 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
   validate({ code, codeVerifier, nonce }, 'code, codeVerifier, and nonce are required');
 
   console.log('[Prospera Callback] Exchanging authorization code...');
-  console.log('[Prospera Callback] Redirect URI:', redirectUri);
 
   // Ensure Prospera is initialized (lazy initialization)
   try {
@@ -1698,7 +1612,7 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
   const prosperapData = await prospera.exchangeCode(code, codeVerifier, nonce, redirectUri);
 
   console.log('[Prospera Callback] ✓ Token exchange successful');
-  console.log('[Prospera Callback] User email:', prosperapData.user.email);
+  console.log('[Prospera Callback] User info retrieved');
 
   // Verify user is an active Próspera resident
   let userProfile = null; // Declare outside try block so it's accessible later
@@ -1708,8 +1622,7 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
     // Get user's Próspera profile including RPN
     userProfile = await prospera.getUserProfile(prosperapData.accessToken);
 
-    // DEBUG: Log full profile to see all available fields (country, entity type, etc.)
-    console.log('[Prospera Callback] Full user profile:', JSON.stringify(userProfile, null, 2));
+    // Profile retrieved - fields available for mapping
 
     // Extract RPN from profile (field name may vary - adjust based on actual API response)
     const rpn = userProfile.rpn || userProfile.resident_permit_number || userProfile.residentPermitNumber;
@@ -1838,7 +1751,7 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
       userId: user.id,
     });
 
-    console.log('[Prospera Callback] ✓ Wallet ready:', walletData.walletAddress);
+    console.log('[Prospera Callback] ✓ Wallet ready');
 
     // Update user with wallet address if new or changed
     if (user.walletAddress !== walletData.walletAddress) {
@@ -1886,7 +1799,7 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
 
   // Check if user has MFA enabled
   if (user.mfaFactorId) {
-    console.log('[Prospera Callback] MFA required for user:', user.email);
+    console.log('[Prospera Callback] MFA required for user');
     return res.status(200).json({
       success: true,
       mfaRequired: true,
@@ -1918,7 +1831,7 @@ router.post('/prospera/callback', catchAsync(async (req, res) => {
     role: user.role
   });
 
-  console.log('[Prospera Callback] ✓ Login successful for user:', user.email);
+  console.log('[Prospera Callback] ✓ Login successful');
 
   res.status(200).json({
     success: true,
@@ -1984,7 +1897,7 @@ router.post('/prospera/complete-registration', catchAsync(async (req, res) => {
     });
   }
 
-  console.log('[Prospera Registration] Completing registration for:', userData.email);
+  console.log('[Prospera Registration] Completing registration...');
 
   // Check if user already exists (shouldn't happen, but safety check)
   let user = await User.findOne({ email: userData.email });
@@ -2033,7 +1946,7 @@ router.post('/prospera/complete-registration', catchAsync(async (req, res) => {
     entityType: userData.entityType || 'individual',
   });
 
-  console.log('[Prospera Registration] ✓ New user created:', user.id);
+  console.log('[Prospera Registration] ✓ New user created');
 
   // Create or retrieve Crossmint wallet for the user
   let walletData = null;
@@ -2048,7 +1961,7 @@ router.post('/prospera/complete-registration', catchAsync(async (req, res) => {
       userId: user.id,
     });
 
-    console.log('[Prospera Registration] ✓ Wallet ready:', walletData.walletAddress);
+    console.log('[Prospera Registration] ✓ Wallet ready');
 
     // Update user with wallet address
     user = await User.findByIdAndUpdate(
@@ -2093,7 +2006,7 @@ router.post('/prospera/complete-registration', catchAsync(async (req, res) => {
     role: user.role
   });
 
-  console.log('[Prospera Registration] ✓ Registration complete for user:', user.email);
+  console.log('[Prospera Registration] ✓ Registration complete');
 
   res.status(201).json({
     success: true,
@@ -2142,36 +2055,15 @@ router.post('/prospera/complete-registration', catchAsync(async (req, res) => {
  * @access  Private (requires auth token)
  */
 router.post('/prospera/link-wallet', authenticate, catchAsync(async (req, res) => {
-  // Log body BEFORE ensureBodyParsed
-  console.log('[Prospera Link Wallet] ==========================================');
-  console.log('[Prospera Link Wallet] BODY PARSING DEBUG');
-  console.log('[Prospera Link Wallet] - req.body before parsing:', req.body);
-  console.log('[Prospera Link Wallet] - typeof req.body:', typeof req.body);
-  console.log('[Prospera Link Wallet] - Object.keys(req.body):', req.body ? Object.keys(req.body) : 'null/undefined');
-  console.log('[Prospera Link Wallet] ==========================================');
-
   // Ensure body is parsed (for Vercel compatibility)
   await ensureBodyParsed(req);
-
-  // Log body AFTER ensureBodyParsed
-  console.log('[Prospera Link Wallet] ==========================================');
-  console.log('[Prospera Link Wallet] AFTER PARSING DEBUG');
-  console.log('[Prospera Link Wallet] - req.body after parsing:', req.body);
-  console.log('[Prospera Link Wallet] - Object.keys(req.body):', req.body ? Object.keys(req.body) : 'null/undefined');
-  console.log('[Prospera Link Wallet] ==========================================');
 
   const { code, codeVerifier, nonce, redirectUri } = req.body;
 
   // Validate required fields
   validate({ code, codeVerifier, nonce }, 'code, codeVerifier, and nonce are required');
 
-  console.log('[Prospera Link Wallet] Starting wallet link process for user:', req.user.email);
-  console.log('[Prospera Link Wallet] Redirect URI:', redirectUri);
-  console.log('[Prospera Link Wallet] Extracted values:');
-  console.log('[Prospera Link Wallet] - code:', code ? 'present' : 'MISSING');
-  console.log('[Prospera Link Wallet] - codeVerifier:', codeVerifier ? 'present' : 'MISSING');
-  console.log('[Prospera Link Wallet] - nonce:', nonce ? 'present' : 'MISSING');
-  console.log('[Prospera Link Wallet] - redirectUri:', redirectUri || 'UNDEFINED');
+  console.log('[Prospera Link Wallet] Starting wallet link process');
 
   try {
     // Exchange authorization code for tokens
@@ -2221,7 +2113,7 @@ router.post('/prospera/link-wallet', authenticate, catchAsync(async (req, res) =
         userId: user.id,
       });
 
-      console.log('[Prospera Link Wallet] ✓ Wallet ready:', walletData.walletAddress);
+      console.log('[Prospera Link Wallet] ✓ Wallet ready');
 
       // Update user with wallet address
       const updatedUser = await User.findByIdAndUpdate(
@@ -2257,17 +2149,10 @@ router.post('/prospera/link-wallet', authenticate, catchAsync(async (req, res) =
 
   } catch (error) {
     console.error('[Prospera Link Wallet] Error:', error.message);
-    console.error('[Prospera Link Wallet] DEBUG - redirectUri received:', redirectUri);
-    console.error('[Prospera Link Wallet] DEBUG - FRONTEND_URL:', process.env.FRONTEND_URL);
     return res.status(500).json({
       success: false,
       message: 'Failed to link Próspera wallet',
-      error: error.message,
-      debug: {
-        redirectUriReceived: redirectUri,
-        frontendUrl: process.env.FRONTEND_URL,
-        expectedRedirectUri: `${process.env.FRONTEND_URL}/investment-manager/account`
-      }
+      error: error.message
     });
   }
 }));
@@ -2286,10 +2171,7 @@ router.post('/prospera/link-wallet', authenticate, catchAsync(async (req, res) =
 router.post('/wallet/register', authenticate, catchAsync(async (req, res) => {
   const { walletAddress, walletType = 'embedded', signerType = 'email' } = req.body;
 
-  console.log('[Wallet Register] Registering wallet for user:', req.auth.userId);
-  console.log('[Wallet Register] Wallet address:', walletAddress);
-  console.log('[Wallet Register] Wallet type:', walletType);
-  console.log('[Wallet Register] Signer type:', signerType);
+  console.log('[Wallet Register] Registering wallet, type:', walletType, 'signer:', signerType);
 
   // Validate wallet address format
   if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
@@ -2308,7 +2190,7 @@ router.post('/wallet/register', authenticate, catchAsync(async (req, res) => {
 
   // Check if user already has a wallet
   if (user.walletAddress && user.walletAddress !== walletAddress) {
-    console.log('[Wallet Register] User already has a different wallet:', user.walletAddress);
+    console.log('[Wallet Register] User already has a different wallet, updating');
     // For now, allow updating to a new wallet
     // In production, you might want to add additional verification
   }
@@ -2318,7 +2200,7 @@ router.post('/wallet/register', authenticate, catchAsync(async (req, res) => {
     walletAddress: walletAddress
   });
 
-  console.log('[Wallet Register] Wallet registered successfully for user:', req.auth.userId);
+  console.log('[Wallet Register] Wallet registered successfully');
 
   res.status(200).json({
     success: true,
@@ -2449,7 +2331,7 @@ router.post('/wallet/transfer', authenticate, catchAsync(async (req, res) => {
   if (tokenLocator.includes(':')) {
     const tokenPart = tokenLocator.split(':')[1]; // Get the token address or symbol
     correctedTokenLocator = `${correctChain}:${tokenPart}`;
-    console.log('[Wallet Transfer] Chain corrected:', tokenLocator, '->', correctedTokenLocator);
+    console.log('[Wallet Transfer] Chain corrected for token locator');
   }
 
   // Validate recipient address format (basic EVM address check)
@@ -2479,7 +2361,7 @@ router.post('/wallet/transfer', authenticate, catchAsync(async (req, res) => {
   }
 
   // Verify MFA code using user's Supabase session
-  console.log('[Wallet Transfer] Verifying MFA for user:', user.email);
+  console.log('[Wallet Transfer] Verifying MFA...');
 
   try {
     // Create a Supabase client authenticated as the user
@@ -2536,10 +2418,6 @@ router.post('/wallet/transfer', authenticate, catchAsync(async (req, res) => {
 
   // Execute transfer via Crossmint
   console.log('[Wallet Transfer] Initiating transfer...');
-  console.log('[Wallet Transfer] From:', user.walletAddress);
-  console.log('[Wallet Transfer] To:', recipient);
-  console.log('[Wallet Transfer] Token:', correctedTokenLocator);
-  console.log('[Wallet Transfer] Amount:', amount);
 
   try {
     const transferResult = await crossmint.transferToken(
@@ -2549,20 +2427,7 @@ router.post('/wallet/transfer', authenticate, catchAsync(async (req, res) => {
       amount
     );
 
-    console.log('[Wallet Transfer] ✓ Transfer initiated:', transferResult.id);
-
-    // Log transfer for audit trail
-    console.log('[Wallet Transfer] Audit Log:', JSON.stringify({
-      userId: user.id,
-      userEmail: user.email,
-      fromWallet: user.walletAddress,
-      toWallet: recipient,
-      tokenLocator: correctedTokenLocator,
-      amount,
-      transferId: transferResult.id,
-      status: transferResult.status,
-      timestamp: new Date().toISOString()
-    }));
+    console.log('[Wallet Transfer] ✓ Transfer initiated, id:', transferResult.id, 'status:', transferResult.status);
 
     res.status(200).json({
       success: true,
@@ -2648,122 +2513,6 @@ router.get('/wallet/transfer/:transferId', authenticate, catchAsync(async (req, 
  * @desc    Health check for Custom API routes
  * @access  Public
  */
-/**
- * Diagnostic endpoint to check if a user exists in both Auth and users table
- */
-router.get('/diagnostic/user/:email', catchAsync(async (req, res) => {
-  const { email } = req.params;
-  const supabase = getSupabase();
-
-  // Check in users table by email
-  const userByEmail = await User.findByEmail(email);
-
-  // Check in Supabase Auth (admin only)
-  let authUser = null;
-  let authError = null;
-  try {
-    const { data, error } = await supabase.auth.admin.listUsers();
-    if (error) {
-      authError = error.message;
-    } else {
-      authUser = data.users.find(u => u.email === email);
-    }
-  } catch (error) {
-    authError = error.message;
-  }
-
-  // If we found the auth user, also try finding by ID (like login does)
-  let userById = null;
-  if (authUser) {
-    userById = await User.findById(authUser.id);
-  }
-
-  res.json({
-    success: true,
-    email: email,
-    existsInUsersTable: !!userByEmail,
-    existsInAuth: !!authUser,
-    userTableData: {
-      byEmail: userByEmail ? {
-        id: userByEmail.id,
-        email: userByEmail.email,
-        role: userByEmail.role,
-        isActive: userByEmail.isActive
-      } : null,
-      byId: userById ? {
-        id: userById.id,
-        email: userById.email,
-        role: userById.role,
-        isActive: userById.isActive
-      } : null,
-      idsMatch: userByEmail && userById ? userByEmail.id === userById.id : null
-    },
-    authData: authUser ? {
-      id: authUser.id,
-      email: authUser.email,
-      createdAt: authUser.created_at
-    } : null,
-    authError: authError,
-    diagnosis: !userByEmail && authUser ? 'User exists in Auth but missing from users table - THIS IS THE PROBLEM' :
-               userByEmail && !authUser ? 'User exists in table but missing from Auth' :
-               userByEmail && authUser && !userById ? 'User found by email but NOT by ID - ID MISMATCH ISSUE' :
-               userByEmail && authUser && userById ? 'User exists in both and findById works - should work fine' :
-               'User does not exist in either system',
-    timestamp: new Date().toISOString()
-  });
-}));
-
-/**
- * Diagnostic endpoint to check Supabase configuration
- */
-router.get('/diagnostic/supabase', catchAsync(async (req, res) => {
-  const hasServiceKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const hasAnonKey = !!process.env.SUPABASE_ANON_KEY;
-  const keyType = hasServiceKey ? 'service_role' : (hasAnonKey ? 'anon' : 'none');
-
-  // Try to query users table
-  const supabase = getSupabase();
-  let canQueryUsers = false;
-  let userCount = null;
-  let queryError = null;
-
-  try {
-    const { data, error, count } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true });
-
-    if (error) {
-      queryError = {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint
-      };
-    } else {
-      canQueryUsers = true;
-      userCount = count;
-    }
-  } catch (error) {
-    queryError = error.message;
-  }
-
-  res.json({
-    success: true,
-    supabase: {
-      url: process.env.SUPABASE_URL,
-      keyType: keyType,
-      hasServiceRoleKey: hasServiceKey,
-      hasAnonKey: hasAnonKey
-    },
-    database: {
-      canQueryUsers,
-      userCount,
-      error: queryError
-    },
-    timestamp: new Date().toISOString()
-  });
-}));
-
 router.get('/health', (req, res) => {
   res.json({
     service: 'Custom APIs',
