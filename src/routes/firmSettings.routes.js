@@ -9,6 +9,7 @@ const FirmSettings = require('../models/supabase/firmSettings');
 const { handleFirmLogoUpload } = require('../middleware/upload');
 const { uploadToSupabase } = require('../utils/fileUpload');
 const { canCreate, getUserContext } = require('../middleware/rbac');
+const { generateThemePalette } = require('../utils/themeGenerator');
 
 const router = express.Router();
 
@@ -39,6 +40,33 @@ router.get('/logo', catchAsync(async (_req, res) => {
     data: {
       firmLogo: settings?.firmLogo || null,
       firmName: settings?.firmName || 'PoliBit'
+    }
+  });
+}));
+
+/**
+ * @route   GET /api/firm-settings/theme
+ * @desc    Get firm theme as pre-computed CSS variables (public endpoint)
+ * @access  Public
+ */
+router.get('/theme', catchAsync(async (_req, res) => {
+  const settings = await FirmSettings.get();
+
+  if (!settings?.themeConfig?.primaryColor) {
+    return res.status(200).json({
+      success: true,
+      data: null
+    });
+  }
+
+  const { cssVariables, fontUrl } = generateThemePalette(settings.themeConfig);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      cssVariables,
+      fontUrl,
+      themeConfig: settings.themeConfig
     }
   });
 }));
@@ -159,7 +187,8 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
     'firmWebsite',
     'firmAddress',
     'firmPhone',
-    'firmEmail'
+    'firmEmail',
+    'themeConfig'
   ];
 
   // Handle file upload if present
@@ -190,7 +219,12 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
     if (field === 'firmLogo' && req.file) continue;
 
     if (req.body[field] !== undefined) {
-      if (typeof req.body[field] === 'string') {
+      if (field === 'themeConfig') {
+        // Parse JSON string if needed, or accept object directly
+        updateData[field] = typeof req.body[field] === 'string'
+          ? JSON.parse(req.body[field])
+          : req.body[field];
+      } else if (typeof req.body[field] === 'string') {
         updateData[field] = req.body[field].trim();
       } else {
         updateData[field] = req.body[field];
@@ -245,7 +279,8 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
     'firmWebsite',
     'firmAddress',
     'firmPhone',
-    'firmEmail'
+    'firmEmail',
+    'themeConfig'
   ];
 
   // Handle file upload if present
@@ -276,7 +311,11 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
     if (field === 'firmLogo' && req.file) continue;
 
     if (req.body[field] !== undefined) {
-      if (typeof req.body[field] === 'string') {
+      if (field === 'themeConfig') {
+        updateData[field] = typeof req.body[field] === 'string'
+          ? JSON.parse(req.body[field])
+          : req.body[field];
+      } else if (typeof req.body[field] === 'string') {
         updateData[field] = req.body[field].trim();
       } else {
         updateData[field] = req.body[field];
