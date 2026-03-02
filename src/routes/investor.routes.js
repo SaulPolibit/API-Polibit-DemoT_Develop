@@ -18,7 +18,20 @@ const { FirmSettings } = require('../models/supabase');
 
 const router = express.Router();
 
-// CORS is handled globally in app.js
+// Add CORS headers for all investor routes
+router.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  next();
+});
 
 /**
  * @route   POST /api/investors

@@ -5,12 +5,11 @@
 
 require('dotenv').config();
 
-// Validate required environment variables before starting
+// Warn about missing environment variables (non-fatal for serverless compatibility)
 const REQUIRED_ENV_VARS = ['JWT_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'API_KEY'];
 const missingVars = REQUIRED_ENV_VARS.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
-  console.error(`FATAL: Missing required environment variables: ${missingVars.join(', ')}`);
-  process.exit(1);
+  console.warn(`WARNING: Missing environment variables: ${missingVars.join(', ')}`);
 }
 
 const express = require('express');
