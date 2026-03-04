@@ -180,10 +180,10 @@ router.put('/nav-visibility', authenticate, catchAsync(async (req, res) => {
     });
   }
 
-  const { investmentManager, lpPortal } = req.body;
-  validate(investmentManager || lpPortal, 'No navigation visibility data provided');
+  const { investmentManager, lpPortal, features } = req.body;
+  validate(investmentManager || lpPortal || features, 'No navigation visibility data provided');
 
-  const navVisibilityConfig = { investmentManager, lpPortal };
+  const navVisibilityConfig = { investmentManager, lpPortal, features };
 
   const existingSettings = await FirmSettings.get();
 
