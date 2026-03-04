@@ -607,9 +607,10 @@ router.get('/:id/with-investors', authenticate, catchAsync(async (req, res) => {
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root and Guest can access any structure, Admin can only access their own
+  // Root and Guest can access any structure, Admin can only access assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
+    validate(hasAccess, 'Unauthorized access to structure');
   }
 
   const structureWithInvestors = await Structure.findWithInvestors(id);
