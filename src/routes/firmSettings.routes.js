@@ -8,7 +8,7 @@ const { catchAsync, validate } = require('../middleware/errorHandler');
 const FirmSettings = require('../models/supabase/firmSettings');
 const { handleFirmLogoUpload } = require('../middleware/upload');
 const { uploadToSupabase } = require('../utils/fileUpload');
-const { canCreate, getUserContext } = require('../middleware/rbac');
+const { canCreate, getUserContext, ROLES } = require('../middleware/rbac');
 const { generateThemePalette } = require('../utils/themeGenerator');
 
 const router = express.Router();
@@ -147,6 +147,61 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
     success: true,
     message: 'Firm settings created successfully',
     data: settings
+  });
+}));
+
+/**
+ * @route   GET /api/firm-settings/nav-visibility
+ * @desc    Get navigation visibility config
+ * @access  Private (authenticated)
+ */
+router.get('/nav-visibility', authenticate, catchAsync(async (req, res) => {
+  const settings = await FirmSettings.get();
+
+  res.status(200).json({
+    success: true,
+    data: settings?.navVisibilityConfig || null
+  });
+}));
+
+/**
+ * @route   PUT /api/firm-settings/nav-visibility
+ * @desc    Update navigation visibility config
+ * @access  Private (Root only)
+ */
+router.put('/nav-visibility', authenticate, catchAsync(async (req, res) => {
+  const { userRole } = getUserContext(req);
+
+  // Root only
+  if (userRole !== ROLES.ROOT) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Only Root users can update navigation visibility.'
+    });
+  }
+
+  const { investmentManager, lpPortal } = req.body;
+  validate(investmentManager || lpPortal, 'No navigation visibility data provided');
+
+  const navVisibilityConfig = { investmentManager, lpPortal };
+
+  const existingSettings = await FirmSettings.get();
+
+  if (!existingSettings) {
+    return res.status(404).json({
+      success: false,
+      message: 'No firm settings found. Please create firm settings first.'
+    });
+  }
+
+  const settings = await FirmSettings.findByIdAndUpdate(existingSettings.id, {
+    navVisibilityConfig
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Navigation visibility updated successfully',
+    data: settings.navVisibilityConfig
   });
 }));
 

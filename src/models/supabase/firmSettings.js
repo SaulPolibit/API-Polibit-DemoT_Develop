@@ -21,6 +21,7 @@ class FirmSettings {
       firmPhone: 'firm_phone',
       firmEmail: 'firm_email',
       themeConfig: 'theme_config',
+      navVisibilityConfig: 'nav_visibility_config',
       userId: 'user_id',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -51,6 +52,7 @@ class FirmSettings {
       firmPhone: dbData.firm_phone,
       firmEmail: dbData.firm_email,
       themeConfig: dbData.theme_config,
+      navVisibilityConfig: dbData.nav_visibility_config,
       userId: dbData.user_id,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
