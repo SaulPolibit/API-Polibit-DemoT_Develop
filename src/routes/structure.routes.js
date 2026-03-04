@@ -572,11 +572,7 @@ router.get('/:id/children', authenticate, requireInvestmentManagerAccess, catchA
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
-    validate(hasAccess, 'Unauthorized access to structure');
-  }
+  // Read access: requireInvestmentManagerAccess gate is sufficient
 
   const children = await Structure.findChildStructures(id);
 
@@ -608,11 +604,7 @@ router.get('/:id/with-investors', authenticate, catchAsync(async (req, res) => {
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root and Guest can access any structure, Admin can only access assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
-    validate(hasAccess, 'Unauthorized access to structure');
-  }
+  // Read access: role gate above is sufficient (matches GET /:id behavior)
 
   const structureWithInvestors = await Structure.findWithInvestors(id);
 
@@ -643,11 +635,7 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root and Guest can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
-    validate(hasAccess, 'Unauthorized access to structure');
-  }
+  // Read access: role gate above is sufficient (matches GET /:id behavior)
 
   // Get all investors for this structure from structure_investors junction table
   const structureInvestors = await StructureInvestor.findByStructureId(id);
@@ -949,11 +937,7 @@ router.get('/:id/admins', authenticate, requireInvestmentManagerAccess, catchAsy
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can view any structure, Admin can only view assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
-    validate(hasAccess, 'Unauthorized access to structure');
-  }
+  // Read access: requireInvestmentManagerAccess gate is sufficient
 
   // Get all admins/support for this structure
   const admins = await StructureAdmin.findByStructureId(id);
