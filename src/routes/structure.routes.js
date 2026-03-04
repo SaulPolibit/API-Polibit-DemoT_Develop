@@ -572,9 +572,10 @@ router.get('/:id/children', authenticate, requireInvestmentManagerAccess, catchA
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
+  // Root can access any structure, Admin can only access assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
+    validate(hasAccess, 'Unauthorized access to structure');
   }
 
   const children = await Structure.findChildStructures(id);
@@ -854,9 +855,10 @@ router.patch('/:id/financials', authenticate, requireInvestmentManagerAccess, ca
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can edit any structure, Admin can only edit their own
+  // Root can edit any structure, Admin can only edit assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
   }
 
   const financials = {};
@@ -897,9 +899,10 @@ router.post('/:id/admins', authenticate, requireInvestmentManagerAccess, catchAs
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can add to any structure, Admin can only add to their own
+  // Root can add to any structure, Admin can only add to assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
   }
 
   // Check if target user exists and has valid role
@@ -946,9 +949,10 @@ router.get('/:id/admins', authenticate, requireInvestmentManagerAccess, catchAsy
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can view any structure, Admin can only view their own
+  // Root can view any structure, Admin can only view assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const hasAccess = await canAccessStructure(structure, userRole, userId, StructureAdmin);
+    validate(hasAccess, 'Unauthorized access to structure');
   }
 
   // Get all admins/support for this structure
@@ -974,9 +978,10 @@ router.delete('/:id/admins/:targetUserId', authenticate, requireInvestmentManage
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can remove from any structure, Admin can only remove from their own
+  // Root can remove from any structure, Admin can only remove from assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
   }
 
   // Check if relationship exists
@@ -1004,9 +1009,10 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can delete any structure, Admin can only delete their own
+  // Root can delete any structure, Admin can only delete assigned structures
   if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
   }
 
   await Structure.findByIdAndDelete(id);
