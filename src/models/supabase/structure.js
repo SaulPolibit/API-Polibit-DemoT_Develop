@@ -548,12 +548,17 @@ class Structure {
 
     const structure = this._toModel(structureData);
 
-    // Count unique investors from investments (current investors)
-    const uniqueInvestors = new Set(
-      investments
-        ?.map(inv => inv.user_id || inv.created_by) // Support both old and new column names
-        .filter(id => id !== null) || []
-    );
+    // Count investors from structure_investors table (capital call commitments)
+    const { data: structureInvestors } = await supabase
+      .from('structure_investors')
+      .select('user_id')
+      .eq('structure_id', structureId);
+
+    // Count unique investors from both investments and structure_investors
+    const uniqueInvestors = new Set([
+      ...(investments?.map(inv => inv.user_id || inv.created_by).filter(id => id !== null) || []),
+      ...(structureInvestors?.map(si => si.user_id).filter(id => id !== null) || []),
+    ]);
     structure.currentInvestors = uniqueInvestors.size;
 
     // Count total investments

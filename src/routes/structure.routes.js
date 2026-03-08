@@ -654,8 +654,10 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
     let calledCapital = 0;
     if (capitalCalls && capitalCalls.length > 0) {
       capitalCalls.forEach(call => {
-        if (call.allocations) {
-          const allocation = call.allocations.find(a => a.investorId === si.userId || a.userId === si.userId);
+        // CapitalCall model returns investorAllocations (not allocations)
+        const allocs = call.investorAllocations || call.allocations;
+        if (allocs) {
+          const allocation = allocs.find(a => a.investorId === si.userId || a.userId === si.userId);
           if (allocation && call.status !== 'draft') {
             calledCapital += allocation.callAmount || 0;
           }
