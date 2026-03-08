@@ -396,6 +396,26 @@ router.post('/', authenticate, handleDocumentUpload, catchAsync(async (req, res)
     }
   }
 
+  // Check max investor restriction before allowing new investors
+  if (userId && structureId) {
+    const structureForCheck = await Structure.findById(structureId.trim());
+    if (structureForCheck && structureForCheck.maxInvestorRestriction) {
+      const currentInvestorCount = await Structure.getInvestorCount(structureId.trim());
+      if (currentInvestorCount >= structureForCheck.maxInvestorRestriction) {
+        // Check if user is already an investor in this structure
+        const existingInvestor = await StructureInvestor.findByUserAndStructure(userId, structureId.trim());
+        if (!existingInvestor) {
+          return res.status(403).json({
+            success: false,
+            message: 'This structure has reached its maximum number of investors allowed by regulation.',
+            maxInvestorRestriction: structureForCheck.maxInvestorRestriction,
+            currentInvestors: currentInvestorCount
+          });
+        }
+      }
+    }
+  }
+
   // Generate submission ID if not provided
   const finalSubmissionId = submissionId?.trim() || `PAY-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 

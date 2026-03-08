@@ -126,6 +126,7 @@ class Structure {
       feeRateOnNic: 'fee_rate_on_nic',
       feeRateOnUnfunded: 'fee_rate_on_unfunded',
       gpPercentage: 'gp_percentage',
+      maxInvestorRestriction: 'max_investor_restriction',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -261,6 +262,7 @@ class Structure {
       feeRateOnNic: dbData.fee_rate_on_nic,
       feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
       gpPercentage: dbData.gp_percentage,
+      maxInvestorRestriction: dbData.max_investor_restriction,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at

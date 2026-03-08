@@ -107,6 +107,27 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(structureId), 'Invalid structure ID format');
 
+  // Check max investor restriction before allowing new investors
+  const structureForCheck = await Structure.findById(structureId);
+  if (structureForCheck && structureForCheck.maxInvestorRestriction) {
+    const currentInvestorCount = await Structure.getInvestorCount(structureId);
+    if (currentInvestorCount >= structureForCheck.maxInvestorRestriction) {
+      // If assigning an existing user, check if they're already an investor
+      const targetUserId = providedUserId || null;
+      const existingInvestor = targetUserId
+        ? await StructureInvestor.findByUserAndStructure(targetUserId, structureId)
+        : null;
+      if (!existingInvestor) {
+        return res.status(400).json({
+          success: false,
+          message: 'This structure has reached its maximum number of investors allowed by regulation.',
+          maxInvestorRestriction: structureForCheck.maxInvestorRestriction,
+          currentInvestors: currentInvestorCount
+        });
+      }
+    }
+  }
+
   let userId;
   let existingUser;
   let newUserCreated = false;
