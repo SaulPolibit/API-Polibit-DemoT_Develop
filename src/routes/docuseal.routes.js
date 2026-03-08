@@ -623,7 +623,46 @@ router.get('/verifyUserSignature', authenticate, catchAsync(async (req, res) => 
   }
 
   // Get all submissions for this user's email
-  const userSubmissions = await DocusealSubmission.findByEmail(user.email);
+  let userSubmissions = await DocusealSubmission.findByEmail(user.email);
+
+  // If no local submissions found, query DocuSeal API directly as fallback
+  // (handles cases where webhook didn't fire, e.g. default/public templates)
+  if (userSubmissions.length === 0) {
+    console.log('[verifyUserSignature] No local submissions found, querying DocuSeal API for:', user.email);
+    try {
+      const result = await apiManager.getSubmissions({}, { q: user.email });
+      if (!result.error && result.body && Array.isArray(result.body)) {
+        const completedSubmissions = result.body.filter(s =>
+          s.status === 'completed' ||
+          (s.submitters && s.submitters.some(sub => sub.status === 'completed' && sub.email === user.email))
+        );
+        console.log('[verifyUserSignature] DocuSeal API found', completedSubmissions.length, 'completed submissions');
+        if (completedSubmissions.length > 0) {
+          // Create local records for completed submissions found on DocuSeal
+          for (const sub of completedSubmissions) {
+            const submitterEmail = sub.submitters?.find(s => s.email === user.email)?.email || user.email;
+            const slug = sub.slug || '';
+            try {
+              const created = await DocusealSubmission.create({
+                email: submitterEmail,
+                submissionId: String(sub.id),
+                submissionURL: slug ? `https://docuseal.com/s/${slug}` : '',
+                auditLogUrl: sub.audit_log_url || '',
+                status: 'completed'
+              });
+              console.log('[verifyUserSignature] Created local submission record:', created.id);
+            } catch (createErr) {
+              console.log('[verifyUserSignature] Could not create local record (may already exist):', createErr.message);
+            }
+          }
+          // Re-fetch local submissions after creating records
+          userSubmissions = await DocusealSubmission.findByEmail(user.email);
+        }
+      }
+    } catch (apiErr) {
+      console.log('[verifyUserSignature] DocuSeal API fallback failed:', apiErr.message);
+    }
+  }
 
   // Get all payments for this user's email
   const userPayments = await Payment.findByEmail(user.email);
