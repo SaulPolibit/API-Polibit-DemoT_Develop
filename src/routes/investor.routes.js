@@ -1183,10 +1183,22 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
   const newPaidAmount = newCapitalPaid + newFeesPaid + newVatPaid;
   const newOutstanding = totalDue - newPaidAmount;
 
-  // Do NOT change allocation status yet — payment requires manager approval
-  // Status will be updated to 'Paid'/'Partially Paid' when approved
+  // Capital-commitment payments are auto-approved; all others require manager approval
+  const isAutoApproved = paymentMethod === 'capital-commitment';
+  const approvalStatus = isAutoApproved ? 'approved' : 'pending';
 
-  // Update the allocation with payment breakdown and set payment_approval_status to 'pending'
+  // Determine allocation status
+  let newStatus = allocation.status;
+  if (isAutoApproved) {
+    if (newOutstanding <= 0.01) {
+      newStatus = 'Paid';
+    } else if (newPaidAmount > 0) {
+      newStatus = 'Partially Paid';
+    }
+  }
+  // If not auto-approved, keep current status — don't mark as Paid until approved
+
+  // Update the allocation with payment breakdown
   const { data: updatedAllocation, error: updateError } = await supabase
     .from('capital_call_allocations')
     .update({
@@ -1194,8 +1206,8 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
       capital_paid: newCapitalPaid,
       fees_paid: newFeesPaid,
       vat_paid: newVatPaid,
-      // Keep current status — don't mark as Paid until approved
-      payment_approval_status: 'pending',
+      status: newStatus,
+      payment_approval_status: approvalStatus,
       payment_method: paymentMethod || null,
       payment_reference: paymentReference || null,
       payment_date: paymentDate || new Date().toISOString(),
@@ -1210,19 +1222,47 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
   }
 
   // Log payment details for audit
-  console.log(`[Payment] Allocation ${allocation.id} payment submitted (pending approval): capital=${newCapitalPaid}, fees=${newFeesPaid}, vat=${newVatPaid}, method=${paymentMethod}, reference=${paymentReference}`);
+  console.log(`[Payment] Allocation ${allocation.id} payment submitted (${approvalStatus}): capital=${newCapitalPaid}, fees=${newFeesPaid}, vat=${newVatPaid}, method=${paymentMethod}, reference=${paymentReference}`);
 
-  // Do NOT update capital call totals yet — will be updated when payment is approved
+  // For auto-approved payments (capital-commitment), update capital call totals immediately
+  if (isAutoApproved) {
+    const { data: allAllocations } = await supabase
+      .from('capital_call_allocations')
+      .select('paid_amount, total_due, payment_approval_status')
+      .eq('capital_call_id', capitalCallId);
+
+    // Only count approved payments toward totals
+    const approvedAllocations = (allAllocations || []).filter(a => a.payment_approval_status === 'approved');
+    const totalPaid = approvedAllocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
+    const totalAmount = (allAllocations || []).reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+    let ccStatus = capitalCall.status || 'Sent';
+    if (totalPaid >= totalAmount) {
+      ccStatus = 'Paid';
+    } else if (totalPaid > 0) {
+      ccStatus = 'Partially Paid';
+    }
+
+    await supabase
+      .from('capital_calls')
+      .update({
+        total_paid_amount: totalPaid,
+        total_unpaid_amount: totalAmount - totalPaid,
+        status: ccStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', capitalCallId);
+  }
 
   res.status(200).json({
     success: true,
-    message: 'Payment recorded successfully',
+    message: isAutoApproved ? 'Payment approved automatically' : 'Payment recorded successfully',
     data: {
       allocationId: updatedAllocation.id,
       // Total amounts
       paidAmount: newPaidAmount,
       outstanding: newOutstanding,
-      paymentApprovalStatus: 'pending',
+      paymentApprovalStatus: approvalStatus,
       // Payment breakdown (for commitment tracking)
       capitalPaid: newCapitalPaid,
       feesPaid: newFeesPaid,
