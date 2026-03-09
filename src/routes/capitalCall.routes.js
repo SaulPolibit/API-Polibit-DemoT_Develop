@@ -154,29 +154,12 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
   const { getSupabase } = require('../config/database');
   const supabase = getSupabase();
 
-  // Fetch allocations with paid_amount > 0, join with capital_calls, users, and structures
+  // Fetch allocations with paid_amount > 0, join with capital_calls
+  // Using * for allocations to be resilient to missing columns before migration
   const { data: allocations, error } = await supabase
     .from('capital_call_allocations')
     .select(`
-      id,
-      capital_call_id,
-      user_id,
-      allocated_amount,
-      principal_amount,
-      management_fee_net,
-      vat_amount,
-      total_due,
-      paid_amount,
-      capital_paid,
-      fees_paid,
-      vat_paid,
-      status,
-      payment_method,
-      payment_reference,
-      payment_date,
-      payment_approval_status,
-      created_at,
-      updated_at,
+      *,
       capital_calls (
         id,
         call_number,
