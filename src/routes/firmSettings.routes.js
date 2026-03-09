@@ -80,16 +80,20 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
   // Get global settings
   const settings = await FirmSettings.get();
 
-  if (!settings) {
-    return res.status(404).json({
-      success: false,
-      message: 'No firm settings found. Please contact administrator.'
-    });
-  }
-
+  // Return defaults if no settings exist yet (first-time setup)
   res.status(200).json({
     success: true,
-    data: settings
+    data: settings || {
+      firmName: 'My Firm',
+      firmLogo: null,
+      firmDescription: null,
+      firmWebsite: null,
+      firmAddress: null,
+      firmPhone: null,
+      firmEmail: null,
+      themeConfig: null,
+      navVisibilityConfig: null,
+    }
   });
 }));
 
