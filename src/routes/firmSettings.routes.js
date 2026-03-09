@@ -228,14 +228,12 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
 
   const userId = req.auth.userId || req.user.id;
 
-  // Get existing global settings
-  const existingSettings = await FirmSettings.get();
+  // Get existing global settings — auto-create if none exist
+  let existingSettings = await FirmSettings.get();
 
   if (!existingSettings) {
-    return res.status(404).json({
-      success: false,
-      message: 'No firm settings found. Please create settings first.'
-    });
+    // Auto-create default firm settings record
+    existingSettings = await FirmSettings.create({ firmName: 'My Firm', userId });
   }
 
   const updateData = {};
