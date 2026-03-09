@@ -174,6 +174,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
       payment_method,
       payment_reference,
       payment_date,
+      payment_approval_status,
       created_at,
       updated_at,
       capital_calls (
@@ -254,6 +255,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
       vatPaid: parseFloat(alloc.vat_paid) || 0,
       outstanding: (parseFloat(alloc.total_due) || 0) - (parseFloat(alloc.paid_amount) || 0),
       status: alloc.status,
+      paymentApprovalStatus: alloc.payment_approval_status || (alloc.status === 'Paid' || alloc.status === 'Partially Paid' ? 'approved' : null),
       paymentMethod: alloc.payment_method || 'bank_transfer',
       paymentReference: alloc.payment_reference || '',
       paymentDate: alloc.payment_date || alloc.updated_at,
@@ -262,12 +264,12 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
     });
   }
 
-  // Calculate stats
+  // Calculate stats based on payment_approval_status
   const stats = {
     total: enrichedPayments.length,
-    paid: enrichedPayments.filter(p => p.status === 'Paid').length,
-    partiallyPaid: enrichedPayments.filter(p => p.status === 'Partially Paid').length,
-    pending: enrichedPayments.filter(p => p.status !== 'Paid' && p.status !== 'Partially Paid').length,
+    pending: enrichedPayments.filter(p => p.paymentApprovalStatus === 'pending').length,
+    approved: enrichedPayments.filter(p => p.paymentApprovalStatus === 'approved').length,
+    rejected: enrichedPayments.filter(p => p.paymentApprovalStatus === 'rejected').length,
     totalPaidAmount: enrichedPayments.reduce((sum, p) => sum + p.paidAmount, 0),
   };
 
@@ -276,6 +278,149 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
     count: enrichedPayments.length,
     stats,
     data: enrichedPayments,
+  });
+}));
+
+/**
+ * @route   PATCH /api/capital-calls/payments/:allocationId/approve
+ * @desc    Approve an investor's capital call payment (confirm payment was received)
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.patch('/payments/:allocationId/approve', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { getSupabase } = require('../config/database');
+  const supabase = getSupabase();
+  const { allocationId } = req.params;
+  const { notes } = req.body;
+
+  // Get the allocation
+  const { data: allocation, error: fetchError } = await supabase
+    .from('capital_call_allocations')
+    .select('*, capital_calls(*)')
+    .eq('id', allocationId)
+    .single();
+
+  if (fetchError || !allocation) {
+    return res.status(404).json({ success: false, message: 'Allocation not found' });
+  }
+
+  if (allocation.payment_approval_status !== 'pending') {
+    return res.status(400).json({ success: false, message: `Payment is already ${allocation.payment_approval_status || 'not pending'}` });
+  }
+
+  // Determine the allocation status based on paid amounts
+  const totalDue = parseFloat(allocation.total_due) || 0;
+  const paidAmount = parseFloat(allocation.paid_amount) || 0;
+  const outstanding = totalDue - paidAmount;
+
+  let newStatus = allocation.status;
+  if (outstanding <= 0.01) {
+    newStatus = 'Paid';
+  } else if (paidAmount > 0) {
+    newStatus = 'Partially Paid';
+  }
+
+  // Update allocation: approve payment and set proper status
+  const { error: updateError } = await supabase
+    .from('capital_call_allocations')
+    .update({
+      payment_approval_status: 'approved',
+      status: newStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', allocationId);
+
+  if (updateError) {
+    throw new Error(`Error approving payment: ${updateError.message}`);
+  }
+
+  // Now update capital call totals since payment is confirmed
+  const capitalCallId = allocation.capital_call_id;
+  const { data: allAllocations } = await supabase
+    .from('capital_call_allocations')
+    .select('paid_amount, total_due, payment_approval_status')
+    .eq('capital_call_id', capitalCallId);
+
+  // Only count approved payments toward totals
+  const approvedAllocations = (allAllocations || []).filter(a => a.payment_approval_status === 'approved');
+  const totalPaid = approvedAllocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
+  const totalAmount = (allAllocations || []).reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+  let ccStatus = allocation.capital_calls?.status || 'Sent';
+  if (totalPaid >= totalAmount) {
+    ccStatus = 'Paid';
+  } else if (totalPaid > 0) {
+    ccStatus = 'Partially Paid';
+  }
+
+  await supabase
+    .from('capital_calls')
+    .update({
+      total_paid_amount: totalPaid,
+      total_unpaid_amount: totalAmount - totalPaid,
+      status: ccStatus,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', capitalCallId);
+
+  console.log(`[Payment Approval] Allocation ${allocationId} approved. Status: ${newStatus}`);
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment approved successfully',
+    data: { allocationId, status: newStatus, paymentApprovalStatus: 'approved' }
+  });
+}));
+
+/**
+ * @route   PATCH /api/capital-calls/payments/:allocationId/reject
+ * @desc    Reject an investor's capital call payment (payment not received/invalid)
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.patch('/payments/:allocationId/reject', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { getSupabase } = require('../config/database');
+  const supabase = getSupabase();
+  const { allocationId } = req.params;
+  const { reason } = req.body;
+
+  // Get the allocation
+  const { data: allocation, error: fetchError } = await supabase
+    .from('capital_call_allocations')
+    .select('*')
+    .eq('id', allocationId)
+    .single();
+
+  if (fetchError || !allocation) {
+    return res.status(404).json({ success: false, message: 'Allocation not found' });
+  }
+
+  if (allocation.payment_approval_status !== 'pending') {
+    return res.status(400).json({ success: false, message: `Payment is already ${allocation.payment_approval_status || 'not pending'}` });
+  }
+
+  // Reject: revert paid amounts back to 0 and clear payment data
+  const { error: updateError } = await supabase
+    .from('capital_call_allocations')
+    .update({
+      payment_approval_status: 'rejected',
+      paid_amount: 0,
+      capital_paid: 0,
+      fees_paid: 0,
+      vat_paid: 0,
+      // Keep payment_method/reference/date for audit trail
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', allocationId);
+
+  if (updateError) {
+    throw new Error(`Error rejecting payment: ${updateError.message}`);
+  }
+
+  console.log(`[Payment Rejection] Allocation ${allocationId} rejected. Reason: ${reason || 'none'}`);
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment rejected',
+    data: { allocationId, paymentApprovalStatus: 'rejected', reason: reason || null }
   });
 }));
 

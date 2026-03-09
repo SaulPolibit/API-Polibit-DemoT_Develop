@@ -1183,15 +1183,10 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
   const newPaidAmount = newCapitalPaid + newFeesPaid + newVatPaid;
   const newOutstanding = totalDue - newPaidAmount;
 
-  // Determine new status
-  let newStatus = allocation.status;
-  if (newOutstanding <= 0.01) { // Allow for small rounding differences
-    newStatus = 'Paid';
-  } else if (newPaidAmount > 0) {
-    newStatus = 'Partially Paid';
-  }
+  // Do NOT change allocation status yet — payment requires manager approval
+  // Status will be updated to 'Paid'/'Partially Paid' when approved
 
-  // Update the allocation with payment breakdown and payment metadata
+  // Update the allocation with payment breakdown and set payment_approval_status to 'pending'
   const { data: updatedAllocation, error: updateError } = await supabase
     .from('capital_call_allocations')
     .update({
@@ -1199,7 +1194,8 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
       capital_paid: newCapitalPaid,
       fees_paid: newFeesPaid,
       vat_paid: newVatPaid,
-      status: newStatus,
+      // Keep current status — don't mark as Paid until approved
+      payment_approval_status: 'pending',
       payment_method: paymentMethod || null,
       payment_reference: paymentReference || null,
       payment_date: paymentDate || new Date().toISOString(),
@@ -1214,34 +1210,9 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
   }
 
   // Log payment details for audit
-  console.log(`[Payment] Allocation ${allocation.id} updated: capital=${newCapitalPaid}, fees=${newFeesPaid}, vat=${newVatPaid}, method=${paymentMethod}, reference=${paymentReference}`);
+  console.log(`[Payment] Allocation ${allocation.id} payment submitted (pending approval): capital=${newCapitalPaid}, fees=${newFeesPaid}, vat=${newVatPaid}, method=${paymentMethod}, reference=${paymentReference}`);
 
-  // Update the capital call totals
-  const { data: allAllocations } = await supabase
-    .from('capital_call_allocations')
-    .select('paid_amount, total_due, capital_paid, fees_paid, vat_paid')
-    .eq('capital_call_id', capitalCallId);
-
-  const totalPaid = allAllocations.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
-  const totalAmount = allAllocations.reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
-
-  // Determine capital call status
-  let ccStatus = capitalCall.status;
-  if (totalPaid >= totalAmount) {
-    ccStatus = 'Paid';
-  } else if (totalPaid > 0 && capitalCall.status !== 'Paid') {
-    ccStatus = 'Partially Paid';
-  }
-
-  await supabase
-    .from('capital_calls')
-    .update({
-      total_paid_amount: totalPaid,
-      total_unpaid_amount: totalAmount - totalPaid,
-      status: ccStatus,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', capitalCallId);
+  // Do NOT update capital call totals yet — will be updated when payment is approved
 
   res.status(200).json({
     success: true,
@@ -1251,7 +1222,7 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
       // Total amounts
       paidAmount: newPaidAmount,
       outstanding: newOutstanding,
-      status: newStatus,
+      paymentApprovalStatus: 'pending',
       // Payment breakdown (for commitment tracking)
       capitalPaid: newCapitalPaid,
       feesPaid: newFeesPaid,
