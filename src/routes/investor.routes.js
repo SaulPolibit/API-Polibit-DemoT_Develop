@@ -1191,7 +1191,7 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
     newStatus = 'Partially Paid';
   }
 
-  // Update the allocation with payment breakdown
+  // Update the allocation with payment breakdown and payment metadata
   const { data: updatedAllocation, error: updateError } = await supabase
     .from('capital_call_allocations')
     .update({
@@ -1200,6 +1200,9 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
       fees_paid: newFeesPaid,
       vat_paid: newVatPaid,
       status: newStatus,
+      payment_method: paymentMethod || null,
+      payment_reference: paymentReference || null,
+      payment_date: paymentDate || new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
     .eq('id', allocation.id)

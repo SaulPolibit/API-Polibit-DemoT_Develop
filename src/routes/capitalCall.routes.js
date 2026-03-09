@@ -146,6 +146,140 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 }));
 
 /**
+ * @route   GET /api/capital-calls/payments
+ * @desc    Get all capital call payments (allocations where paid_amount > 0) for approvals
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { getSupabase } = require('../config/database');
+  const supabase = getSupabase();
+
+  // Fetch allocations with paid_amount > 0, join with capital_calls, users, and structures
+  const { data: allocations, error } = await supabase
+    .from('capital_call_allocations')
+    .select(`
+      id,
+      capital_call_id,
+      user_id,
+      allocated_amount,
+      principal_amount,
+      management_fee_net,
+      vat_amount,
+      total_due,
+      paid_amount,
+      capital_paid,
+      fees_paid,
+      vat_paid,
+      status,
+      payment_method,
+      payment_reference,
+      payment_date,
+      created_at,
+      updated_at,
+      capital_calls (
+        id,
+        call_number,
+        call_date,
+        due_date,
+        purpose,
+        status,
+        structure_id,
+        approval_status,
+        total_call_amount
+      )
+    `)
+    .gt('paid_amount', 0)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Error fetching capital call payments: ${error.message}`);
+  }
+
+  // Enrich with user and structure data
+  const enrichedPayments = [];
+
+  for (const alloc of (allocations || [])) {
+    const capitalCall = alloc.capital_calls;
+    if (!capitalCall) continue;
+
+    // Get user info
+    let investorName = 'Unknown';
+    let investorEmail = '';
+    if (alloc.user_id) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name')
+        .eq('id', alloc.user_id)
+        .single();
+      if (user) {
+        investorName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email;
+        investorEmail = user.email;
+      }
+    }
+
+    // Get structure info
+    let structureName = 'N/A';
+    let structureType = '';
+    if (capitalCall.structure_id) {
+      const { data: struct } = await supabase
+        .from('structures')
+        .select('id, name, type')
+        .eq('id', capitalCall.structure_id)
+        .single();
+      if (struct) {
+        structureName = struct.name;
+        structureType = struct.type || '';
+      }
+    }
+
+    enrichedPayments.push({
+      id: alloc.id,
+      capitalCallId: capitalCall.id,
+      callNumber: capitalCall.call_number,
+      callDate: capitalCall.call_date,
+      dueDate: capitalCall.due_date,
+      purpose: capitalCall.purpose,
+      capitalCallStatus: capitalCall.status,
+      structureId: capitalCall.structure_id,
+      structureName,
+      structureType,
+      investorId: alloc.user_id,
+      investorName,
+      investorEmail,
+      allocatedAmount: parseFloat(alloc.allocated_amount) || 0,
+      totalDue: parseFloat(alloc.total_due) || 0,
+      paidAmount: parseFloat(alloc.paid_amount) || 0,
+      capitalPaid: parseFloat(alloc.capital_paid) || 0,
+      feesPaid: parseFloat(alloc.fees_paid) || 0,
+      vatPaid: parseFloat(alloc.vat_paid) || 0,
+      outstanding: (parseFloat(alloc.total_due) || 0) - (parseFloat(alloc.paid_amount) || 0),
+      status: alloc.status,
+      paymentMethod: alloc.payment_method || 'bank_transfer',
+      paymentReference: alloc.payment_reference || '',
+      paymentDate: alloc.payment_date || alloc.updated_at,
+      createdAt: alloc.created_at,
+      updatedAt: alloc.updated_at,
+    });
+  }
+
+  // Calculate stats
+  const stats = {
+    total: enrichedPayments.length,
+    paid: enrichedPayments.filter(p => p.status === 'Paid').length,
+    partiallyPaid: enrichedPayments.filter(p => p.status === 'Partially Paid').length,
+    pending: enrichedPayments.filter(p => p.status !== 'Paid' && p.status !== 'Partially Paid').length,
+    totalPaidAmount: enrichedPayments.reduce((sum, p) => sum + p.paidAmount, 0),
+  };
+
+  res.status(200).json({
+    success: true,
+    count: enrichedPayments.length,
+    stats,
+    data: enrichedPayments,
+  });
+}));
+
+/**
  * @route   GET /api/capital-calls/:id
  * @desc    Get a single capital call by ID
  * @access  Private (requires authentication, Root/Admin only)
