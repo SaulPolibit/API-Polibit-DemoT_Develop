@@ -127,11 +127,7 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 
   let filter = {};
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.createdBy = userId;
-  }
-  // Root (role 0) sees all capital calls, so no userId filter
+  // All IM roles see all capital calls (access controlled via navigation visibility settings)
 
   if (structureId) filter.structureId = structureId;
   if (status) filter.status = status;
@@ -420,10 +416,6 @@ router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   validate(capitalCall, 'Capital call not found');
 
-  // Root can access any capital call, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   res.status(200).json({
     success: true,
@@ -445,10 +437,6 @@ router.get('/:id/with-allocations', authenticate, requireInvestmentManagerAccess
   const capitalCallWithAllocations = results[0];
   validate(capitalCallWithAllocations, 'Capital call not found');
 
-  // Root can access any capital call, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCallWithAllocations.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   res.status(200).json({
     success: true,
@@ -468,10 +456,6 @@ router.get('/structure/:structureId/summary', authenticate, requireInvestmentMan
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   const summary = await CapitalCall.getSummary(structureId);
 
@@ -493,10 +477,6 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   // Get historical capital calls with allocations
   const history = await CapitalCall.getHistoryByStructure(structureId);
@@ -574,10 +554,6 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can edit any capital call, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const updateData = {};
   const allowedFields = [
@@ -618,10 +594,6 @@ router.patch('/:id/send', authenticate, requireInvestmentManagerAccess, catchAsy
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can edit any capital call, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
   validate(capitalCall.status === 'Draft', 'Capital call must be in Draft status to send');
 
   const updatedCapitalCall = await CapitalCall.markAsSent(id);
@@ -657,10 +629,6 @@ router.patch('/:id/mark-paid', authenticate, requireInvestmentManagerAccess, cat
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can edit any capital call, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const updatedCapitalCall = await CapitalCall.markAsPaid(id);
 
@@ -686,10 +654,6 @@ router.patch('/:id/update-payment', authenticate, requireInvestmentManagerAccess
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can edit any capital call, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const updatedCapitalCall = await CapitalCall.updatePaymentAmounts(id, paidAmount);
 
@@ -712,10 +676,6 @@ router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAcc
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can edit any capital call, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
@@ -741,10 +701,6 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can delete any capital call, Admin can only delete their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   await CapitalCall.findByIdAndDelete(id);
 
@@ -768,10 +724,6 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can access any capital call, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
@@ -808,10 +760,6 @@ router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmen
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can access any capital call, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
@@ -860,10 +808,6 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can access any capital call, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
@@ -973,10 +917,6 @@ router.get('/:id/approval-history', authenticate, requireInvestmentManagerAccess
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can access any capital call, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   const history = await ApprovalHistory.findByEntity('capital_call', id);
 
@@ -1005,10 +945,6 @@ router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, ca
     filter.approvalStatusIn = ['pending_cfo'];
   }
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.createdBy = userId;
-  }
 
   const capitalCalls = await CapitalCall.findByApprovalStatus(filter);
 
@@ -1032,10 +968,6 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can edit any capital call, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
   validate(capitalCall.approvalStatus === 'draft', 'Capital call must be in draft status to submit for review');
 
   // Get user details for history
@@ -1116,10 +1048,6 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can approve any capital call, Admin can only approve their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
 
   // With simplified workflow, this endpoint now handles pending_cfo status
   validate(
@@ -1289,10 +1217,6 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can reject any, Admin can only reject their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
   validate(
     capitalCall.approvalStatus === 'pending_cfo',
     'Capital call must be pending CFO approval to reject'
@@ -1382,10 +1306,6 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-  // Root can request changes on any, Admin can only on their own
-  if (userRole === ROLES.ADMIN) {
-    validate(capitalCall.createdBy === userId, 'Unauthorized access to capital call');
-  }
   validate(
     capitalCall.approvalStatus === 'pending_cfo',
     'Capital call must be pending CFO approval to request changes'

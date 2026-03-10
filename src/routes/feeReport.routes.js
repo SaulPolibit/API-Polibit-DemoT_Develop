@@ -126,9 +126,7 @@ router.get('/:structureId/generate', authenticate, requireInvestmentManagerAcces
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
+
 
   const firmName = await getFirmNameForUser(userId);
   const feeData = await aggregateFeeData(structureId, startDate, endDate);
@@ -166,9 +164,7 @@ router.get('/:structureId/data', authenticate, requireInvestmentManagerAccess, c
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
+
 
   const feeData = await aggregateFeeData(structureId, startDate, endDate);
 
@@ -202,11 +198,8 @@ router.get('/:structureId/investor/:investorId', authenticate, catchAsync(async 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Access control
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  } else if (userRole !== ROLES.ROOT) {
-    // LP user can only see their own fees
+  // Access control: Root/Admin see all, LPs can only see their own
+  if (userRole !== ROLES.ROOT && userRole !== ROLES.ADMIN) {
     validate(investorId === userId, 'Unauthorized access to fee data');
   }
 

@@ -39,11 +39,8 @@ router.get('/:investorId/statement', authenticate, catchAsync(async (req, res) =
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Access control: Investment managers can see any investor, LPs can only see their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  } else if (userRole !== ROLES.ROOT) {
-    // LP user - can only see their own account
+  // Access control: Root/Admin see all, LPs can only see their own
+  if (userRole !== ROLES.ROOT && userRole !== ROLES.ADMIN) {
     validate(investorId === userId, 'Unauthorized access to capital account');
   }
 
@@ -116,10 +113,8 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Access control
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  } else if (userRole !== ROLES.ROOT) {
+  // Access control: Root/Admin see all, LPs can only see their own
+  if (userRole !== ROLES.ROOT && userRole !== ROLES.ADMIN) {
     validate(investorId === userId, 'Unauthorized access to capital account');
   }
 

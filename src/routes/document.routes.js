@@ -41,8 +41,8 @@ async function validateEntity(entityType, entityId, userId, userRole) {
 
   validate(entity, `${entityType} not found`);
 
-  // Root can access any entity, Admin and Investor can only access their own
-  if (userRole === ROLES.ADMIN || userRole === ROLES.INVESTOR) {
+  // Root/Admin can access any entity, Investor can only access their own
+  if (userRole === ROLES.INVESTOR) {
     validate(entity.userId === userId, `Unauthorized access to ${entityType}`);
   }
 
@@ -221,10 +221,6 @@ router.get('/all', authenticate, catchAsync(async (req, res) => {
 
   let filter = {};
 
-  // Role-based filtering: Root/Support/Guest see all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.uploadedBy = userId;
-  }
   // Root (0), Support (2), Guest (4) see all documents, so no uploadedBy filter
 
   if (entityType) filter.entityType = entityType;
@@ -406,10 +402,10 @@ router.get('/combined', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication)
  */
 router.get('/', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
   const { entityType, documentType, isActive } = req.query;
 
-  let filter = { userId };
+  // All IM roles see all documents (access controlled via navigation visibility settings)
+  let filter = {};
 
   if (entityType) filter.entityType = entityType;
   if (documentType) filter.documentType = documentType;

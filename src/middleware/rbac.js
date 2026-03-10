@@ -94,12 +94,9 @@ const applyRoleFilter = (criteria = {}, userRole, userId, creatorField = 'create
     return criteria;
   }
 
-  // Admin sees only their own items
+  // Admin sees everything (access controlled via navigation visibility settings)
   if (userRole === ROLES.ADMIN) {
-    return {
-      ...criteria,
-      [creatorField]: userId
-    };
+    return criteria;
   }
 
   // Investor should not access investment manager data
@@ -107,8 +104,8 @@ const applyRoleFilter = (criteria = {}, userRole, userId, creatorField = 'create
     return null;
   }
 
-  // Unknown role
-  return null;
+  // Unknown role — allow access (navigation controls visibility)
+  return criteria;
 };
 
 /**
@@ -144,15 +141,9 @@ const filterByRole = (items, userRole, userId) => {
     return items;
   }
 
-  // Admin sees only their own items
+  // Admin sees everything (access controlled via navigation visibility settings)
   if (userRole === ROLES.ADMIN) {
-    return items.filter(item => {
-      // Check different possible field names for creator
-      const creatorId = item.createdBy || item.created_by ||
-                       item.userId || item.user_id ||
-                       item.uploadedBy || item.uploaded_by;
-      return creatorId === userId;
-    });
+    return items;
   }
 
   // Investor should not see investment manager data
@@ -160,7 +151,7 @@ const filterByRole = (items, userRole, userId) => {
     return [];
   }
 
-  return [];
+  return items;
 };
 
 /**

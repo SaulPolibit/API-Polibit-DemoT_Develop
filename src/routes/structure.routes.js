@@ -849,11 +849,6 @@ router.patch('/:id/financials', authenticate, requireInvestmentManagerAccess, ca
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can edit any structure, Admin can only edit assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
-    validate(canEdit, 'Unauthorized access to structure');
-  }
 
   const financials = {};
   if (totalCalled !== undefined) financials.totalCalled = totalCalled;
@@ -893,11 +888,6 @@ router.post('/:id/admins', authenticate, requireInvestmentManagerAccess, catchAs
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can add to any structure, Admin can only add to assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
-    validate(canEdit, 'Unauthorized access to structure');
-  }
 
   // Check if target user exists and has valid role
   const targetUser = await User.findById(targetUserId);
@@ -968,11 +958,6 @@ router.delete('/:id/admins/:targetUserId', authenticate, requireInvestmentManage
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can remove from any structure, Admin can only remove from assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
-    validate(canEdit, 'Unauthorized access to structure');
-  }
 
   // Check if relationship exists
   const hasAccess = await StructureAdmin.hasAccess(id, targetUserId);
@@ -999,11 +984,6 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
   const structure = await Structure.findById(id);
   validate(structure, 'Structure not found');
 
-  // Root can delete any structure, Admin can only delete assigned structures
-  if (userRole === ROLES.ADMIN) {
-    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
-    validate(canEdit, 'Unauthorized access to structure');
-  }
 
   await Structure.findByIdAndDelete(id);
 

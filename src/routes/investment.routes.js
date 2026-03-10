@@ -69,10 +69,6 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can create investments for any structure, Admin can only create for their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Structure does not belong to user');
-  }
 
   // Validate type-specific fields
   if (investmentType === 'EQUITY' || investmentType === 'MIXED') {
@@ -174,11 +170,7 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
 
   let filter = {};
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.userId = userId;
-  }
-  // Root (role 0) sees all investments, so no userId filter
+  // All IM roles see all investments (access controlled via navigation visibility settings)
 
   if (structureId) filter.structureId = structureId;
   if (projectId) filter.projectId = projectId;
@@ -205,15 +197,11 @@ router.get('/active', authenticate, catchAsync(async (req, res) => {
 
   const investments = await Investment.findActive(structureId);
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  const userInvestments = userRole === ROLES.ROOT
-    ? investments
-    : investments.filter(inv => inv.userId === userId);
-
+  // All IM roles see all investments (access controlled via navigation visibility settings)
   res.status(200).json({
     success: true,
-    count: userInvestments.length,
-    data: userInvestments
+    count: investments.length,
+    data: investments
   });
 }));
 
@@ -230,10 +218,6 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
 
   validate(investment, 'Investment not found');
 
-  // Root can access any investment, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investment.userId === userId, 'Unauthorized access to investment');
-  }
 
   res.status(200).json({
     success: true,
@@ -253,10 +237,6 @@ router.get('/:id/with-structure', authenticate, catchAsync(async (req, res) => {
   const investment = await Investment.findById(id);
   validate(investment, 'Investment not found');
 
-  // Root can access any investment, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investment.userId === userId, 'Unauthorized access to investment');
-  }
 
   const investmentWithStructure = await Investment.findWithStructure(id);
 
@@ -278,10 +258,6 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
   const investment = await Investment.findById(id);
   validate(investment, 'Investment not found');
 
-  // Root can edit any investment, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investment.userId === userId, 'Unauthorized access to investment');
-  }
 
   const updateData = {};
   const allowedFields = [
@@ -345,10 +321,6 @@ router.patch('/:id/performance', authenticate, requireInvestmentManagerAccess, c
   const investment = await Investment.findById(id);
   validate(investment, 'Investment not found');
 
-  // Root can edit any investment, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investment.userId === userId, 'Unauthorized access to investment');
-  }
 
   const metrics = {};
   if (irrPercent !== undefined) metrics.irrPercent = irrPercent;
@@ -381,10 +353,6 @@ router.patch('/:id/exit', authenticate, requireInvestmentManagerAccess, catchAsy
   const investment = await Investment.findById(id);
   validate(investment, 'Investment not found');
 
-  // Root can edit any investment, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investment.userId === userId, 'Unauthorized access to investment');
-  }
 
   const exitData = {
     exitDate: exitDate || new Date().toISOString()
@@ -415,10 +383,6 @@ router.get('/structure/:structureId/portfolio', authenticate, catchAsync(async (
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   const portfolio = await Investment.getPortfolioSummary(structureId);
 
@@ -440,10 +404,6 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
   const investment = await Investment.findById(id);
   validate(investment, 'Investment not found');
 
-  // Root can delete any investment, Admin can only delete their own
-  if (userRole === ROLES.ADMIN) {
-    validate(investment.userId === userId, 'Unauthorized access to investment');
-  }
 
   await Investment.findByIdAndDelete(id);
 

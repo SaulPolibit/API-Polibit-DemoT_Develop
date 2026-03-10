@@ -121,11 +121,7 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 
   let filter = {};
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.createdBy = userId;
-  }
-  // Root (role 0) sees all distributions, so no userId filter
+  // All IM roles see all distributions (access controlled via navigation visibility settings)
 
   if (structureId) filter.structureId = structureId;
   if (status) filter.status = status;
@@ -152,10 +148,6 @@ router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   validate(distribution, 'Distribution not found');
 
-  // Root can access any distribution, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   res.status(200).json({
     success: true,
@@ -175,10 +167,6 @@ router.get('/:id/with-allocations', authenticate, requireInvestmentManagerAccess
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can access any distribution, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const distributionWithAllocations = await Distribution.findWithAllocations(id);
 
@@ -200,10 +188,6 @@ router.get('/structure/:structureId/summary', authenticate, requireInvestmentMan
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   const summary = await Distribution.getSummary(structureId);
 
@@ -225,10 +209,6 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can edit any distribution, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const updateData = {};
   const allowedFields = [
@@ -267,10 +247,6 @@ router.post('/:id/apply-waterfall', authenticate, requireInvestmentManagerAccess
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can edit any distribution, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
   validate(!distribution.waterfallApplied, 'Waterfall already applied to this distribution');
 
   const structure = await Structure.findById(distribution.structureId);
@@ -297,10 +273,6 @@ router.patch('/:id/mark-paid', authenticate, requireInvestmentManagerAccess, cat
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can edit any distribution, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const updatedDistribution = await Distribution.markAsPaid(id);
 
@@ -335,10 +307,6 @@ router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAcc
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can edit any distribution, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const structure = await Structure.findById(distribution.structureId);
   validate(structure, 'Structure not found');
@@ -367,10 +335,6 @@ router.get('/investor/:investorId/total', authenticate, requireInvestmentManager
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   const total = await Distribution.getInvestorDistributionTotal(investorId, structureId);
 
@@ -392,10 +356,6 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can delete any distribution, Admin can only delete their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   await Distribution.findByIdAndDelete(id);
 
@@ -421,10 +381,6 @@ router.get('/:id/approval-history', authenticate, requireInvestmentManagerAccess
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can access any distribution, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const history = await ApprovalHistory.findByEntity('distribution', id);
 
@@ -453,10 +409,6 @@ router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, ca
     filter.approvalStatusIn = ['pending_cfo'];
   }
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  if (userRole === ROLES.ADMIN) {
-    filter.createdBy = userId;
-  }
 
   const distributions = await Distribution.findByApprovalStatus(filter);
 
@@ -480,10 +432,6 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can edit any distribution, Admin can only edit their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
   validate(distribution.approvalStatus === 'draft', 'Distribution must be in draft status to submit for review');
 
   // Get user details for history
@@ -564,10 +512,6 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can approve any distribution, Admin can only approve their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   // With simplified workflow, this endpoint now handles pending_cfo status
   validate(
@@ -737,10 +681,6 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can reject any, Admin can only reject their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
   validate(
     distribution.approvalStatus === 'pending_cfo',
     'Distribution must be pending CFO approval to reject'
@@ -830,10 +770,6 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can request changes on any, Admin can only on their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
   validate(
     distribution.approvalStatus === 'pending_cfo',
     'Distribution must be pending CFO approval to request changes'
@@ -906,10 +842,6 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can access any distribution, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const structure = await Structure.findById(distribution.structureId);
   validate(structure, 'Structure not found');
@@ -946,10 +878,6 @@ router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmen
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can access any distribution, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const structure = await Structure.findById(distribution.structureId);
   validate(structure, 'Structure not found');
@@ -996,10 +924,6 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-  // Root can access any distribution, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(distribution.createdBy === userId, 'Unauthorized access to distribution');
-  }
 
   const structure = await Structure.findById(distribution.structureId);
   validate(structure, 'Structure not found');

@@ -572,10 +572,6 @@ router.post('/send/quarterly-report', authenticate, catchAsync(async (req, res) 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   const reportData = { structureId, quarter, year, reportUrl };
   const notifications = await sendQuarterlyReportNotice(reportData, structure, userId);
@@ -617,10 +613,6 @@ router.post('/send/k1-tax-form', authenticate, catchAsync(async (req, res) => {
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  // Root can access any structure, Admin can only access their own
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
 
   const k1Data = { structureId, taxYear, formUrl };
   const notifications = await sendK1TaxFormNotice(k1Data, structure, userId);
@@ -664,11 +656,6 @@ router.post('/send/announcement', authenticate, catchAsync(async (req, res) => {
     structure = await Structure.findById(structureId);
     validate(structure, 'Structure not found');
 
-    // Root can access any structure, Admin can only access their own
-    if (userRole === ROLES.ADMIN) {
-      validate(structure.createdBy === userId, 'Unauthorized access to structure');
-    }
-  }
 
   const announcementData = {
     title,

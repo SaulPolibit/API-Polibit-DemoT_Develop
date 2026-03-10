@@ -36,9 +36,7 @@ router.get('/:structureId/performance', authenticate, requireInvestmentManagerAc
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
+
 
   const reportData = await calculatePerformanceMetrics(structureId, asOfDate);
   const firmName = await getFirmNameForUser(userId);
@@ -82,9 +80,7 @@ router.get('/:structureId/quarterly', authenticate, requireInvestmentManagerAcce
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
+
 
   // Get performance metrics as of end date + quarterly activity
   const [performanceData, quarterlyActivity] = await Promise.all([
@@ -130,9 +126,7 @@ router.get('/:structureId/ccd', authenticate, requireInvestmentManagerAccess, ca
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
+
 
   const reportData = await calculateCCDSummary(structureId);
   const firmName = await getFirmNameForUser(userId);
@@ -172,9 +166,7 @@ router.get('/:structureId/all', authenticate, requireInvestmentManagerAccess, ca
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
-  if (userRole === ROLES.ADMIN) {
-    validate(structure.createdBy === userId, 'Unauthorized access to structure');
-  }
+
 
   const [performanceReport, ccdReport] = await Promise.all([
     calculatePerformanceMetrics(structureId, asOfDate),
