@@ -655,7 +655,7 @@ router.post('/send/announcement', authenticate, catchAsync(async (req, res) => {
     // Validate structure exists
     structure = await Structure.findById(structureId);
     validate(structure, 'Structure not found');
-
+  }
 
   const announcementData = {
     title,
