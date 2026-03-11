@@ -296,26 +296,36 @@ class Structure {
   }
 
   /**
-   * Get actual investor count for a structure (count unique users from investments)
+   * Get actual investor count for a structure (count unique users from investments AND structure_investors)
    */
   static async getInvestorCount(structureId) {
     const supabase = getSupabase();
 
-    // Get all investments for this structure
-    const { data, error } = await supabase
+    // Get investors from investments table
+    const { data: investments, error: investmentsError } = await supabase
       .from('investments')
-      .select('*')
+      .select('user_id, created_by')
       .eq('structure_id', structureId);
 
-    if (error) {
-      console.error(`Error counting investors: ${error.message}`);
-      return 0;
+    if (investmentsError) {
+      console.error(`Error counting investors from investments: ${investmentsError.message}`);
     }
 
-    // Count unique user IDs (investors) - support both old and new column names
-    const uniqueInvestors = new Set(
-      data.map(inv => inv.user_id || inv.created_by).filter(id => id !== null)
-    );
+    // Get investors from structure_investors table (LP commitments)
+    const { data: structureInvestors, error: siError } = await supabase
+      .from('structure_investors')
+      .select('user_id')
+      .eq('structure_id', structureId);
+
+    if (siError) {
+      console.error(`Error counting investors from structure_investors: ${siError.message}`);
+    }
+
+    // Count unique user IDs from both sources
+    const uniqueInvestors = new Set([
+      ...(investments?.map(inv => inv.user_id || inv.created_by).filter(id => id !== null) || []),
+      ...(structureInvestors?.map(si => si.user_id).filter(id => id !== null) || []),
+    ]);
     return uniqueInvestors.size;
   }
 
