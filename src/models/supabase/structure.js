@@ -127,6 +127,15 @@ class Structure {
       feeRateOnUnfunded: 'fee_rate_on_unfunded',
       gpPercentage: 'gp_percentage',
       maxInvestorRestriction: 'max_investor_restriction',
+      // ILPA Phase 3-5: Fee structure + Payment methods
+      postCommitmentFeeRate: 'post_commitment_fee_rate',
+      flatManagementFeeRate: 'flat_management_fee_rate',
+      managementFeeOffset: 'management_fee_offset',
+      feeOffsetRate: 'fee_offset_rate',
+      prefReturnCompounding: 'pref_return_compounding',
+      payWithPolibitEnabled: 'pay_with_polibit_enabled',
+      payWithPolibitSettlement: 'pay_with_polibit_settlement',
+      paymentCardEnabled: 'payment_card_enabled',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'

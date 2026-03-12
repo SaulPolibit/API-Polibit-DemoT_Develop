@@ -240,7 +240,16 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     feeRateOnNic,
     feeRateOnUnfunded,
     gpPercentage,
-    maxInvestorRestriction
+    maxInvestorRestriction,
+    // ILPA Phase 3-5: Fee structure + Payment methods
+    postCommitmentFeeRate,
+    flatManagementFeeRate,
+    managementFeeOffset,
+    feeOffsetRate,
+    prefReturnCompounding,
+    payWithPolibitEnabled,
+    payWithPolibitSettlement,
+    paymentCardEnabled
   } = req.body;
 
   // Validate required fields
@@ -398,6 +407,15 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     feeRateOnUnfunded: sanitizeNumber(feeRateOnUnfunded, null),
     gpPercentage: sanitizeNumber(gpPercentage, null),
     maxInvestorRestriction: sanitizeNumber(maxInvestorRestriction, null),
+    // ILPA Phase 3-5: Fee structure + Payment methods
+    postCommitmentFeeRate: sanitizeNumber(postCommitmentFeeRate, null),
+    flatManagementFeeRate: sanitizeNumber(flatManagementFeeRate, null),
+    managementFeeOffset: managementFeeOffset === true || managementFeeOffset === 'true',
+    feeOffsetRate: feeOffsetRate?.trim() || null,
+    prefReturnCompounding: prefReturnCompounding?.trim() || 'compound',
+    payWithPolibitEnabled: payWithPolibitEnabled === true || payWithPolibitEnabled === 'true',
+    payWithPolibitSettlement: payWithPolibitSettlement?.trim() || 'standard',
+    paymentCardEnabled: paymentCardEnabled === true || paymentCardEnabled === 'true',
     createdBy: userId
   };
 
@@ -775,7 +793,11 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'managementFeeBase', 'gpCatchUpRate',
     // Proximity Dual-Rate Fee Fields
     'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage',
-    'maxInvestorRestriction'
+    'maxInvestorRestriction',
+    // ILPA Phase 3-5: Fee structure + Payment methods
+    'postCommitmentFeeRate', 'flatManagementFeeRate', 'managementFeeOffset',
+    'feeOffsetRate', 'prefReturnCompounding',
+    'payWithPolibitEnabled', 'payWithPolibitSettlement', 'paymentCardEnabled'
   ];
 
   // Fields that are numeric in the database and must not receive empty strings
@@ -793,7 +815,8 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'incomeDebtTaxRateLegalEntities', 'incomeEquityTaxRateLegalEntities',
     'gpCatchUpRate',
     'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage',
-    'maxInvestorRestriction'
+    'maxInvestorRestriction',
+    'postCommitmentFeeRate', 'flatManagementFeeRate'
   ]);
 
   const sanitizeUpdateNumber = (value) => {
