@@ -93,7 +93,7 @@ async function getCapitalCallDataForInvestor(userId, structureId) {
       );
 
       if (allocation) {
-        totalCalled += allocation.allocatedAmount || 0;
+        totalCalled += allocation.totalDue || allocation.callAmount || 0;
         totalPaid += allocation.amountPaid || 0;
       }
     }
