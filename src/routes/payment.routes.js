@@ -238,6 +238,9 @@ router.get('/me', authenticate, catchAsync(async (req, res) => {
           ownershipPercent: investor.ownershipPercent,
           kycStatus: investor.kycStatus,
           investorType: investor.investorType,
+          customTerms: investor.customTerms,
+          feeDiscount: investor.feeDiscount,
+          vatExempt: investor.vatExempt,
         } : null,
         capitalCallData: capitalCallData
       };
@@ -734,6 +737,9 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
         commitment: investor.commitment,
         ownershipPercent: investor.ownershipPercent,
         status: investor.status,
+        customTerms: investor.customTerms,
+        feeDiscount: investor.feeDiscount,
+        vatExempt: investor.vatExempt,
       } : null,
       capitalCallData: capitalCallData
     }
