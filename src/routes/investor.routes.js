@@ -1743,7 +1743,7 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
   const structures = (structureInvestors || [])
     .filter(si => si.structure)
     .map(si => {
-      const commitment = parseFloat(si.commitment_amount) || 0;
+      const commitment = parseFloat(si.commitment) || 0;
 
       // Calculate called capital for this structure
       const structureCalls = (capitalCallAllocations || []).filter(
