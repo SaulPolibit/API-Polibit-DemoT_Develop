@@ -35,6 +35,10 @@ const EmailDomain = require('./emailDomain');
 // MFA System models
 const MFAFactor = require('./mfaFactor');
 
+// Contract Management models
+const ContractTemplate = require('./contractTemplate');
+const StructureContract = require('./structureContract');
+
 // DocuSeal System models
 const DocusealSubmission = require('./docusealSubmission');
 
@@ -91,6 +95,10 @@ module.exports = {
 
   // MFA System models
   MFAFactor,
+
+  // Contract Management models
+  ContractTemplate,
+  StructureContract,
 
   // DocuSeal System models
   DocusealSubmission,

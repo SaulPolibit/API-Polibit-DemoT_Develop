@@ -56,6 +56,10 @@ const ilpaReportRoutes = require('./ilpaReport.routes');
 // Presence routes
 const presenceRoutes = require('./presence.routes');
 
+// Contract Management routes
+const contractTemplateRoutes = require('./contractTemplate.routes');
+const structureContractRoutes = require('./structureContract.routes');
+
 const router = express.Router();
 
 // Mount route modules
@@ -115,6 +119,10 @@ router.use('/ilpa-reports', ilpaReportRoutes);
 // Mount Presence routes
 router.use('/presence', presenceRoutes);
 
+// Mount Contract Management routes
+router.use('/contract-templates', contractTemplateRoutes);
+router.use('/structures', structureContractRoutes); // /api/structures/:id/contracts
+
 // Root API endpoint
 router.get('/', (_req, res) => {
   res.json({
@@ -166,6 +174,9 @@ router.get('/', (_req, res) => {
       ilpaReports: '/api/ilpa-reports',
       // Presence endpoints
       presence: '/api/presence',
+      // Contract Management endpoints
+      contractTemplates: '/api/contract-templates',
+      structureContracts: '/api/structures/:id/contracts',
     },
   });
 });

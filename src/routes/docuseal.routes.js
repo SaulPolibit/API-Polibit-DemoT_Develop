@@ -12,7 +12,7 @@ const {
   NotFoundError,
   AuthorizationError
 } = require('../middleware/errorHandler');
-const { User, DocusealSubmission, Payment } = require('../models/supabase');
+const { User, DocusealSubmission, Payment, ContractTemplate } = require('../models/supabase');
 
 const router = express.Router();
 
@@ -551,6 +551,18 @@ router.post('/webhook', catchAsync(async (req, res) => {
     // Find existing submission by submissionId
     const existingSubmission = await DocusealSubmission.findBySubmissionId(submissionId);
 
+    // Check if this completion is for a management countersign
+    const mgmtSubmission = await DocusealSubmission.findByManagementSubmissionId(submissionId);
+    if (mgmtSubmission) {
+      console.log('[DocuSeal Webhook] Management countersign completed for submission:', mgmtSubmission.id);
+      const updatedMgmt = await DocusealSubmission.updateManagementStatus(mgmtSubmission.id, 'completed', submissionId);
+      return res.status(200).json({
+        success: true,
+        message: 'Management countersign completed',
+        data: updatedMgmt
+      });
+    }
+
     if (!existingSubmission) {
       console.log('[DocuSeal Webhook] No existing submission found - creating new one');
 
@@ -585,6 +597,29 @@ router.post('/webhook', catchAsync(async (req, res) => {
     );
 
     console.log('[DocuSeal Webhook] Submission updated successfully:', updatedSubmission);
+
+    // Check if this submission needs management countersignature
+    if (updatedSubmission.contractTemplateId) {
+      try {
+        const template = await ContractTemplate.getById(updatedSubmission.contractTemplateId);
+        if (template && template.signatureType === 'investor_and_management' && updatedSubmission.managementStatus !== 'completed') {
+          await DocusealSubmission.updateManagementStatus(updatedSubmission.id, 'pending');
+          console.log('[DocuSeal Webhook] Management countersign set to pending for submission:', updatedSubmission.id);
+        }
+      } catch (templateErr) {
+        console.error('[DocuSeal Webhook] Error checking contract template:', templateErr.message);
+      }
+    }
+
+    // Check if this is a management countersign completion
+    if (existingSubmission.managementSubmissionId && String(submissionId) === String(existingSubmission.managementSubmissionId)) {
+      try {
+        await DocusealSubmission.updateManagementStatus(existingSubmission.id, 'completed', submissionId);
+        console.log('[DocuSeal Webhook] Management countersign completed for submission:', existingSubmission.id);
+      } catch (mgmtErr) {
+        console.error('[DocuSeal Webhook] Error updating management status:', mgmtErr.message);
+      }
+    }
 
     return res.status(200).json({
       success: true,
