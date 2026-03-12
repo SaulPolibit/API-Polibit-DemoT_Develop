@@ -986,7 +986,7 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
     fromStatus: 'draft',
     toStatus: 'pending_cfo',
     userId,
-    userName: user?.name || 'Unknown',
+    userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes,
     metadata: { callNumber: capitalCall.callNumber }
   });
@@ -1074,7 +1074,7 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
     fromStatus: 'pending_cfo',
     toStatus: 'approved',
     userId,
-    userName: user?.name || 'Unknown',
+    userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes,
     metadata: { callNumber: capitalCall.callNumber }
   });
@@ -1156,7 +1156,7 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
     fromStatus: 'pending_cfo',
     toStatus: 'approved',
     userId,
-    userName: user?.name || 'Unknown',
+    userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes,
     metadata: { callNumber: capitalCall.callNumber }
   });
@@ -1241,7 +1241,7 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
     fromStatus: capitalCall.approvalStatus,
     toStatus: 'rejected',
     userId,
-    userName: user?.name || 'Unknown',
+    userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes: reason,
     metadata: { callNumber: capitalCall.callNumber }
   });
@@ -1330,7 +1330,7 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
     fromStatus: capitalCall.approvalStatus,
     toStatus: 'draft',
     userId,
-    userName: user?.name || 'Unknown',
+    userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes,
     metadata: { callNumber: capitalCall.callNumber }
   });
