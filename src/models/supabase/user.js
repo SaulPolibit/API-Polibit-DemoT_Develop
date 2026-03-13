@@ -632,7 +632,7 @@ class User {
     // Calculate totals
     const totalCommitment = structures.reduce((sum, s) => sum + s.commitment, 0);
     const totalUncalledCapital = totalCommitment - calledCapital;
-    const activeFunds = structures.filter(s => s.status === 'Active').length;
+    const activeFunds = structures.length;
 
     return {
       totalCommitment,
