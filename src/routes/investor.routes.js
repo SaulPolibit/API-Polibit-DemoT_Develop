@@ -1692,13 +1692,16 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
       return {
         structure_id: investor.structureId,
         user_id: userId,
+        commitment: investor.commitment,
+        ownership_percent: investor.ownershipPercent,
         structure: structure ? {
           id: structure.id,
           name: structure.name,
           type: structure.type,
           status: structure.status,
           base_currency: structure.baseCurrency,
-          total_invested: structure.totalInvested
+          total_invested: structure.totalInvested,
+          total_commitment: structure.totalCommitment
         } : null
       };
     })
@@ -1751,8 +1754,9 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
     .filter(si => si.structure)
     .map(si => {
       const commitment = parseFloat(si.commitment) || 0;
+      const ownershipPercent = parseFloat(si.ownership_percent) || 0;
 
-      // Calculate called capital for this structure
+      // Calculate called capital for this structure from capital call allocations
       const structureCalls = (capitalCallAllocations || []).filter(
         alloc => alloc.capital_call?.structure_id === si.structure_id
       );
@@ -1761,9 +1765,18 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
         0
       );
 
-      // Use structure's total_invested as current value
-      // This represents the total amount invested in the structure
-      const currentValue = parseFloat(si.structure.total_invested) || calledCapital;
+      // Current value = investor's proportional share of structure's total_invested
+      const structureTotalInvested = parseFloat(si.structure.total_invested) || 0;
+      let currentValue;
+      if (ownershipPercent > 0) {
+        currentValue = structureTotalInvested * (ownershipPercent / 100);
+      } else if (commitment > 0 && parseFloat(si.structure.total_commitment) > 0) {
+        // Derive ownership from commitment ratio
+        const derivedOwnership = commitment / parseFloat(si.structure.total_commitment);
+        currentValue = structureTotalInvested * derivedOwnership;
+      } else {
+        currentValue = calledCapital;
+      }
 
       // Calculate unrealized gain
       const unrealizedGain = currentValue - calledCapital;
@@ -1775,10 +1788,10 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
         status: si.structure.status,
         commitment: commitment,
         calledCapital: calledCapital,
-        currentValue: currentValue,
-        unrealizedGain: unrealizedGain,
+        currentValue: parseFloat(currentValue.toFixed(2)),
+        unrealizedGain: parseFloat(unrealizedGain.toFixed(2)),
         currency: si.structure.base_currency || 'USD',
-        ownershipPercent: parseFloat(si.ownership_percent) || 0
+        ownershipPercent: ownershipPercent
       };
     });
 
