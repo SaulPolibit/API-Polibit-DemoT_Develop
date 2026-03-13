@@ -1676,6 +1676,13 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
     });
   }
 
+  // Fetch commitment/ownership from the canonical structure_investors table
+  const siRecords = await StructureInvestor.findByUserId(userId);
+  const siByStructure = {};
+  (siRecords || []).forEach(si => {
+    if (si.structureId) siByStructure[si.structureId] = si;
+  });
+
   // Fetch structures for all investor records
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const structureInvestors = await Promise.all(
@@ -1689,11 +1696,14 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
         }
       }
 
+      // Prefer structure_investors data (canonical), fall back to investors table
+      const si = siByStructure[investor.structureId];
+
       return {
         structure_id: investor.structureId,
         user_id: userId,
-        commitment: investor.commitment,
-        ownership_percent: investor.ownershipPercent,
+        commitment: si?.commitment ?? investor.commitment,
+        ownership_percent: si?.ownershipPercent ?? investor.ownershipPercent,
         structure: structure ? {
           id: structure.id,
           name: structure.name,
