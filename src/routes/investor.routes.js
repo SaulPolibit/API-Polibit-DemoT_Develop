@@ -1704,16 +1704,23 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
     })
   ).then(results => results.filter(r => r.structure !== null));
 
-  // Get all capital call allocations for this user
+  // Get all capital call allocations for this user (with full capital call details)
   const { data: capitalCallAllocations, error: ccError } = await supabase
     .from('capital_call_allocations')
     .select(`
       *,
       capital_call:capital_calls (
-        structure_id
+        id,
+        structure_id,
+        call_number,
+        call_date,
+        due_date,
+        status,
+        total_call_amount
       )
     `)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
 
   if (ccError) {
     throw new Error(`Error fetching capital calls: ${ccError.message}`);
@@ -1793,6 +1800,28 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
       };
     });
 
+  // Build capital calls array for activity page
+  const capitalCalls = (capitalCallAllocations || [])
+    .filter(alloc => alloc.capital_call)
+    .map(alloc => {
+      const structure = structures.find(s => s.id === alloc.capital_call.structure_id);
+
+      return {
+        id: alloc.id,
+        capitalCallId: alloc.capital_call.id,
+        structureId: alloc.capital_call.structure_id,
+        structureName: structure?.name || 'Unknown Structure',
+        callNumber: alloc.capital_call.call_number,
+        callDate: alloc.capital_call.call_date,
+        dueDate: alloc.capital_call.due_date,
+        totalDue: parseFloat(alloc.allocated_amount) || 0,
+        paidAmount: parseFloat(alloc.paid_amount) || 0,
+        outstanding: (parseFloat(alloc.allocated_amount) || 0) - (parseFloat(alloc.paid_amount) || 0),
+        status: alloc.status || alloc.capital_call.status || 'Pending',
+        currency: structure?.currency || 'USD',
+      };
+    });
+
   // Calculate summary metrics
   const totalCommitment = structures.reduce((sum, s) => sum + s.commitment, 0);
   const totalCalledCapital = structures.reduce((sum, s) => sum + s.calledCapital, 0);
@@ -1826,6 +1855,7 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
         totalReturn: parseFloat(totalReturn.toFixed(2)),
         totalReturnPercent: parseFloat(totalReturnPercent.toFixed(2))
       },
+      capitalCalls,
       distributions
     }
   });
