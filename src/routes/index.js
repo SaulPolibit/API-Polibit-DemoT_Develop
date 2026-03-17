@@ -22,6 +22,9 @@ const documentRoutes = require('./document.routes');
 // Drawdown Notice Template routes
 const drawdownNoticeTemplateRoutes = require('./drawdownNoticeTemplate.routes');
 
+// Distribution Notice Template routes
+const distributionNoticeTemplateRoutes = require('./distributionNoticeTemplate.routes');
+
 // Chat System routes
 const conversationRoutes = require('./conversation.routes');
 const messageRoutes = require('./message.routes');
@@ -77,6 +80,7 @@ router.use('/users', userRoutes);
 // Mount Investment Manager routes
 router.use('/structures', structureRoutes);
 router.use('/structures', drawdownNoticeTemplateRoutes); // /api/structures/:structureId/drawdown-template
+router.use('/structures', distributionNoticeTemplateRoutes); // /api/structures/:structureId/distribution-template
 router.use('/investors', investorRoutes);
 router.use('/investments', investmentRoutes);
 router.use('/capital-calls', capitalCallRoutes);
@@ -145,6 +149,7 @@ router.get('/', (_req, res) => {
       investments: '/api/investments',
       capitalCalls: '/api/capital-calls',
       drawdownNoticeTemplates: '/api/structures/:structureId/drawdown-template',
+      distributionNoticeTemplates: '/api/structures/:structureId/distribution-template',
       distributions: '/api/distributions',
       waterfallTiers: '/api/waterfall-tiers',
       documents: '/api/documents',

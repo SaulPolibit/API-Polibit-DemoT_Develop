@@ -52,6 +52,9 @@ class Distribution {
       managementFeeAmount: 'management_fee_amount',
       // Approval workflow
       approvalStatus: 'approval_status',
+      // Spec V2: Source classifications and recallable flag
+      sourceClassifications: 'source_classifications',
+      recallable: 'recallable',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -113,6 +116,9 @@ class Distribution {
       managementFeeAmount: dbData.management_fee_amount,
       // Approval workflow
       approvalStatus: dbData.approval_status,
+      // Spec V2: Source classifications and recallable flag
+      sourceClassifications: dbData.source_classifications,
+      recallable: dbData.recallable,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at

@@ -136,6 +136,22 @@ class Structure {
       payWithPolibitEnabled: 'pay_with_polibit_enabled',
       payWithPolibitSettlement: 'pay_with_polibit_settlement',
       paymentCardEnabled: 'payment_card_enabled',
+      // Spec V2: Recallable Distributions (Step 4)
+      recallableDistributionsEnabled: 'recallable_distributions_enabled',
+      recallableLimitType: 'recallable_limit_type',
+      recallableLimitValue: 'recallable_limit_value',
+      commitmentPeriodYears: 'commitment_period_years',
+      // Spec V2: Day Count Convention (Step 5 Debt)
+      dayCountConvention: 'day_count_convention',
+      // Spec V2: Withholding Tax (Step 6)
+      withholdingTaxOnDistributions: 'withholding_tax_on_distributions',
+      withholdingTaxNaturalResidents: 'withholding_tax_natural_residents',
+      withholdingTaxNaturalNonResidents: 'withholding_tax_natural_non_residents',
+      withholdingTaxLegalResidents: 'withholding_tax_legal_residents',
+      withholdingTaxLegalNonResidents: 'withholding_tax_legal_non_residents',
+      // Spec V2: Bank Transfer toggles (Step 7)
+      bankTransferLocalEnabled: 'bank_transfer_local_enabled',
+      bankTransferInternationalEnabled: 'bank_transfer_international_enabled',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -272,6 +288,22 @@ class Structure {
       feeRateOnUnfunded: dbData.fee_rate_on_unfunded,
       gpPercentage: dbData.gp_percentage,
       maxInvestorRestriction: dbData.max_investor_restriction,
+      // Spec V2: Recallable Distributions (Step 4)
+      recallableDistributionsEnabled: dbData.recallable_distributions_enabled,
+      recallableLimitType: dbData.recallable_limit_type,
+      recallableLimitValue: dbData.recallable_limit_value,
+      commitmentPeriodYears: dbData.commitment_period_years,
+      // Spec V2: Day Count Convention (Step 5 Debt)
+      dayCountConvention: dbData.day_count_convention,
+      // Spec V2: Withholding Tax (Step 6)
+      withholdingTaxOnDistributions: dbData.withholding_tax_on_distributions,
+      withholdingTaxNaturalResidents: dbData.withholding_tax_natural_residents,
+      withholdingTaxNaturalNonResidents: dbData.withholding_tax_natural_non_residents,
+      withholdingTaxLegalResidents: dbData.withholding_tax_legal_residents,
+      withholdingTaxLegalNonResidents: dbData.withholding_tax_legal_non_residents,
+      // Spec V2: Bank Transfer toggles (Step 7)
+      bankTransferLocalEnabled: dbData.bank_transfer_local_enabled,
+      bankTransferInternationalEnabled: dbData.bank_transfer_international_enabled,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at

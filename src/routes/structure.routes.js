@@ -249,7 +249,20 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     prefReturnCompounding,
     payWithPolibitEnabled,
     payWithPolibitSettlement,
-    paymentCardEnabled
+    paymentCardEnabled,
+    // Spec V2 fields
+    recallableDistributionsEnabled,
+    recallableLimitType,
+    recallableLimitValue,
+    commitmentPeriodYears,
+    dayCountConvention,
+    withholdingTaxOnDistributions,
+    withholdingTaxNaturalResidents,
+    withholdingTaxNaturalNonResidents,
+    withholdingTaxLegalResidents,
+    withholdingTaxLegalNonResidents,
+    bankTransferLocalEnabled,
+    bankTransferInternationalEnabled
   } = req.body;
 
   // Validate required fields
@@ -416,6 +429,19 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     payWithPolibitEnabled: payWithPolibitEnabled === true || payWithPolibitEnabled === 'true',
     payWithPolibitSettlement: payWithPolibitSettlement?.trim() || 'standard',
     paymentCardEnabled: paymentCardEnabled === true || paymentCardEnabled === 'true',
+    // Spec V2 fields
+    recallableDistributionsEnabled: recallableDistributionsEnabled === true || recallableDistributionsEnabled === 'true',
+    recallableLimitType: recallableLimitType?.trim() || 'no_limit',
+    recallableLimitValue: sanitizeNumber(recallableLimitValue, null),
+    commitmentPeriodYears: sanitizeNumber(commitmentPeriodYears, null),
+    dayCountConvention: dayCountConvention?.trim() || 'actual_365',
+    withholdingTaxOnDistributions: sanitizeNumber(withholdingTaxOnDistributions, null),
+    withholdingTaxNaturalResidents: sanitizeNumber(withholdingTaxNaturalResidents, null),
+    withholdingTaxNaturalNonResidents: sanitizeNumber(withholdingTaxNaturalNonResidents, null),
+    withholdingTaxLegalResidents: sanitizeNumber(withholdingTaxLegalResidents, null),
+    withholdingTaxLegalNonResidents: sanitizeNumber(withholdingTaxLegalNonResidents, null),
+    bankTransferLocalEnabled: bankTransferLocalEnabled === true || bankTransferLocalEnabled === 'true',
+    bankTransferInternationalEnabled: bankTransferInternationalEnabled === true || bankTransferInternationalEnabled === 'true',
     createdBy: userId
   };
 
@@ -797,7 +823,14 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     // ILPA Phase 3-5: Fee structure + Payment methods
     'postCommitmentFeeRate', 'flatManagementFeeRate', 'managementFeeOffset',
     'feeOffsetRate', 'prefReturnCompounding',
-    'payWithPolibitEnabled', 'payWithPolibitSettlement', 'paymentCardEnabled'
+    'payWithPolibitEnabled', 'payWithPolibitSettlement', 'paymentCardEnabled',
+    // Spec V2 fields
+    'recallableDistributionsEnabled', 'recallableLimitType', 'recallableLimitValue',
+    'commitmentPeriodYears', 'dayCountConvention',
+    'withholdingTaxOnDistributions', 'withholdingTaxNaturalResidents',
+    'withholdingTaxNaturalNonResidents', 'withholdingTaxLegalResidents',
+    'withholdingTaxLegalNonResidents',
+    'bankTransferLocalEnabled', 'bankTransferInternationalEnabled'
   ];
 
   // Fields that are numeric in the database and must not receive empty strings
@@ -816,7 +849,11 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'gpCatchUpRate',
     'feeRateOnNic', 'feeRateOnUnfunded', 'gpPercentage',
     'maxInvestorRestriction',
-    'postCommitmentFeeRate', 'flatManagementFeeRate'
+    'postCommitmentFeeRate', 'flatManagementFeeRate',
+    'recallableLimitValue', 'commitmentPeriodYears',
+    'withholdingTaxOnDistributions', 'withholdingTaxNaturalResidents',
+    'withholdingTaxNaturalNonResidents', 'withholdingTaxLegalResidents',
+    'withholdingTaxLegalNonResidents'
   ]);
 
   const sanitizeUpdateNumber = (value) => {

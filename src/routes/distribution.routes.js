@@ -49,7 +49,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     sourceOther,
     waterfallApplied,
     createAllocations,
-    approvalStatus
+    approvalStatus,
+    // Spec V2 fields
+    sourceClassifications,
+    recallable
   } = req.body;
 
   // Validate required fields
@@ -89,6 +92,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     managementFeeAmount: 0,
     // Approval workflow
     approvalStatus: approvalStatus || 'draft',
+    // Spec V2: Source classifications and recallable flag
+    sourceClassifications: sourceClassifications || null,
+    recallable: recallable === true || recallable === 'true',
     createdBy: userId
   };
 
@@ -215,7 +221,8 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
     'distributionDate', 'totalAmount', 'source', 'notes', 'status',
     'sourceEquityGain', 'sourceDebtInterest', 'sourceDebtPrincipal', 'sourceOther',
     'waterfallApplied', 'tier1Amount', 'tier2Amount', 'tier3Amount', 'tier4Amount',
-    'lpTotalAmount', 'gpTotalAmount', 'managementFeeAmount', 'approvalStatus'
+    'lpTotalAmount', 'gpTotalAmount', 'managementFeeAmount', 'approvalStatus',
+    'sourceClassifications', 'recallable'
   ];
 
   for (const field of allowedFields) {
