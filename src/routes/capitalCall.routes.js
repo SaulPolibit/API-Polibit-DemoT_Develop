@@ -57,7 +57,15 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     approvalStatus,
     // Proximity Dual-Rate Fee Fields
     feeRateOnNic,
-    feeRateOnUnfunded
+    feeRateOnUnfunded,
+    // Capital Call Wizard Changes (Doc 4)
+    feeOffsetAmount,
+    vatOnInvestments,
+    vatOnFundExpenses,
+    // ProximityParks Use of Proceeds Breakdown (header totals)
+    totalInvestments,
+    totalFundExpenses,
+    totalReserves
   } = req.body;
 
   // Validate required fields
@@ -95,6 +103,14 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     // Proximity Dual-Rate Fee Fields (default from structure if not provided)
     feeRateOnNic: feeRateOnNic !== undefined ? feeRateOnNic : structure.feeRateOnNic || null,
     feeRateOnUnfunded: feeRateOnUnfunded !== undefined ? feeRateOnUnfunded : structure.feeRateOnUnfunded || null,
+    // Capital Call Wizard Changes (Doc 4)
+    feeOffsetAmount: feeOffsetAmount || 0,
+    vatOnInvestments: vatOnInvestments || 0,
+    vatOnFundExpenses: vatOnFundExpenses || 0,
+    // ProximityParks Use of Proceeds Breakdown (header totals)
+    totalInvestments: totalInvestments || 0,
+    totalFundExpenses: totalFundExpenses || 0,
+    totalReserves: totalReserves || 0,
     createdBy: userId
   };
 

@@ -42,6 +42,10 @@ class CapitalCall {
       totalFundExpenses: 'total_fund_expenses',
       totalReserves: 'total_reserves',
       totalDrawdown: 'total_drawdown',
+      // Capital Call Wizard Changes (Doc 4)
+      feeOffsetAmount: 'fee_offset_amount',
+      vatOnInvestments: 'vat_on_investments',
+      vatOnFundExpenses: 'vat_on_fund_expenses',
       createdBy: 'created_by',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -94,6 +98,10 @@ class CapitalCall {
       totalFundExpenses: dbData.total_fund_expenses,
       totalReserves: dbData.total_reserves,
       totalDrawdown: dbData.total_drawdown,
+      // Capital Call Wizard Changes (Doc 4)
+      feeOffsetAmount: dbData.fee_offset_amount,
+      vatOnInvestments: dbData.vat_on_investments,
+      vatOnFundExpenses: dbData.vat_on_fund_expenses,
       createdBy: dbData.created_by,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
@@ -701,31 +709,35 @@ class CapitalCall {
         };
       });
 
-      // Pass 2: Calculate fee offset (GP contribution)
-      const totalFundFeeGross = investorFees.reduce((sum, f) => sum + f.managementFeeGross, 0);
+      // Pass 2: Calculate fee offset and VAT on use-of-proceeds
+      const totalFeeOffsetInput = capitalCall.feeOffsetAmount || 0;
+      const totalFundFeeAfterDiscount = investorFees.reduce((sum, f) => sum + (f.managementFeeGross - f.investorDiscountAmount), 0);
 
       allocations = investorFees.map((f) => {
-        // Management fee after investor discount (before GP offset)
+        // Management fee after investor discount (before fee offset)
         const managementFeeAfterDiscount = f.managementFeeGross - f.investorDiscountAmount;
 
-        // Fee offset: proportional share of GP fee offset (applied after investor discount)
+        // Fee offset: pro-rated by each investor's fee proportion of total fund fees
         let feeOffset = 0;
         let deemedGpContribution = 0;
-        if (gpPercentage > 0 && totalFundFeeGross > 0) {
-          // GP offset = investor's pro-rata share of fees * GP ownership percentage
-          feeOffset = managementFeeAfterDiscount * (gpPercentage / 100);
+        if (totalFeeOffsetInput > 0 && totalFundFeeAfterDiscount > 0) {
+          feeOffset = (managementFeeAfterDiscount / totalFundFeeAfterDiscount) * totalFeeOffsetInput;
           deemedGpContribution = -feeOffset;
         }
 
         const managementFeeNet = managementFeeAfterDiscount - feeOffset;
 
-        // Calculate VAT if applicable
+        // Calculate VAT on fees if applicable
         let vatAmount = 0;
         if (capitalCall.vatApplicable && !f.vatExempt && capitalCall.vatRate) {
           vatAmount = managementFeeNet * (capitalCall.vatRate / 100);
         }
 
-        const totalDue = f.principalAmount + managementFeeNet + vatAmount;
+        // Per-investor VAT on use-of-proceeds (pro-rated by ownership)
+        const vatOnInvestmentsAmount = (capitalCall.vatOnInvestments || 0) * (f.si.ownership_percent / 100);
+        const vatOnFundExpensesAmount = (capitalCall.vatOnFundExpenses || 0) * (f.si.ownership_percent / 100);
+
+        const totalDue = f.principalAmount + managementFeeNet + vatAmount + vatOnInvestmentsAmount + vatOnFundExpensesAmount;
 
         // ProximityParks breakdown: investments = principal (when not explicitly set)
         // Fund expenses and reserves come from the capital call header if set
@@ -738,8 +750,8 @@ class CapitalCall {
         const reservesAmount = capitalCall.totalReserves
           ? (capitalCall.totalReserves * (f.si.ownership_percent / 100))
           : 0;
-        // Total drawdown = investments + expenses + reserves + fees + VAT (counts toward commitment)
-        const totalDrawdown = investmentsAmount + fundExpensesAmount + reservesAmount + managementFeeNet + vatAmount;
+        // Total drawdown = investments + expenses + reserves + fees + VAT on fees + VAT on proceeds - feeOffset
+        const totalDrawdown = investmentsAmount + fundExpensesAmount + reservesAmount + managementFeeNet + vatAmount + vatOnInvestmentsAmount + vatOnFundExpensesAmount;
 
         return {
           capital_call_id: capitalCallId,
@@ -765,6 +777,9 @@ class CapitalCall {
           unfunded_fee_amount: f.unfundedFee,
           fee_offset_amount: feeOffset,
           deemed_gp_contribution: deemedGpContribution,
+          // VAT on use-of-proceeds
+          vat_on_investments_amount: vatOnInvestmentsAmount,
+          vat_on_fund_expenses_amount: vatOnFundExpensesAmount,
           // ProximityParks breakdown fields
           investments_amount: investmentsAmount,
           fund_expenses_amount: fundExpensesAmount,
