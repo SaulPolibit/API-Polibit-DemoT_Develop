@@ -648,15 +648,22 @@ class CapitalCall {
     const isDualRateMode = capitalCall.managementFeeBase === 'nic_plus_unfunded' &&
       (capitalCall.feeRateOnNic != null || capitalCall.feeRateOnUnfunded != null);
 
-    // Get structure for GP percentage (needed for fee offset in dual-rate mode)
-    let structure = null;
-    if (isDualRateMode) {
-      const { data: structureData } = await supabase
-        .from('structures')
-        .select('gp_percentage')
-        .eq('id', structureId)
-        .single();
-      structure = structureData;
+    // Get structure for GP percentage and recallable config
+    const { data: structure } = await supabase
+      .from('structures')
+      .select('gp_percentage, recallable_distributions_enabled')
+      .eq('id', structureId)
+      .single();
+
+    // Fetch cumulative called amounts per investor (excluding current call)
+    const cumulativeCalledMap = await this.getCumulativeCalledByStructure(
+      structureId, capitalCallId
+    );
+
+    // Fetch cumulative recallable distribution amounts if enabled
+    let cumulativeRecallableMap = {};
+    if (structure?.recallable_distributions_enabled) {
+      cumulativeRecallableMap = await this.getCumulativeRecallableByStructure(structureId);
     }
 
     // Calculate period fraction based on fee period
@@ -682,10 +689,11 @@ class CapitalCall {
         const vatExempt = si.vat_exempt || false;
         const commitment = si.commitment || 0;
 
-        // NIC = calledCapital (commitment - unfunded). For unfunded, use commitment minus what's been called.
-        // unfundedCommitment is the investor's remaining unfunded capital before this call
-        const unfundedCommitment = commitment; // pre-call unfunded (simplified: full commitment for first call)
-        const nicBase = commitment - unfundedCommitment; // prior NIC (0 for first call)
+        // NIC = previously called capital. Unfunded = commitment - called + recallable.
+        const previouslyCalled = cumulativeCalledMap[si.user_id] || 0;
+        const recallableAmt = cumulativeRecallableMap[si.user_id] || 0;
+        const unfundedCommitment = Math.max(0, commitment - previouslyCalled + recallableAmt);
+        const nicBase = previouslyCalled;
 
         // Calculate individual fees at full rates (before discount)
         const nicFeeGross = nicBase * periodFraction * (nicRate / 100);
@@ -1242,6 +1250,54 @@ class CapitalCall {
     });
 
     return cumulativeMap;
+  }
+  /**
+   * Get cumulative recallable distribution amounts for all investors in a structure
+   * @param {string} structureId - The structure ID
+   * @returns {Object} Map of userId -> totalRecallable
+   */
+  static async getCumulativeRecallableByStructure(structureId) {
+    const supabase = getSupabase();
+
+    // Get all non-draft distributions for this structure that are marked recallable
+    const { data: distributions, error: distError } = await supabase
+      .from('distributions')
+      .select('id')
+      .eq('structure_id', structureId)
+      .eq('recallable', true)
+      .not('status', 'in', '("Draft","Cancelled")');
+
+    if (distError) {
+      throw new Error(`Error fetching recallable distributions: ${distError.message}`);
+    }
+
+    if (!distributions || distributions.length === 0) {
+      return {};
+    }
+
+    const distIds = distributions.map(d => d.id);
+
+    // Get all allocations across these distributions
+    const { data: allocations, error: allocError } = await supabase
+      .from('distribution_allocations')
+      .select('user_id, allocated_amount')
+      .in('distribution_id', distIds);
+
+    if (allocError) {
+      throw new Error(`Error fetching distribution allocations: ${allocError.message}`);
+    }
+
+    // Aggregate by user_id
+    const recallableMap = {};
+    allocations?.forEach(a => {
+      const userId = a.user_id;
+      if (!recallableMap[userId]) {
+        recallableMap[userId] = 0;
+      }
+      recallableMap[userId] += a.allocated_amount || 0;
+    });
+
+    return recallableMap;
   }
 }
 

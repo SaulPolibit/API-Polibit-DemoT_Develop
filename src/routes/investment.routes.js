@@ -414,6 +414,46 @@ router.delete('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(a
 }));
 
 /**
+ * @route   GET /api/investments/:id/interest-accrual
+ * @desc    Calculate interest accrual for a debt investment using day count convention
+ * @access  Private (requires authentication)
+ */
+router.get('/:id/interest-accrual', authenticate, catchAsync(async (req, res) => {
+  const { id } = req.params;
+  const { startDate, endDate } = req.query;
+
+  validate(startDate, 'startDate query parameter is required');
+  validate(endDate, 'endDate query parameter is required');
+
+  const investment = await Investment.findById(id);
+  validate(investment, 'Investment not found');
+
+  const structure = await Structure.findById(investment.structureId);
+  validate(structure, 'Structure not found');
+
+  const { calculateInterest } = require('../utils/interest-calculator');
+
+  const principal = investment.outstandingPrincipal || investment.principalProvided || 0;
+  const annualRate = investment.interestRate || structure.debtInterestRate || 0;
+  const convention = structure.dayCountConvention || 'actual_365';
+
+  const result = calculateInterest(principal, annualRate, startDate, endDate, convention);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      investmentId: id,
+      principal,
+      annualRate,
+      convention,
+      startDate,
+      endDate,
+      ...result
+    }
+  });
+}));
+
+/**
  * @route   GET /api/investments/health
  * @desc    Health check for Investment API routes
  * @access  Public

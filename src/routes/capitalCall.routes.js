@@ -500,6 +500,14 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
   // Get cumulative called amounts per investor
   const cumulativeCalled = await CapitalCall.getCumulativeCalledByStructure(structureId);
 
+  // Get cumulative recallable distribution amounts if enabled
+  let cumulativeRecallable = {};
+  let totalRecallable = 0;
+  if (structure.recallableDistributionsEnabled) {
+    cumulativeRecallable = await CapitalCall.getCumulativeRecallableByStructure(structureId);
+    totalRecallable = Object.values(cumulativeRecallable).reduce((sum, val) => sum + val, 0);
+  }
+
   // Calculate totals using total_drawdown from allocations (includes fees + VAT for ProximityParks methodology)
   const totalCalled = history.reduce((sum, call) => {
     // Sum total_drawdown from all allocations, fallback to totalDue, then totalCallAmount
@@ -515,11 +523,13 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
     data: {
       history,
       cumulativeCalled,
+      cumulativeRecallable,
       summary: {
         totalCalls: history.length,
         totalCalled,
         totalPaid,
         totalUnpaid: totalCalled - totalPaid,
+        totalRecallable,
         structureTotalCommitment: structure.totalCommitment || 0,
         percentCalled: structure.totalCommitment > 0
           ? ((totalCalled / structure.totalCommitment) * 100).toFixed(2)
