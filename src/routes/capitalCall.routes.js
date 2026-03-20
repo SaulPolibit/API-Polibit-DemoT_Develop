@@ -5,9 +5,9 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { CapitalCall, Structure, User, FirmSettings } = require('../models/supabase');
+const { CapitalCall, Structure, StructureAdmin, User, FirmSettings } = require('../models/supabase');
 const ApprovalHistory = require('../models/supabase/approvalHistory');
-const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
+const { requireInvestmentManagerAccess, getUserContext, ROLES, canEditStructure } = require('../middleware/rbac');
 const { generateCapitalCallNoticePDF, generateIndividualLPNoticePDF } = require('../services/documentGenerator');
 const { sendEmail } = require('../utils/emailSender');
 const { sendCapitalCallNotice } = require('../utils/notificationHelper');
@@ -34,7 +34,7 @@ const router = express.Router();
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
 
   const {
     structureId,
@@ -73,10 +73,13 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   validate(callNumber, 'Call number is required');
   validate(totalCallAmount !== undefined && totalCallAmount > 0, 'Total call amount must be positive');
 
-  // Validate structure exists and belongs to user
+  // Validate structure exists and user has edit access
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.createdBy === userId, 'Structure does not belong to user');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   // Create capital call
   const capitalCallData = {
@@ -556,15 +559,12 @@ router.get('/investor/:investorId', authenticate, requireInvestmentManagerAccess
 
   const capitalCalls = await CapitalCall.findByInvestorId(investorId);
 
-  // Role-based filtering: Root sees all, Admin sees only their own
-  const userCapitalCalls = userRole === ROLES.ROOT
-    ? capitalCalls
-    : capitalCalls.filter(call => call.createdBy === userId);
+  // All IM roles see all capital calls (access controlled via navigation visibility settings)
 
   res.status(200).json({
     success: true,
-    count: userCapitalCalls.length,
-    data: userCapitalCalls
+    count: capitalCalls.length,
+    data: capitalCalls
   });
 }));
 

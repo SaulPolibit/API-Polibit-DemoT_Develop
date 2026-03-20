@@ -5,7 +5,8 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { WaterfallTier, Structure } = require('../models/supabase');
+const { WaterfallTier, Structure, StructureAdmin } = require('../models/supabase');
+const { getUserContext, ROLES, canEditStructure } = require('../middleware/rbac');
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const router = express.Router();
  * @access  Private (requires authentication)
  */
 router.post('/', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
 
   const {
     structureId,
@@ -36,10 +37,13 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
   validate(lpSharePercent !== undefined, 'LP share percent is required');
   validate(gpSharePercent !== undefined, 'GP share percent is required');
 
-  // Validate structure exists and belongs to user
+  // Validate structure exists and user has edit access
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Structure does not belong to user');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   // Validate percentages
   validate(lpSharePercent + gpSharePercent === 100, 'LP and GP shares must sum to 100%');
@@ -80,7 +84,7 @@ router.post('/', authenticate, catchAsync(async (req, res) => {
  * @body    { structureId: string, tiers: Array<{ name, managementFee, gpSplit, irrHurdle, preferredReturn }> }
  */
 router.post('/bulk-create', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { structureId, tiers } = req.body;
 
   // Validate required fields
@@ -89,10 +93,13 @@ router.post('/bulk-create', authenticate, catchAsync(async (req, res) => {
   validate(tiers.length > 0, 'At least one tier must be provided');
   validate(tiers.length <= 4, 'Maximum 4 tiers allowed');
 
-  // Validate structure exists and belongs to user
+  // Validate structure exists and user has edit access
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.createdBy === userId, 'Structure does not belong to user');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   const createdTiers = [];
   const errors = [];
@@ -176,14 +183,17 @@ router.post('/bulk-create', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication)
  */
 router.post('/structure/:structureId/create-default', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { structureId } = req.params;
   const { hurdleRate, carriedInterest, replace } = req.body;
 
-  // Validate structure exists and belongs to user
+  // Validate structure exists and user has edit access
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Structure does not belong to user');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   // If replace is true, delete existing tiers first
   if (replace === true) {
@@ -213,10 +223,9 @@ router.post('/structure/:structureId/create-default', authenticate, catchAsync(a
  * @access  Private (requires authentication)
  */
 router.get('/', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
   const { structureId, isActive } = req.query;
 
-  let filter = { userId };
+  let filter = {};
 
   if (structureId) filter.structureId = structureId;
   if (isActive !== undefined) filter.isActive = isActive === 'true';
@@ -236,12 +245,11 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication)
  */
 router.get('/structure/:structureId', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
   const { structureId } = req.params;
 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Unauthorized access to structure');
+  // Read access: authentication gate is sufficient
 
   const tiers = await WaterfallTier.findByStructureId(structureId);
 
@@ -258,12 +266,11 @@ router.get('/structure/:structureId', authenticate, catchAsync(async (req, res) 
  * @access  Private (requires authentication)
  */
 router.get('/structure/:structureId/active', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
   const { structureId } = req.params;
 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Unauthorized access to structure');
+  // Read access: authentication gate is sufficient
 
   const tiers = await WaterfallTier.findActiveByStructureId(structureId);
 
@@ -280,12 +287,11 @@ router.get('/structure/:structureId/active', authenticate, catchAsync(async (req
  * @access  Private (requires authentication)
  */
 router.get('/structure/:structureId/summary', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
   const { structureId } = req.params;
 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Unauthorized access to structure');
+  // Read access: authentication gate is sufficient
 
   const summary = await WaterfallTier.getWaterfallSummary(structureId);
 
@@ -301,13 +307,12 @@ router.get('/structure/:structureId/summary', authenticate, catchAsync(async (re
  * @access  Private (requires authentication)
  */
 router.get('/:id', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
   const { id } = req.params;
 
   const tier = await WaterfallTier.findById(id);
 
   validate(tier, 'Waterfall tier not found');
-  validate(tier.userId === userId, 'Unauthorized access to waterfall tier');
+  // Read access: authentication gate is sufficient
 
   res.status(200).json({
     success: true,
@@ -321,12 +326,19 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication)
  */
 router.put('/:id', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   const tier = await WaterfallTier.findById(id);
   validate(tier, 'Waterfall tier not found');
-  validate(tier.userId === userId, 'Unauthorized access to waterfall tier');
+
+  // Write access: check via structure
+  const structure = await Structure.findById(tier.structureId);
+  validate(structure, 'Structure not found');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to waterfall tier');
+  }
 
   const updateData = {};
   const allowedFields = [
@@ -364,7 +376,7 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication)
  */
 router.put('/structure/:structureId/bulk-update', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { structureId } = req.params;
   const { tiers } = req.body;
 
@@ -373,7 +385,10 @@ router.put('/structure/:structureId/bulk-update', authenticate, catchAsync(async
 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Unauthorized access to structure');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   const updatedTiers = await WaterfallTier.bulkUpdateTiers(structureId, tiers, userId);
 
@@ -390,12 +405,15 @@ router.put('/structure/:structureId/bulk-update', authenticate, catchAsync(async
  * @access  Private (requires authentication)
  */
 router.patch('/structure/:structureId/deactivate-all', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { structureId } = req.params;
 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.userId === userId, 'Unauthorized access to structure');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   const deactivatedTiers = await WaterfallTier.deactivateAllTiers(structureId);
 
@@ -412,12 +430,19 @@ router.patch('/structure/:structureId/deactivate-all', authenticate, catchAsync(
  * @access  Private (requires authentication)
  */
 router.delete('/:id', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   const tier = await WaterfallTier.findById(id);
   validate(tier, 'Waterfall tier not found');
-  validate(tier.userId === userId, 'Unauthorized access to waterfall tier');
+
+  // Write access: check via structure
+  const structure = await Structure.findById(tier.structureId);
+  validate(structure, 'Structure not found');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to waterfall tier');
+  }
 
   await WaterfallTier.findByIdAndDelete(id);
 

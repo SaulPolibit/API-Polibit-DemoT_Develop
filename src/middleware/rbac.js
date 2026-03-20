@@ -67,7 +67,7 @@ const requireRootAccess = (req, res, next) => {
 /**
  * Apply role-based filtering to query criteria
  * Root (0): Returns criteria unchanged (sees everything)
- * Admin (1): Adds creator filter to criteria
+ * Admin (1): Returns criteria unchanged (access controlled via navigation visibility settings)
  * Support (2): Returns criteria unchanged (sees everything, read-only)
  * Investor (3): Returns null (should be blocked by middleware)
  * Guest (4): Returns criteria unchanged (sees everything, read-only)
@@ -111,7 +111,7 @@ const applyRoleFilter = (criteria = {}, userRole, userId, creatorField = 'create
 /**
  * Filter array of items based on user role
  * Root (0): Returns all items
- * Admin (1): Returns only items created by the user
+ * Admin (1): Returns all items (access controlled via navigation visibility settings)
  * Support (2): Returns all items (read-only access)
  * Investor (3): Returns empty array
  * Guest (4): Returns all items (read-only access)

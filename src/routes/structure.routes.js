@@ -279,7 +279,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
 
     const parentStructure = await Structure.findById(parentStructureId);
     validate(parentStructure, 'Parent structure not found');
-    validate(parentStructure.createdBy === userId, 'Parent structure does not belong to user');
+    if (userRole !== ROLES.ROOT) {
+      const canEdit = await canEditStructure(parentStructure, userRole, userId, StructureAdmin);
+      validate(canEdit, 'Unauthorized access to parent structure');
+    }
     validate(parentStructure.hierarchyLevel < 5, 'Maximum hierarchy level (5) reached');
   }
 

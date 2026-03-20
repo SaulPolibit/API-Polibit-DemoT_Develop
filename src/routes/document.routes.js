@@ -511,13 +511,16 @@ router.get('/entity/:entityType/:entityId/count', authenticate, catchAsync(async
  * @access  Private (requires authentication)
  */
 router.get('/:id', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   const document = await Document.findById(id);
 
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
+  // Only investors are restricted to their own documents
+  if (userRole === ROLES.INVESTOR) {
+    validate(document.userId === userId, 'Unauthorized access to document');
+  }
 
   res.status(200).json({
     success: true,
@@ -576,12 +579,14 @@ router.get('/versions/:entityType/:entityId/:documentType', authenticate, catchA
  * @access  Private (requires authentication)
  */
 router.put('/:id', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
+  if (userRole === ROLES.INVESTOR) {
+    validate(document.userId === userId, 'Unauthorized access to document');
+  }
 
   const updateData = {};
   const allowedFields = [
@@ -623,7 +628,9 @@ router.post('/:id/new-version', authenticate, handleDocumentUpload, catchAsync(a
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
+  if (userRole === ROLES.INVESTOR) {
+    validate(document.userId === userId, 'Unauthorized access to document');
+  }
 
   // Upload file to Supabase Storage
   const folder = `${document.entityType.toLowerCase()}s/${document.entityId}`;
@@ -656,8 +663,7 @@ router.post('/:id/new-version', authenticate, handleDocumentUpload, catchAsync(a
  * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.patch('/:id/tags', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
-  const userRole = req.auth?.role ?? req.user?.role;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
   const { tags } = req.body;
 
@@ -669,7 +675,6 @@ router.patch('/:id/tags', authenticate, catchAsync(async (req, res) => {
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
 
   const updatedDocument = await Document.addTags(id, tags);
 
@@ -686,8 +691,7 @@ router.patch('/:id/tags', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.delete('/:id/tags', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
-  const userRole = req.auth?.role ?? req.user?.role;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
   const { tags } = req.body;
 
@@ -699,7 +703,6 @@ router.delete('/:id/tags', authenticate, catchAsync(async (req, res) => {
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
 
   const updatedDocument = await Document.removeTags(id, tags);
 
@@ -716,8 +719,7 @@ router.delete('/:id/tags', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.patch('/:id/metadata', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
-  const userRole = req.auth?.role ?? req.user?.role;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
   const { metadata } = req.body;
 
@@ -728,7 +730,6 @@ router.patch('/:id/metadata', authenticate, catchAsync(async (req, res) => {
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
 
   const updatedDocument = await Document.updateMetadata(id, metadata);
 
@@ -745,8 +746,7 @@ router.patch('/:id/metadata', authenticate, catchAsync(async (req, res) => {
  * @access  Private (requires authentication, Root/Admin/Support only - Guest and Investor roles blocked)
  */
 router.delete('/:id/soft', authenticate, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
-  const userRole = req.auth?.role ?? req.user?.role;
+  const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
 
   // Block GUEST and INVESTOR roles from soft deleting documents
@@ -754,7 +754,6 @@ router.delete('/:id/soft', authenticate, catchAsync(async (req, res) => {
 
   const document = await Document.findById(id);
   validate(document, 'Document not found');
-  validate(document.userId === userId, 'Unauthorized access to document');
 
   await Document.softDelete(id);
 

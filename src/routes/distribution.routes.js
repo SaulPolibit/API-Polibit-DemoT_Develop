@@ -5,9 +5,9 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { Distribution, Structure, User, FirmSettings } = require('../models/supabase');
+const { Distribution, Structure, StructureAdmin, User, FirmSettings } = require('../models/supabase');
 const ApprovalHistory = require('../models/supabase/approvalHistory');
-const { requireInvestmentManagerAccess, getUserContext, ROLES } = require('../middleware/rbac');
+const { requireInvestmentManagerAccess, getUserContext, ROLES, canEditStructure } = require('../middleware/rbac');
 const { generateDistributionNoticePDF, generateIndividualDistributionNoticePDF } = require('../services/documentGenerator');
 const { sendEmail } = require('../utils/emailSender');
 const { sendDistributionNotice } = require('../utils/notificationHelper');
@@ -33,7 +33,7 @@ const router = express.Router();
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const userId = req.auth.userId || req.user.id;
+  const { userId, userRole } = getUserContext(req);
 
   const {
     structureId,
@@ -60,10 +60,13 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   validate(distributionNumber, 'Distribution number is required');
   validate(totalAmount !== undefined && totalAmount > 0, 'Total amount must be positive');
 
-  // Validate structure exists and belongs to user
+  // Validate structure exists and user has edit access
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(structure.createdBy === userId, 'Structure does not belong to user');
+  if (userRole !== ROLES.ROOT) {
+    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
+    validate(canEdit, 'Unauthorized access to structure');
+  }
 
   // Create distribution
   const distributionData = {
