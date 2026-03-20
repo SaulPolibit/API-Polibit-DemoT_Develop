@@ -150,6 +150,7 @@ class Structure {
       withholdingTaxNaturalNonResidents: 'withholding_tax_natural_non_residents',
       withholdingTaxLegalResidents: 'withholding_tax_legal_residents',
       withholdingTaxLegalNonResidents: 'withholding_tax_legal_non_residents',
+      sameTaxTreatment: 'same_tax_treatment',
       // Spec V2: Bank Transfer toggles (Step 7)
       bankTransferLocalEnabled: 'bank_transfer_local_enabled',
       bankTransferInternationalEnabled: 'bank_transfer_international_enabled',
@@ -312,6 +313,7 @@ class Structure {
       withholdingTaxNaturalNonResidents: dbData.withholding_tax_natural_non_residents,
       withholdingTaxLegalResidents: dbData.withholding_tax_legal_residents,
       withholdingTaxLegalNonResidents: dbData.withholding_tax_legal_non_residents,
+      sameTaxTreatment: dbData.same_tax_treatment,
       // Spec V2: Bank Transfer toggles (Step 7)
       bankTransferLocalEnabled: dbData.bank_transfer_local_enabled,
       bankTransferInternationalEnabled: dbData.bank_transfer_international_enabled,

@@ -5,7 +5,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { CapitalCall, Structure, StructureAdmin, User, FirmSettings } = require('../models/supabase');
+const { CapitalCall, Structure, StructureAdmin, User, FirmSettings, StructureInvestor } = require('../models/supabase');
 const ApprovalHistory = require('../models/supabase/approvalHistory');
 const { requireInvestmentManagerAccess, getUserContext, ROLES, canEditStructure } = require('../middleware/rbac');
 const { generateCapitalCallNoticePDF, generateIndividualLPNoticePDF } = require('../services/documentGenerator');
@@ -456,10 +456,41 @@ router.get('/:id/with-allocations', authenticate, requireInvestmentManagerAccess
   const capitalCallWithAllocations = results[0];
   validate(capitalCallWithAllocations, 'Capital call not found');
 
+  const structureId = capitalCallWithAllocations.structureId;
+
+  // Fetch fund commitment data and previously called amounts
+  const [totalFundCommitment, structureInvestors, previouslyCalledMap] = await Promise.all([
+    StructureInvestor.getTotalCommitment(structureId),
+    StructureInvestor.findByStructureId(structureId),
+    CapitalCall.getCumulativeCalledByStructure(structureId, id)
+  ]);
+
+  // Build commitment map per investor
+  const commitmentMap = {};
+  structureInvestors.forEach(inv => {
+    commitmentMap[inv.userId] = inv.commitment || 0;
+  });
+
+  // Merge commitment and previously called data into each investor allocation
+  if (capitalCallWithAllocations.investorAllocations) {
+    capitalCallWithAllocations.investorAllocations = capitalCallWithAllocations.investorAllocations.map(alloc => {
+      const commitment = commitmentMap[alloc.investorId] || 0;
+      const previouslyCalled = previouslyCalledMap[alloc.investorId] || 0;
+      return {
+        ...alloc,
+        commitment,
+        previouslyCalled,
+        remainingCommitment: commitment - previouslyCalled - (alloc.totalDrawdown || alloc.callAmount || 0)
+      };
+    });
+  }
 
   res.status(200).json({
     success: true,
-    data: capitalCallWithAllocations
+    data: {
+      ...capitalCallWithAllocations,
+      totalFundCommitment
+    }
   });
 }));
 

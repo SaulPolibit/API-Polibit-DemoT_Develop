@@ -5,7 +5,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { catchAsync, validate } = require('../middleware/errorHandler');
-const { Distribution, Structure, StructureAdmin, User, FirmSettings } = require('../models/supabase');
+const { Distribution, Structure, StructureAdmin, User, FirmSettings, StructureInvestor } = require('../models/supabase');
 const ApprovalHistory = require('../models/supabase/approvalHistory');
 const { requireInvestmentManagerAccess, getUserContext, ROLES, canEditStructure } = require('../middleware/rbac');
 const { generateDistributionNoticePDF, generateIndividualDistributionNoticePDF } = require('../services/documentGenerator');
@@ -176,12 +176,40 @@ router.get('/:id/with-allocations', authenticate, requireInvestmentManagerAccess
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-
   const distributionWithAllocations = await Distribution.findWithAllocations(id);
+  const structureId = distribution.structureId;
+
+  // Fetch fund commitment data and previously distributed amounts
+  const [totalFundCommitment, structureInvestors, previouslyDistributedMap] = await Promise.all([
+    StructureInvestor.getTotalCommitment(structureId),
+    StructureInvestor.findByStructureId(structureId),
+    Distribution.getCumulativeDistributedByStructure(structureId, id)
+  ]);
+
+  // Build commitment map per investor
+  const commitmentMap = {};
+  structureInvestors.forEach(inv => {
+    commitmentMap[inv.userId] = inv.commitment || 0;
+  });
+
+  // Merge commitment and previously distributed data into each allocation
+  if (distributionWithAllocations.distribution_allocations) {
+    distributionWithAllocations.distribution_allocations = distributionWithAllocations.distribution_allocations.map(alloc => {
+      const investorId = alloc.user_id || alloc.userId;
+      return {
+        ...alloc,
+        commitment: commitmentMap[investorId] || 0,
+        previouslyDistributed: previouslyDistributedMap[investorId] || 0
+      };
+    });
+  }
 
   res.status(200).json({
     success: true,
-    data: distributionWithAllocations
+    data: {
+      ...distributionWithAllocations,
+      totalFundCommitment
+    }
   });
 }));
 

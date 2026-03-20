@@ -501,6 +501,59 @@ class Distribution {
 
     return data;
   }
+
+  /**
+   * Get cumulative distributed amounts per investor for a structure
+   * Excludes a specific distribution (useful for calculating "previously distributed")
+   */
+  static async getCumulativeDistributedByStructure(structureId, excludeDistId = null) {
+    const supabase = getSupabase();
+
+    // Get all non-draft/cancelled distributions for this structure
+    let query = supabase
+      .from('distributions')
+      .select('id')
+      .eq('structure_id', structureId)
+      .not('status', 'in', '("Draft","Cancelled")');
+
+    if (excludeDistId) {
+      query = query.neq('id', excludeDistId);
+    }
+
+    const { data: distributions, error: distError } = await query;
+
+    if (distError) {
+      throw new Error(`Error fetching distributions: ${distError.message}`);
+    }
+
+    if (!distributions || distributions.length === 0) {
+      return {};
+    }
+
+    const distIds = distributions.map(d => d.id);
+
+    // Get all allocations across these distributions
+    const { data: allocations, error: allocError } = await supabase
+      .from('distribution_allocations')
+      .select('user_id, allocated_amount')
+      .in('distribution_id', distIds);
+
+    if (allocError) {
+      throw new Error(`Error fetching distribution allocations: ${allocError.message}`);
+    }
+
+    // Aggregate by user
+    const cumulativeMap = {};
+    allocations?.forEach(a => {
+      const userId = a.user_id;
+      if (!cumulativeMap[userId]) {
+        cumulativeMap[userId] = 0;
+      }
+      cumulativeMap[userId] += parseFloat(a.allocated_amount) || 0;
+    });
+
+    return cumulativeMap;
+  }
 }
 
 module.exports = Distribution;

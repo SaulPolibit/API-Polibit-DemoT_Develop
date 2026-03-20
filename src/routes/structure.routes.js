@@ -834,7 +834,7 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'commitmentPeriodYears', 'dayCountConvention',
     'withholdingTaxOnDistributions', 'withholdingTaxNaturalResidents',
     'withholdingTaxNaturalNonResidents', 'withholdingTaxLegalResidents',
-    'withholdingTaxLegalNonResidents',
+    'withholdingTaxLegalNonResidents', 'sameTaxTreatment',
     'bankTransferLocalEnabled', 'bankTransferInternationalEnabled'
   ];
 
