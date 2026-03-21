@@ -358,7 +358,7 @@ class Structure {
     // Get investors from investments table
     const { data: investments, error: investmentsError } = await supabase
       .from('investments')
-      .select('user_id, created_by')
+      .select('user_id')
       .eq('structure_id', structureId);
 
     if (investmentsError) {
@@ -377,7 +377,7 @@ class Structure {
 
     // Count unique user IDs from both sources
     const uniqueInvestors = new Set([
-      ...(investments?.map(inv => inv.user_id || inv.created_by).filter(id => id !== null) || []),
+      ...(investments?.map(inv => inv.user_id).filter(id => id !== null) || []),
       ...(structureInvestors?.map(si => si.user_id).filter(id => id !== null) || []),
     ]);
     return uniqueInvestors.size;
@@ -620,7 +620,7 @@ class Structure {
 
     // Count unique investors from both investments and structure_investors
     const uniqueInvestors = new Set([
-      ...(investments?.map(inv => inv.user_id || inv.created_by).filter(id => id !== null) || []),
+      ...(investments?.map(inv => inv.user_id).filter(id => id !== null) || []),
       ...(structureInvestors?.map(si => si.user_id).filter(id => id !== null) || []),
     ]);
     structure.currentInvestors = uniqueInvestors.size;
