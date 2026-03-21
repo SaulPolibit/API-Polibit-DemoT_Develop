@@ -176,8 +176,6 @@ class CapitalCall {
         capital_paid,
         fees_paid,
         vat_paid,
-        ownership_percent,
-        notice_sent,
         status,
         users:user_id (
           id,
@@ -236,10 +234,8 @@ class CapitalCall {
         capitalPaid: parseFloat(a.capital_paid) || 0,
         feesPaid: parseFloat(a.fees_paid) || 0,
         vatPaid: parseFloat(a.vat_paid) || 0,
-        // Drawdown & ownership
+        // Drawdown
         totalDrawdown: parseFloat(a.total_drawdown) || 0,
-        ownershipPercent: parseFloat(a.ownership_percent) || 0,
-        noticeSent: a.notice_sent || false,
         // Status
         status: a.status || 'Pending'
       }));
@@ -448,9 +444,7 @@ class CapitalCall {
           capital_paid,
           fees_paid,
           vat_paid,
-          ownership_percent,
           status,
-          notice_sent,
           users:user_id (
             id,
             email,
