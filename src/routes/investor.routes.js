@@ -1523,6 +1523,19 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
   // Update User record with ILPA fee settings if provided
   if (Object.keys(userIlpaFields).length > 0 && investor.userId) {
     await User.findByIdAndUpdate(investor.userId, userIlpaFields);
+
+    // Also sync fee settings to structure_investors table (used by capital call wizard)
+    if (investor.structureId) {
+      try {
+        const siRecord = await StructureInvestor.findByUserAndStructure(investor.userId, investor.structureId);
+        if (siRecord) {
+          await StructureInvestor.findByIdAndUpdate(siRecord.id, userIlpaFields);
+          console.log('[Investor Route] Synced ILPA fields to structure_investors for userId:', investor.userId);
+        }
+      } catch (siError) {
+        console.error('[Investor Route] Failed to sync ILPA fields to structure_investors:', siError.message);
+      }
+    }
   }
 
   // Update investor record (if there are remaining fields)
