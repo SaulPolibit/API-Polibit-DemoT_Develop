@@ -2527,4 +2527,79 @@ router.get('/health', (req, res) => {
   });
 });
 
+// ===== PASSWORD RESET =====
+
+/**
+ * POST /password/request-reset
+ * Request a password reset link (public, no auth)
+ * Only processes for active investors (role 3) — generic response regardless
+ */
+router.post('/password/request-reset', catchAsync(async (req, res) => {
+  await ensureBodyParsed(req);
+  const { email } = req.body;
+  validate(email, 'Email is required');
+
+  const user = await User.findByEmail(email);
+
+  // Only process for active investors (role 3) — generic response regardless
+  if (user && user.role === 3 && user.isActive) {
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 3600000); // 1 hour
+
+    await User.findByIdAndUpdate(user.id, {
+      passwordResetToken: token,
+      passwordResetExpires: expires,
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password/${token}`;
+
+    const { sendEmail } = require('../utils/emailSender');
+    await sendEmail(user.id, {
+      to: [user.email],
+      subject: 'Password Reset Request',
+      bodyHtml: `<p>Click <a href="${resetUrl}">here</a> to reset your password. This link expires in 1 hour.</p>`,
+      bodyText: `Reset your password: ${resetUrl} (expires in 1 hour)`,
+    });
+  }
+
+  // Always return success (no email enumeration)
+  res.json({ success: true, message: 'If this email is registered, a reset link has been sent.' });
+}));
+
+/**
+ * POST /password/reset
+ * Reset password using token (public, no auth)
+ */
+router.post('/password/reset', catchAsync(async (req, res) => {
+  await ensureBodyParsed(req);
+  const { token, password } = req.body;
+  validate(token && password, 'Token and new password are required');
+  validate(password.length >= 6, 'Password must be at least 6 characters');
+
+  // Find user by reset token
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from('users')
+    .select('*')
+    .eq('password_reset_token', token)
+    .single();
+
+  if (!data || new Date(data.password_reset_expires) < new Date()) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired token' });
+  }
+
+  // Update password in users table (findByIdAndUpdate auto-hashes)
+  await User.findByIdAndUpdate(data.id, {
+    password,
+    passwordResetToken: null,
+    passwordResetExpires: null,
+  });
+
+  // Update password in Supabase Auth
+  await supabase.auth.admin.updateUserById(data.id, { password });
+
+  res.json({ success: true, message: 'Password has been reset' });
+}));
+
 module.exports = router;
