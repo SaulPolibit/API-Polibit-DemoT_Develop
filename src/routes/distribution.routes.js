@@ -68,6 +68,11 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     validate(canEdit, 'Unauthorized access to structure');
   }
 
+  // Check for duplicate distribution number within this structure
+  const trimmedNumber = typeof distributionNumber === 'string' ? distributionNumber.trim() : String(distributionNumber);
+  const existingDists = await Distribution.find({ structureId, distributionNumber: trimmedNumber });
+  validate(!existingDists || existingDists.length === 0, `Distribution number "${trimmedNumber}" already exists for this structure`);
+
   // Create distribution
   const distributionData = {
     structureId,
@@ -341,15 +346,49 @@ router.patch('/:id/mark-paid', authenticate, requireInvestmentManagerAccess, cat
 router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
+  const { allocations: customAllocations } = req.body;
 
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
 
-
   const structure = await Structure.findById(distribution.structureId);
   validate(structure, 'Structure not found');
 
-  const allocations = await Distribution.createAllocationsForStructure(id, distribution.structureId);
+  let allocations;
+
+  // If frontend sends pre-calculated allocations, use them directly
+  if (customAllocations && Array.isArray(customAllocations) && customAllocations.length > 0) {
+    const { getSupabase } = require('../config/database');
+    const supabase = getSupabase();
+
+    const dbAllocations = customAllocations.map(a => ({
+      distribution_id: id,
+      user_id: a.investorId || a.userId || a.user_id,
+      allocated_amount: a.baseAllocation || a.allocatedAmount || a.allocated_amount || 0,
+      paid_amount: 0,
+      status: 'Pending',
+      payment_date: distribution.distributionDate,
+      reinvestment_amount: a.reinvestmentAmount || a.reinvestment_amount || 0,
+      income_portion: a.incomeAmount || a.income_portion || 0,
+      roc_portion: a.returnOfCapitalAmount || a.roc_portion || 0,
+      withholding_tax_amount: a.withholdingTaxAmount || a.withholding_tax_amount || 0,
+      net_to_investor: a.netToInvestor || a.net_to_investor || 0,
+    }));
+
+    const { data, error } = await supabase
+      .from('distribution_allocations')
+      .insert(dbAllocations)
+      .select();
+
+    if (error) {
+      throw new Error(`Error creating allocations: ${error.message}`);
+    }
+
+    allocations = data;
+  } else {
+    // Fallback: auto-calculate from structure investors
+    allocations = await Distribution.createAllocationsForStructure(id, distribution.structureId);
+  }
 
   res.status(201).json({
     success: true,
@@ -730,25 +769,20 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
   // Get user details for history
   const user = await User.findById(userId);
 
-  // Update approval status
-  const updatedDistribution = await Distribution.findByIdAndUpdate(id, {
-    approvalStatus: 'rejected'
-  });
-
-  // Log approval action
+  // Log rejection in approval history before deleting
   await ApprovalHistory.logAction({
     entityType: 'distribution',
     entityId: id,
     action: 'rejected',
     fromStatus: distribution.approvalStatus,
-    toStatus: 'rejected',
+    toStatus: 'deleted',
     userId,
     userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes: reason,
     metadata: { distributionNumber: distribution.distributionNumber }
   });
 
-  // Send email notification to submitter
+  // Send email notification to submitter before deleting
   try {
     const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(distribution.structureId);
@@ -765,7 +799,7 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
               <h2 style="margin: 0; color: #721c24;">Distribution Rejected</h2>
             </div>
             <p>Dear ${creator.name},</p>
-            <p>Unfortunately, your distribution has been rejected and cannot proceed at this time.</p>
+            <p>Unfortunately, your distribution has been rejected and has been removed. Please create a new distribution with the necessary corrections.</p>
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Distribution:</strong> #${distribution.distributionNumber}</p>
               <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
@@ -786,85 +820,19 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
     console.warn('Failed to send rejection notification:', emailError.message);
   }
 
-  res.status(200).json({
-    success: true,
-    message: 'Distribution rejected',
-    data: updatedDistribution
-  });
-}));
-
-/**
- * @route   PATCH /api/distributions/:id/request-changes
- * @desc    Request changes on distribution (pending -> draft)
- * @access  Private (requires authentication, Root/Admin only)
- */
-router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
-  const { id } = req.params;
-  const { notes } = req.body;
-
-  validate(notes?.trim(), 'Change request notes are required');
-
-  const distribution = await Distribution.findById(id);
-  validate(distribution, 'Distribution not found');
-
-  validate(
-    distribution.approvalStatus === 'pending_cfo',
-    'Distribution must be pending CFO approval to request changes'
-  );
-
-  // Only Root (CFO) can request changes
-  validate(userRole === ROLES.ROOT, 'Only CFO can request changes on distributions');
-
-  // Get user details for history
-  const user = await User.findById(userId);
-
-  // Update approval status back to draft
-  const updatedDistribution = await Distribution.findByIdAndUpdate(id, {
-    approvalStatus: 'draft'
-  });
-
-  // Log approval action
-  await ApprovalHistory.logAction({
-    entityType: 'distribution',
-    entityId: id,
-    action: 'changes_requested',
-    fromStatus: distribution.approvalStatus,
-    toStatus: 'draft',
-    userId,
-    userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
-    notes,
-    metadata: { distributionNumber: distribution.distributionNumber }
-  });
-
-  // Send email notification to creator about requested changes
-  try {
-    const creator = await User.findById(distribution.createdBy);
-    if (creator?.email) {
-      const firmName = await getFirmNameForUser(userId);
-      await sendEmail(userId, {
-        to: [creator.email],
-        subject: `Changes Requested: Distribution #${distribution.distributionNumber}`,
-        bodyText: `Changes have been requested on Distribution #${distribution.distributionNumber}.\n\nReviewer Notes:\n${notes}\n\nPlease review and resubmit.`,
-        bodyHtml: `
-          <p>Changes have been requested on <strong>Distribution #${distribution.distributionNumber}</strong>.</p>
-          <h4>Reviewer Notes:</h4>
-          <p style="background-color: #fff3cd; padding: 12px; border-radius: 4px;">${notes}</p>
-          <p>Please review and resubmit.</p>
-          <p>Best regards,<br/>${firmName}</p>
-        `
-      });
-    }
-  } catch (emailError) {
-    console.warn('Failed to send change request notification:', emailError.message);
-  }
+  // Delete allocations and distribution
+  const { getSupabase } = require('../config/database');
+  const supabase = getSupabase();
+  await supabase.from('distribution_allocations').delete().eq('distribution_id', id);
+  await Distribution.findByIdAndDelete(id);
 
   res.status(200).json({
     success: true,
-    message: 'Changes requested on distribution',
-    data: updatedDistribution
+    message: 'Distribution rejected and deleted',
+    data: { id, distributionNumber: distribution.distributionNumber }
   });
 }));
+
 
 /**
  * @route   GET /api/distributions/:id/generate-notice
