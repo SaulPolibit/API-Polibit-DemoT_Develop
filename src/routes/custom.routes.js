@@ -275,7 +275,8 @@ router.post('/login', catchAsync(async (req, res) => {
       country: user.country,
       walletAddress: user.walletAddress || null,
       mfaEnabled: !!user.mfaFactorId,
-      mfaFactorId: user.mfaFactorId || null
+      mfaFactorId: user.mfaFactorId || null,
+      termsAcceptedAt: user.termsAcceptedAt || null
     }
   });
 }));
@@ -416,7 +417,8 @@ router.post('/mfa/login-verify', mfaVerifyLimiter, catchAsync(async (req, res) =
         country: user.country,
         walletAddress: user.walletAddress || null,
         mfaEnabled: !!user.mfaFactorId,
-        mfaFactorId: user.mfaFactorId || null
+        mfaFactorId: user.mfaFactorId || null,
+        termsAcceptedAt: user.termsAcceptedAt || null
       }
     });
   } catch (error) {
@@ -2600,6 +2602,27 @@ router.post('/password/reset', catchAsync(async (req, res) => {
   await supabase.auth.admin.updateUserById(data.id, { password });
 
   res.json({ success: true, message: 'Password has been reset' });
+}));
+
+// ===== TERMS ACCEPTANCE =====
+
+/**
+ * @route   POST /api/custom/accept-terms
+ * @desc    Accept Terms of Service and Privacy Policy (investors only)
+ * @access  Private (role 3)
+ */
+router.post('/accept-terms', authenticate, catchAsync(async (req, res) => {
+  const user = req.user;
+
+  if (user.role !== 3) {
+    return res.status(403).json({ success: false, message: 'Forbidden' });
+  }
+
+  await User.findByIdAndUpdate(user.id, {
+    termsAcceptedAt: new Date().toISOString(),
+  });
+
+  res.json({ success: true, message: 'Terms accepted' });
 }));
 
 module.exports = router;

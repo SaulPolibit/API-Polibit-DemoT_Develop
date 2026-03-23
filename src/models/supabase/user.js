@@ -889,6 +889,7 @@ class User {
       bankName: dbUser.bank_name,
       bankAccountNumber: dbUser.bank_account_number,
       bankRoutingNumber: dbUser.bank_routing_number,
+      termsAcceptedAt: dbUser.terms_accepted_at,
       createdAt: dbUser.created_at,
       updatedAt: dbUser.updated_at,
 
@@ -998,6 +999,8 @@ class User {
       bankName: 'bank_name',
       bankAccountNumber: 'bank_account_number',
       bankRoutingNumber: 'bank_routing_number',
+      // Terms acceptance
+      termsAcceptedAt: 'terms_accepted_at',
     };
 
     Object.entries(modelData).forEach(([key, value]) => {
