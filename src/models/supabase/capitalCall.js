@@ -308,6 +308,9 @@ class CapitalCall {
           id,
           name,
           type
+        ),
+        capital_call_allocations (
+          total_due
         )
       `);
 
@@ -340,14 +343,21 @@ class CapitalCall {
       throw new Error(`Error finding capital calls by approval status: ${error.message}`);
     }
 
-    return data.map(item => ({
-      ...this._toModel(item),
-      structure: item.structures ? {
-        id: item.structures.id,
-        name: item.structures.name,
-        type: item.structures.type
-      } : null
-    }));
+    return data.map(item => {
+      // Compute total due from allocations (includes fees + taxes)
+      const allocationsTotalDue = (item.capital_call_allocations || [])
+        .reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+      return {
+        ...this._toModel(item),
+        totalDue: allocationsTotalDue || item.total_call_amount,
+        structure: item.structures ? {
+          id: item.structures.id,
+          name: item.structures.name,
+          type: item.structures.type
+        } : null
+      };
+    });
   }
 
   /**
@@ -1157,12 +1167,18 @@ class CapitalCall {
     }
 
     // Transform to model format
-    return calls.map(call => ({
+    return calls.map(call => {
+      // Compute total due from allocations (includes fees + taxes)
+      const allocationsTotalDue = (call.capital_call_allocations || [])
+        .reduce((sum, a) => sum + (parseFloat(a.total_due) || 0), 0);
+
+      return {
       id: call.id,
       callNumber: call.call_number,
       callDate: call.call_date,
       deadlineDate: call.deadline_date,
       totalCallAmount: call.total_call_amount,
+      totalDue: allocationsTotalDue || call.total_call_amount,
       totalPaidAmount: call.total_paid_amount,
       totalUnpaidAmount: call.total_unpaid_amount,
       status: call.status,
@@ -1191,7 +1207,8 @@ class CapitalCall {
         reservesAmount: a.reserves_amount,
         totalDrawdown: a.total_drawdown
       }))
-    }));
+    };
+    });
   }
 
   /**
