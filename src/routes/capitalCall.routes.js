@@ -260,6 +260,8 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
       paymentMethod: alloc.payment_method || 'bank_transfer',
       paymentReference: alloc.payment_reference || '',
       paymentDate: alloc.payment_date || alloc.updated_at,
+      paymentImage: alloc.payment_image || null,
+      receiptFileName: alloc.receipt_file_name || null,
       createdAt: alloc.created_at,
       updatedAt: alloc.updated_at,
     });

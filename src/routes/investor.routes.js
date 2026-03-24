@@ -15,6 +15,8 @@ const { requireInvestmentManagerAccess, ROLES, getUserContext } = require('../mi
 const { getSupabase } = require('../config/database');
 const { sendEmail } = require('../utils/emailSender');
 const { FirmSettings } = require('../models/supabase');
+const { handleDocumentUpload } = require('../middleware/upload');
+const { uploadToSupabase } = require('../utils/fileUpload');
 
 const router = express.Router();
 
@@ -1092,7 +1094,7 @@ router.get('/me/capital-calls/:capitalCallId', authenticate, catchAsync(async (r
  * @desc    Record a payment for a capital call allocation (LP Portal payment)
  * @access  Private (requires authentication, Investor role only)
  */
-router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(async (req, res) => {
+router.post('/me/capital-calls/:capitalCallId/pay', authenticate, handleDocumentUpload, catchAsync(async (req, res) => {
   const userId = req.auth?.userId || req.user?.id;
   const { userRole } = getUserContext(req);
   const { capitalCallId } = req.params;
@@ -1198,21 +1200,42 @@ router.post('/me/capital-calls/:capitalCallId/pay', authenticate, catchAsync(asy
   }
   // If not auto-approved, keep current status — don't mark as Paid until approved
 
+  // Upload payment receipt if provided
+  let paymentImageUrl = null;
+  let receiptFileName = null;
+  if (req.file) {
+    const uploadResult = await uploadToSupabase(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      `capital-call-payments/${allocation.id}`,
+      'documents'
+    );
+    paymentImageUrl = uploadResult.publicUrl;
+    receiptFileName = req.file.originalname;
+  }
+
   // Update the allocation with payment breakdown
+  const updateFields = {
+    paid_amount: newPaidAmount,
+    capital_paid: newCapitalPaid,
+    fees_paid: newFeesPaid,
+    vat_paid: newVatPaid,
+    status: newStatus,
+    payment_approval_status: approvalStatus,
+    payment_method: paymentMethod || null,
+    payment_reference: paymentReference || null,
+    payment_date: paymentDate || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  if (paymentImageUrl) {
+    updateFields.payment_image = paymentImageUrl;
+    updateFields.receipt_file_name = receiptFileName;
+  }
+
   const { data: updatedAllocation, error: updateError } = await supabase
     .from('capital_call_allocations')
-    .update({
-      paid_amount: newPaidAmount,
-      capital_paid: newCapitalPaid,
-      fees_paid: newFeesPaid,
-      vat_paid: newVatPaid,
-      status: newStatus,
-      payment_approval_status: approvalStatus,
-      payment_method: paymentMethod || null,
-      payment_reference: paymentReference || null,
-      payment_date: paymentDate || new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
+    .update(updateFields)
     .eq('id', allocation.id)
     .select()
     .single();
