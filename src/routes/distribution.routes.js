@@ -695,6 +695,16 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
     approvalStatus: 'approved'
   });
 
+  // Update all allocation statuses to Approved
+  {
+    const { getSupabase } = require('../config/database');
+    const supabase = getSupabase();
+    await supabase
+      .from('distribution_allocations')
+      .update({ status: 'Approved' })
+      .eq('distribution_id', id);
+  }
+
   // Log approval action
   await ApprovalHistory.logAction({
     entityType: 'distribution',
@@ -776,6 +786,14 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
   const updatedDistribution = await Distribution.findByIdAndUpdate(id, {
     approvalStatus: 'approved'
   });
+
+  // Update all allocation statuses to Approved
+  const { getSupabase } = require('../config/database');
+  const supabase = getSupabase();
+  await supabase
+    .from('distribution_allocations')
+    .update({ status: 'Approved' })
+    .eq('distribution_id', id);
 
   // Log approval action
   await ApprovalHistory.logAction({
