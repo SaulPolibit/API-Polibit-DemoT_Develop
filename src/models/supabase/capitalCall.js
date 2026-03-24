@@ -436,7 +436,9 @@ class CapitalCall {
   static async findWithAllocations(capitalCallId) {
     const supabase = getSupabase();
 
-    const { data, error } = await supabase
+    // Try with user join first, fall back to simple query if FK join fails
+    let data, error;
+    ({ data, error } = await supabase
       .from('capital_calls')
       .select(`
         *,
@@ -447,31 +449,7 @@ class CapitalCall {
           base_currency
         ),
         capital_call_allocations (
-          id,
-          user_id,
-          allocated_amount,
-          principal_amount,
-          management_fee_gross,
-          management_fee_discount,
-          management_fee_net,
-          nic_fee_amount,
-          unfunded_fee_amount,
-          fee_offset_amount,
-          deemed_gp_contribution,
-          vat_amount,
-          total_due,
-          paid_amount,
-          capital_paid,
-          fees_paid,
-          vat_paid,
-          status,
-          ownership_percent,
-          investments_amount,
-          fund_expenses_amount,
-          reserves_amount,
-          total_drawdown,
-          vat_on_investments_amount,
-          vat_on_fund_expenses_amount,
+          *,
           users:user_id (
             id,
             email,
@@ -482,7 +460,25 @@ class CapitalCall {
         )
       `)
       .eq('id', capitalCallId)
-      .single();
+      .single());
+
+    // If FK join fails, fall back to simple query without user join
+    if (error && error.message && error.message.includes('relationship')) {
+      ({ data, error } = await supabase
+        .from('capital_calls')
+        .select(`
+          *,
+          structures:structure_id (
+            id,
+            name,
+            type,
+            base_currency
+          ),
+          capital_call_allocations (*)
+        `)
+        .eq('id', capitalCallId)
+        .single());
+    }
 
     if (error) {
       throw new Error(`Error finding capital call with allocations: ${error.message}`);
