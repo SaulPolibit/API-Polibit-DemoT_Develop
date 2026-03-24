@@ -17,6 +17,9 @@ const { sendEmail } = require('../utils/emailSender');
 const { FirmSettings } = require('../models/supabase');
 const { handleDocumentUpload } = require('../middleware/upload');
 const { uploadToSupabase } = require('../utils/fileUpload');
+const { CapitalCall } = require('../models/supabase');
+const Distribution = require('../models/supabase/distribution');
+const { generateIndividualLPNoticePDF, generateIndividualDistributionNoticePDF } = require('../services/documentGenerator');
 
 const router = express.Router();
 
@@ -1930,6 +1933,98 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
       distributions
     }
   });
+}));
+
+/**
+ * @route   GET /api/investors/me/capital-calls/:id/notice
+ * @desc    Generate personalized Capital Call Notice PDF for the authenticated investor
+ * @access  Private (authenticated investor)
+ */
+router.get('/me/capital-calls/:id/notice', authenticate, catchAsync(async (req, res) => {
+  const userId = req.user?.id || req.user?.userId;
+  const { id } = req.params;
+
+  const capitalCall = await CapitalCall.findById(id);
+  validate(capitalCall, 'Capital call not found');
+
+  const structure = await Structure.findById(capitalCall.structureId);
+  validate(structure, 'Structure not found');
+
+  const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
+  const allocations = capitalCallWithAllocations?.capital_call_allocations || [];
+
+  const allocation = allocations.find(a => a.user_id === userId);
+  validate(allocation, 'You do not have an allocation in this capital call');
+
+  const investor = await User.findById(userId);
+
+  // Get firm name for whitelabeling
+  let firmName = 'Investment Manager';
+  try {
+    const firmSettings = await FirmSettings.findByUserId(userId);
+    firmName = firmSettings?.firmName || 'Investment Manager';
+  } catch (_e) { /* ignore */ }
+
+  const enrichedCC = { ...capitalCall, currency: structure.baseCurrency || 'USD' };
+  const pdfBuffer = await generateIndividualLPNoticePDF(
+    enrichedCC,
+    allocation,
+    { ...structure, currency: structure.baseCurrency || 'USD' },
+    investor,
+    { firmName, bankDetails: structure.bankAccounts || {} }
+  );
+
+  const investorName = investor?.name || 'Investor';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="Capital_Call_${capitalCall.callNumber || 'Notice'}_${investorName.replace(/\s+/g, '_')}.pdf"`);
+  res.setHeader('Content-Length', pdfBuffer.length);
+  res.send(pdfBuffer);
+}));
+
+/**
+ * @route   GET /api/investors/me/distributions/:id/notice
+ * @desc    Generate personalized Distribution Notice PDF for the authenticated investor
+ * @access  Private (authenticated investor)
+ */
+router.get('/me/distributions/:id/notice', authenticate, catchAsync(async (req, res) => {
+  const userId = req.user?.id || req.user?.userId;
+  const { id } = req.params;
+
+  const distribution = await Distribution.findById(id);
+  validate(distribution, 'Distribution not found');
+
+  const structure = await Structure.findById(distribution.structureId);
+  validate(structure, 'Structure not found');
+
+  const distributionWithAllocations = await Distribution.findWithAllocations(id);
+  const allocations = distributionWithAllocations?.distribution_allocations || [];
+
+  const allocation = allocations.find(a => a.user_id === userId);
+  validate(allocation, 'You do not have an allocation in this distribution');
+
+  const investor = await User.findById(userId);
+
+  // Get firm name for whitelabeling
+  let firmName = 'Investment Manager';
+  try {
+    const firmSettings = await FirmSettings.findByUserId(userId);
+    firmName = firmSettings?.firmName || 'Investment Manager';
+  } catch (_e) { /* ignore */ }
+
+  const enrichedDist = { ...distribution, currency: structure.baseCurrency || 'USD' };
+  const pdfBuffer = await generateIndividualDistributionNoticePDF(
+    enrichedDist,
+    allocation,
+    { ...structure, currency: structure.baseCurrency || 'USD' },
+    investor,
+    { firmName }
+  );
+
+  const investorName = investor?.name || 'Investor';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="Distribution_${distribution.distributionNumber || 'Notice'}_${investorName.replace(/\s+/g, '_')}.pdf"`);
+  res.setHeader('Content-Length', pdfBuffer.length);
+  res.send(pdfBuffer);
 }));
 
 /**
