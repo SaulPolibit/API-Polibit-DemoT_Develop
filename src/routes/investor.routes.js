@@ -1783,9 +1783,12 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
       distribution:distributions (
         id,
         structure_id,
+        distribution_number,
         distribution_date,
+        total_amount,
         source,
-        status
+        status,
+        approval_status
       )
     `)
     .eq('user_id', userId)
@@ -1841,9 +1844,9 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
       };
     });
 
-  // Build distributions array
+  // Build distributions array — only show approved distributions to investors
   const distributions = (distributionAllocations || [])
-    .filter(alloc => alloc.distribution)
+    .filter(alloc => alloc.distribution && alloc.distribution.approval_status === 'approved')
     .map(alloc => {
       // Find the structure name
       const structure = structures.find(s => s.id === alloc.distribution.structure_id);
@@ -1852,10 +1855,13 @@ router.get('/me/dashboard', authenticate, catchAsync(async (req, res) => {
         id: alloc.distribution.id,
         structureId: alloc.distribution.structure_id,
         structureName: structure?.name || 'Unknown Structure',
+        distributionNumber: alloc.distribution.distribution_number,
         amount: parseFloat(alloc.allocated_amount) || 0,
+        totalAmount: parseFloat(alloc.distribution.total_amount) || 0,
         date: alloc.distribution.distribution_date,
         type: alloc.distribution.source || 'Distribution',
-        status: alloc.status || alloc.distribution.status
+        status: alloc.status || alloc.distribution.status,
+        currency: structure?.currency || 'USD',
       };
     });
 
