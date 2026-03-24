@@ -690,9 +690,10 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
   // Get user details for history
   const user = await User.findById(userId);
 
-  // Update approval status directly to approved
+  // Update approval status and distribution status
   const updatedDistribution = await Distribution.findByIdAndUpdate(id, {
-    approvalStatus: 'approved'
+    approvalStatus: 'approved',
+    status: 'Pending'
   });
 
   // Update all allocation statuses to Approved
@@ -782,9 +783,10 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
   // Get user details for history
   const user = await User.findById(userId);
 
-  // Update approval status
+  // Update approval status and distribution status
   const updatedDistribution = await Distribution.findByIdAndUpdate(id, {
-    approvalStatus: 'approved'
+    approvalStatus: 'approved',
+    status: 'Pending'
   });
 
   // Update all allocation statuses to Approved
