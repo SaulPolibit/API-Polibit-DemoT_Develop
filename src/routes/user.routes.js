@@ -1335,4 +1335,71 @@ router.get('/health', (_req, res) => {
   });
 });
 
+/**
+ * @route   GET /api/users/me/dashboard-config
+ * @desc    Get current user's dashboard widget configuration
+ * @access  Private (authenticated)
+ */
+router.get('/me/dashboard-config', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from('user_dashboard_configs')
+    .select('widgets, last_modified')
+    .eq('user_id', userId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    throw new Error(`Error fetching dashboard config: ${error.message}`);
+  }
+
+  res.status(200).json({
+    success: true,
+    data: data ? {
+      widgets: data.widgets || [],
+      lastModified: data.last_modified,
+    } : null
+  });
+}));
+
+/**
+ * @route   PUT /api/users/me/dashboard-config
+ * @desc    Save current user's dashboard widget configuration
+ * @access  Private (authenticated)
+ */
+router.put('/me/dashboard-config', authenticate, catchAsync(async (req, res) => {
+  const userId = req.auth?.userId || req.user?.id;
+  const supabase = getSupabase();
+  const { widgets } = req.body;
+
+  validate(Array.isArray(widgets), 'widgets must be an array');
+
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('user_dashboard_configs')
+    .upsert({
+      user_id: userId,
+      widgets,
+      last_modified: now,
+      updated_at: now,
+    }, { onConflict: 'user_id' })
+    .select('widgets, last_modified')
+    .single();
+
+  if (error) {
+    throw new Error(`Error saving dashboard config: ${error.message}`);
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Dashboard configuration saved',
+    data: {
+      widgets: data.widgets,
+      lastModified: data.last_modified,
+    }
+  });
+}));
+
 module.exports = router;
