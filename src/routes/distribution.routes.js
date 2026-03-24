@@ -50,6 +50,24 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     waterfallApplied,
     createAllocations,
     approvalStatus,
+    // LP/GP splits
+    lpTotalAmount,
+    gpTotalAmount,
+    managementFeeAmount,
+    // Period fields
+    startOfPeriod,
+    endOfPeriod,
+    // Distribution breakdown fields
+    noi,
+    refinancingProceeds,
+    bankInterest,
+    assetDisposal,
+    reinvestment,
+    // Notice and payment fields
+    dayOfNotice,
+    businessDays,
+    paymentDateDeadline,
+    description,
     // Spec V2 fields
     sourceClassifications,
     recallable
@@ -88,6 +106,20 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     sourceDebtInterest: sourceDebtInterest || 0,
     sourceDebtPrincipal: sourceDebtPrincipal || 0,
     sourceOther: sourceOther || 0,
+    // Period fields
+    startOfPeriod: startOfPeriod || null,
+    endOfPeriod: endOfPeriod || null,
+    // Distribution breakdown fields
+    noi: noi || 0,
+    refinancingProceeds: refinancingProceeds || 0,
+    bankInterest: bankInterest || 0,
+    assetDisposal: assetDisposal || 0,
+    reinvestment: reinvestment || 0,
+    // Notice and payment fields
+    dayOfNotice: dayOfNotice || null,
+    businessDays: businessDays || 5,
+    paymentDateDeadline: paymentDateDeadline || null,
+    description: description?.trim() || '',
     // Waterfall
     waterfallApplied: waterfallApplied || false,
     tier1Amount: 0,
@@ -95,9 +127,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
     tier3Amount: 0,
     tier4Amount: 0,
     // LP/GP splits
-    lpTotalAmount: 0,
-    gpTotalAmount: 0,
-    managementFeeAmount: 0,
+    lpTotalAmount: lpTotalAmount || 0,
+    gpTotalAmount: gpTotalAmount || 0,
+    managementFeeAmount: managementFeeAmount || 0,
     // Approval workflow
     approvalStatus: approvalStatus || 'draft',
     // Spec V2: Source classifications and recallable flag
@@ -287,12 +319,35 @@ router.get('/structure/:structureId/summary', authenticate, requireInvestmentMan
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
 
+  // Get total fund commitment
+  const totalCommitment = await StructureInvestor.getTotalCommitment(structureId);
 
-  const summary = await Distribution.getSummary(structureId);
+  // Get all non-draft/cancelled distributions for this structure
+  const distributions = await Distribution.find({ structureId });
+  const completedDists = distributions.filter(d => d.status !== 'Cancelled');
+
+  const totalDistributed = completedDists.reduce((sum, d) => sum + (d.totalAmount || 0), 0);
+  const percentDistributed = totalCommitment > 0 ? ((totalDistributed / totalCommitment) * 100).toFixed(1) : '0';
 
   res.status(200).json({
     success: true,
-    data: summary
+    data: {
+      summary: {
+        totalCommitment,
+        totalDistributed,
+        percentDistributed,
+        distributionCount: completedDists.length,
+      },
+      history: completedDists.map(d => ({
+        id: d.id,
+        distributionNumber: d.distributionNumber,
+        distributionDate: d.distributionDate,
+        totalAmount: d.totalAmount,
+        total_amount: d.totalAmount,
+        status: d.status,
+        approvalStatus: d.approvalStatus,
+      }))
+    }
   });
 }));
 
