@@ -789,16 +789,23 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
   // Get allocations
   const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
 
+  // Inject currency from structure (capital_calls table has no currency column)
+  const enrichedCapitalCall = {
+    ...capitalCall,
+    currency: structure.baseCurrency || 'USD',
+    allocations: capitalCallWithAllocations?.capital_call_allocations || [],
+  };
+
   // Generate PDF
   const pdfBuffer = await generateCapitalCallNoticePDF(
-    { ...capitalCall, allocations: capitalCallWithAllocations?.capital_call_allocations || [] },
-    structure,
-    { firmName, bankDetails: structure.bankDetails }
+    enrichedCapitalCall,
+    { ...structure, currency: structure.baseCurrency || 'USD' },
+    { firmName: firmName || 'Investment Manager', bankDetails: structure.bankAccounts || {} }
   );
 
   // Set response headers for PDF download
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="ILPA_Capital_Call_${capitalCall.callNumber}.pdf"`);
+  res.setHeader('Content-Disposition', `attachment; filename="ILPA_Capital_Call_${capitalCall.callNumber || 'Notice'}.pdf"`);
   res.setHeader('Content-Length', pdfBuffer.length);
 
   res.send(pdfBuffer);
@@ -834,12 +841,13 @@ router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmen
   const investor = await User.findById(investorId);
 
   // Generate individual LP PDF
+  const enrichedCC = { ...capitalCall, currency: structure.baseCurrency || 'USD' };
   const pdfBuffer = await generateIndividualLPNoticePDF(
-    capitalCall,
+    enrichedCC,
     allocation,
-    structure,
+    { ...structure, currency: structure.baseCurrency || 'USD' },
     investor,
-    { firmName, bankDetails: structure.bankDetails }
+    { firmName: firmName || 'Investment Manager', bankDetails: structure.bankAccounts || {} }
   );
 
   const investorName = investor?.name || allocation.investorName || 'Investor';
@@ -895,12 +903,13 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
       }
 
       // Generate individual LP PDF
+      const enrichedCCNotice = { ...capitalCall, currency: structure.baseCurrency || 'USD' };
       const pdfBuffer = await generateIndividualLPNoticePDF(
-        capitalCall,
+        enrichedCCNotice,
         allocation,
-        structure,
+        { ...structure, currency: structure.baseCurrency || 'USD' },
         investor,
-        { firmName, bankDetails: structure.bankDetails }
+        { firmName: firmName || 'Investment Manager', bankDetails: structure.bankAccounts || {} }
       );
 
       // Prepare email content

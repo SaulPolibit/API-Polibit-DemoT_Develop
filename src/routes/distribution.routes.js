@@ -852,14 +852,21 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
   const structure = await Structure.findById(distribution.structureId);
   validate(structure, 'Structure not found');
 
-  // Get allocations
+  // Get allocations (findWithAllocations uses _toModel which preserves distribution_allocations)
   const distributionWithAllocations = await Distribution.findWithAllocations(id);
+
+  // Inject currency from structure and allocations
+  const enrichedDistribution = {
+    ...distribution,
+    currency: structure.baseCurrency || 'USD',
+    allocations: distributionWithAllocations?.distribution_allocations || [],
+  };
 
   // Generate PDF
   const pdfBuffer = await generateDistributionNoticePDF(
-    { ...distribution, allocations: distributionWithAllocations?.distribution_allocations || [] },
-    structure,
-    { firmName, bankDetails: structure.bankDetails }
+    enrichedDistribution,
+    { ...structure, currency: structure.baseCurrency || 'USD' },
+    { firmName: firmName || 'Investment Manager' }
   );
 
   // Set response headers for PDF download
@@ -899,12 +906,13 @@ router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmen
   validate(investor, 'Investor not found');
 
   // Generate personalized PDF
+  const enrichedDist = { ...distribution, currency: structure.baseCurrency || 'USD' };
   const pdfBuffer = await generateIndividualDistributionNoticePDF(
-    distribution,
+    enrichedDist,
     allocation,
-    structure,
+    { ...structure, currency: structure.baseCurrency || 'USD' },
     investor,
-    { firmName }
+    { firmName: firmName || 'Investment Manager' }
   );
 
   // Set response headers for PDF download
@@ -959,12 +967,13 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
       }
 
       // Generate personalized distribution notice PDF for investor
+      const enrichedDistNotice = { ...distribution, currency: structure.baseCurrency || 'USD' };
       const pdfBuffer = await generateIndividualDistributionNoticePDF(
-        distribution,
+        enrichedDistNotice,
         allocation,
-        structure,
+        { ...structure, currency: structure.baseCurrency || 'USD' },
         investor,
-        { firmName }
+        { firmName: firmName || 'Investment Manager' }
       );
 
       // Prepare email content

@@ -198,12 +198,12 @@ async function generateDistributionNoticePDF(distribution, structure, options = 
 // ============================================================================
 
 function addNoticeHeader(doc, options) {
-  const { firmName, title, fundName, date, recipientName } = options;
+  const { firmName = 'Investment Manager', title = '', fundName = '', date, recipientName } = options;
 
   // Firm name
   doc.fontSize(20)
      .fillColor(COLORS.primary)
-     .text(firmName, 50, 50);
+     .text(firmName || 'Investment Manager', 50, 50);
 
   // Document title
   doc.fontSize(16)
@@ -933,13 +933,19 @@ function addNoticeFooter(doc, firmName) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-function formatCurrency(value, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value || 0);
+function formatCurrency(value, currency) {
+  const safeCurrency = currency || 'USD';
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: safeCurrency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value || 0);
+  } catch {
+    // Fallback if currency code is invalid
+    return `${safeCurrency} ${(value || 0).toLocaleString()}`;
+  }
 }
 
 function formatDate(dateString) {

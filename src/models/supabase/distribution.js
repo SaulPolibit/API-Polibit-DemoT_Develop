@@ -337,7 +337,10 @@ class Distribution {
       throw new Error(`Error finding distribution with allocations: ${error.message}`);
     }
 
-    return this._toModel(data);
+    const model = this._toModel(data);
+    // Preserve raw allocations from join (not mapped by _toModel)
+    model.distribution_allocations = data.distribution_allocations || [];
+    return model;
   }
 
   /**
