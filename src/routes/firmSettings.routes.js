@@ -279,8 +279,8 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
         signInBgFile.buffer,
         signInBgFile.originalname,
         signInBgFile.mimetype,
-        'firm-logos',
-        'sign-in-backgrounds'
+        'sign-in-backgrounds',
+        'firm-logos'
       );
       updateData.signInBackground = uploadResult.publicUrl;
     } catch (error) {
@@ -390,8 +390,8 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
         signInBgFile.buffer,
         signInBgFile.originalname,
         signInBgFile.mimetype,
-        'firm-logos',
-        'sign-in-backgrounds'
+        'sign-in-backgrounds',
+        'firm-logos'
       );
       updateData.signInBackground = uploadResult.publicUrl;
     } catch (error) {
