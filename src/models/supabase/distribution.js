@@ -229,7 +229,8 @@ class Distribution {
         structures:structure_id (
           id,
           name,
-          type
+          type,
+          base_currency
         )
       `);
 
@@ -267,7 +268,8 @@ class Distribution {
       structure: item.structures ? {
         id: item.structures.id,
         name: item.structures.name,
-        type: item.structures.type
+        type: item.structures.type,
+        baseCurrency: item.structures.base_currency || null
       } : null
     }));
   }

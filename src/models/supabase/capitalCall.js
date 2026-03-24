@@ -161,7 +161,8 @@ class CapitalCall {
       structures:structure_id (
         id,
         name,
-        type
+        type,
+        base_currency
       ),
       capital_call_allocations (
         id,
@@ -245,7 +246,8 @@ class CapitalCall {
         structure: item.structures ? {
           id: item.structures.id,
           name: item.structures.name,
-          type: item.structures.type
+          type: item.structures.type,
+          baseCurrency: item.structures.base_currency || null
         } : null,
         // Per-investor allocations for commitment tracking
         investorAllocations,
@@ -307,7 +309,8 @@ class CapitalCall {
         structures:structure_id (
           id,
           name,
-          type
+          type,
+          base_currency
         ),
         capital_call_allocations (
           total_due
@@ -354,7 +357,8 @@ class CapitalCall {
         structure: item.structures ? {
           id: item.structures.id,
           name: item.structures.name,
-          type: item.structures.type
+          type: item.structures.type,
+          baseCurrency: item.structures.base_currency || null
         } : null
       };
     });

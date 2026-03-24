@@ -222,7 +222,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
     if (capitalCall.structure_id) {
       const { data: struct } = await supabase
         .from('structures')
-        .select('id, name, type')
+        .select('id, name, type, base_currency')
         .eq('id', capitalCall.structure_id)
         .single();
       if (struct) {
@@ -242,6 +242,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
       structureId: capitalCall.structure_id,
       structureName,
       structureType,
+      currency: struct?.base_currency || 'USD',
       investorId: alloc.user_id,
       investorName,
       investorEmail,
