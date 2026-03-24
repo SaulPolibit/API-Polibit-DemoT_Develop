@@ -150,6 +150,35 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 }));
 
 /**
+ * @route   GET /api/distributions/pending/approval
+ * @desc    Get all distributions pending approval
+ * @access  Private (requires authentication, Root/Admin only)
+ */
+router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
+  const { userId, userRole } = getUserContext(req);
+  const { status } = req.query;
+
+  let filter = {};
+
+  // Filter by approval status - default to pending_cfo (simplified workflow)
+  if (status) {
+    filter.approvalStatus = status;
+  } else {
+    // Get all pending CFO approval items (simplified workflow)
+    filter.approvalStatusIn = ['pending_cfo'];
+  }
+
+
+  const distributions = await Distribution.findByApprovalStatus(filter);
+
+  res.status(200).json({
+    success: true,
+    count: distributions.length,
+    data: distributions
+  });
+}));
+
+/**
  * @route   GET /api/distributions/:id
  * @desc    Get a single distribution by ID
  * @access  Private (requires authentication, Root/Admin only)
@@ -464,35 +493,6 @@ router.get('/:id/approval-history', authenticate, requireInvestmentManagerAccess
   res.status(200).json({
     success: true,
     data: history
-  });
-}));
-
-/**
- * @route   GET /api/distributions/pending/approval
- * @desc    Get all distributions pending approval
- * @access  Private (requires authentication, Root/Admin only)
- */
-router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
-  const { userId, userRole } = getUserContext(req);
-  const { status } = req.query;
-
-  let filter = {};
-
-  // Filter by approval status - default to pending_cfo (simplified workflow)
-  if (status) {
-    filter.approvalStatus = status;
-  } else {
-    // Get all pending CFO approval items (simplified workflow)
-    filter.approvalStatusIn = ['pending_cfo'];
-  }
-
-
-  const distributions = await Distribution.findByApprovalStatus(filter);
-
-  res.status(200).json({
-    success: true,
-    count: distributions.length,
-    data: distributions
   });
 }));
 
