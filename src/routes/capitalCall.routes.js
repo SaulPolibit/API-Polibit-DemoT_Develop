@@ -219,6 +219,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
     // Get structure info
     let structureName = 'N/A';
     let structureType = '';
+    let structureCurrency = 'USD';
     if (capitalCall.structure_id) {
       const { data: struct } = await supabase
         .from('structures')
@@ -228,6 +229,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
       if (struct) {
         structureName = struct.name;
         structureType = struct.type || '';
+        structureCurrency = struct.base_currency || 'USD';
       }
     }
 
@@ -242,7 +244,7 @@ router.get('/payments', authenticate, requireInvestmentManagerAccess, catchAsync
       structureId: capitalCall.structure_id,
       structureName,
       structureType,
-      currency: struct?.base_currency || 'USD',
+      currency: structureCurrency,
       investorId: alloc.user_id,
       investorName,
       investorEmail,
