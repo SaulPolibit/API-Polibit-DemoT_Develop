@@ -423,7 +423,6 @@ router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAcc
       return {
         distribution_id: id,
         user_id: userId,
-        investor_id: userId, // backward compat: some DBs still have this column
         allocated_amount: a.baseAllocation || a.allocatedAmount || a.allocated_amount || 0,
         ownership_percent: a.ownershipPercent || a.ownership_percent || 0,
         paid_amount: 0,

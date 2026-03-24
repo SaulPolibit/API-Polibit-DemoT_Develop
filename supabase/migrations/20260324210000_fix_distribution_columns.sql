@@ -26,52 +26,15 @@ ALTER TABLE distributions ADD COLUMN IF NOT EXISTS source_debt_interest numeric 
 ALTER TABLE distributions ADD COLUMN IF NOT EXISTS source_debt_principal numeric DEFAULT 0;
 ALTER TABLE distributions ADD COLUMN IF NOT EXISTS source_other numeric DEFAULT 0;
 
--- Fix distribution_allocations table: ensure user_id column exists
--- The codebase uses user_id (references users table) but some DB instances
--- may have been created with investor_id (references old investors table).
-
--- Step 1: Add user_id column if it doesn't exist
+-- Fix distribution_allocations table: ensure required columns exist
 ALTER TABLE distribution_allocations ADD COLUMN IF NOT EXISTS user_id uuid;
-
--- Step 2: Add allocated_amount if missing (some schemas use distribution_amount)
 ALTER TABLE distribution_allocations ADD COLUMN IF NOT EXISTS allocated_amount numeric DEFAULT 0;
 ALTER TABLE distribution_allocations ADD COLUMN IF NOT EXISTS paid_amount numeric DEFAULT 0;
 ALTER TABLE distribution_allocations ADD COLUMN IF NOT EXISTS status text DEFAULT 'Pending';
 
--- Step 3: Copy investor_id data to user_id where user_id is null
-UPDATE distribution_allocations
-SET user_id = investor_id
-WHERE user_id IS NULL AND investor_id IS NOT NULL;
-
--- Step 4: Make investor_id nullable (it may have a NOT NULL constraint)
--- We do this by adding a default and allowing NULLs
+-- Create unique constraint on (distribution_id, user_id) if not exists
 DO $$
 BEGIN
-  -- Only alter if the column exists and is NOT NULL
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'distribution_allocations'
-    AND column_name = 'investor_id'
-    AND is_nullable = 'NO'
-  ) THEN
-    ALTER TABLE distribution_allocations ALTER COLUMN investor_id DROP NOT NULL;
-  END IF;
-END $$;
-
--- Step 5: Drop old unique constraint on (distribution_id, investor_id) if it exists
--- and create one on (distribution_id, user_id) instead
-DO $$
-BEGIN
-  -- Drop old constraint if it exists
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conname = 'distribution_allocations_distribution_id_investor_id_key'
-  ) THEN
-    ALTER TABLE distribution_allocations
-      DROP CONSTRAINT distribution_allocations_distribution_id_investor_id_key;
-  END IF;
-
-  -- Create new unique constraint on (distribution_id, user_id) if not exists
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
     WHERE conname = 'distribution_allocations_distribution_id_user_id_key'
@@ -82,7 +45,7 @@ BEGIN
   END IF;
 END $$;
 
--- Step 6: Create FK from user_id to auth users if not exists
+-- Create FK from user_id to users if not exists
 DO $$
 BEGIN
   IF NOT EXISTS (
