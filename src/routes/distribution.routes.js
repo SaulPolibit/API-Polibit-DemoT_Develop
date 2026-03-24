@@ -142,10 +142,31 @@ router.get('/', authenticate, requireInvestmentManagerAccess, catchAsync(async (
 
   const distributions = await Distribution.find(filter);
 
+  // Enrich distributions with structure info
+  const structureIds = [...new Set(distributions.map(d => d.structureId).filter(Boolean))];
+  const structureMap = {};
+  if (structureIds.length > 0) {
+    const { getSupabase } = require('../config/database');
+    const supabase = getSupabase();
+    const { data: structures } = await supabase
+      .from('structures')
+      .select('id, name, type, base_currency')
+      .in('id', structureIds);
+    (structures || []).forEach(s => { structureMap[s.id] = s; });
+  }
+
+  const enrichedDistributions = distributions.map(d => {
+    const struct = structureMap[d.structureId];
+    return {
+      ...d,
+      structure: struct ? { id: struct.id, name: struct.name, type: struct.type, baseCurrency: struct.base_currency } : null,
+    };
+  });
+
   res.status(200).json({
     success: true,
-    count: distributions.length,
-    data: distributions
+    count: enrichedDistributions.length,
+    data: enrichedDistributions
   });
 }));
 
@@ -191,6 +212,13 @@ router.get('/:id', authenticate, requireInvestmentManagerAccess, catchAsync(asyn
 
   validate(distribution, 'Distribution not found');
 
+  // Enrich with structure info
+  if (distribution.structureId) {
+    const struct = await Structure.findById(distribution.structureId);
+    if (struct) {
+      distribution.structure = { id: struct.id, name: struct.name, type: struct.type, baseCurrency: struct.baseCurrency };
+    }
+  }
 
   res.status(200).json({
     success: true,
