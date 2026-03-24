@@ -1,0 +1,1 @@
+ALTER TABLE firm_settings ADD COLUMN IF NOT EXISTS sign_in_background TEXT DEFAULT NULL;

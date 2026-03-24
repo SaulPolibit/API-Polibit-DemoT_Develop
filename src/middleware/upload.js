@@ -330,9 +330,12 @@ const uploadFirmLogo = multer({
   }
 });
 
-// Middleware to handle firm logo upload with error handling
+// Middleware to handle firm logo and sign-in background upload with error handling
 const handleFirmLogoUpload = (req, res, next) => {
-  const upload = uploadFirmLogo.single('firmLogo');
+  const upload = uploadFirmLogo.fields([
+    { name: 'firmLogo', maxCount: 1 },
+    { name: 'signInBackground', maxCount: 1 },
+  ]);
 
   upload(req, res, (err) => {
     if (err instanceof multer.MulterError) {

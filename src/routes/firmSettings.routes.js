@@ -39,7 +39,8 @@ router.get('/logo', catchAsync(async (_req, res) => {
     success: true,
     data: {
       firmLogo: settings?.firmLogo || null,
-      firmName: settings?.firmName || 'PoliBit'
+      firmName: settings?.firmName || 'PoliBit',
+      signInBackground: settings?.signInBackground || null
     }
   });
 }));
@@ -91,6 +92,7 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
       firmAddress: null,
       firmPhone: null,
       firmEmail: null,
+      signInBackground: null,
       themeConfig: null,
       navVisibilityConfig: null,
     }
@@ -245,22 +247,23 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
     'firmAddress',
     'firmPhone',
     'firmEmail',
+    'signInBackground',
     'themeConfig'
   ];
 
-  // Handle file upload if present
-  if (req.file) {
+  // Handle file uploads if present (firmLogo and/or signInBackground)
+  const firmLogoFile = req.files?.firmLogo?.[0];
+  const signInBgFile = req.files?.signInBackground?.[0];
+
+  if (firmLogoFile) {
     try {
-      // Upload to Supabase storage
       const uploadResult = await uploadToSupabase(
-        req.file.buffer,
-        req.file.originalname,
-        req.file.mimetype,
+        firmLogoFile.buffer,
+        firmLogoFile.originalname,
+        firmLogoFile.mimetype,
         'firm-logos',
         'firm-logos'
       );
-
-      // Set the public URL as firmLogo
       updateData.firmLogo = uploadResult.publicUrl;
     } catch (error) {
       return res.status(500).json({
@@ -270,14 +273,32 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
     }
   }
 
+  if (signInBgFile) {
+    try {
+      const uploadResult = await uploadToSupabase(
+        signInBgFile.buffer,
+        signInBgFile.originalname,
+        signInBgFile.mimetype,
+        'firm-logos',
+        'sign-in-backgrounds'
+      );
+      updateData.signInBackground = uploadResult.publicUrl;
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Error uploading sign-in background: ${error.message}`
+      });
+    }
+  }
+
   // Process other fields from request body
   for (const field of allowedFields) {
-    // Skip firmLogo if it was already set from file upload
-    if (field === 'firmLogo' && req.file) continue;
+    // Skip file fields if already set from upload
+    if (field === 'firmLogo' && firmLogoFile) continue;
+    if (field === 'signInBackground' && signInBgFile) continue;
 
     if (req.body[field] !== undefined) {
       if (field === 'themeConfig') {
-        // Parse JSON string if needed, or accept object directly
         updateData[field] = typeof req.body[field] === 'string'
           ? JSON.parse(req.body[field])
           : req.body[field];
@@ -308,7 +329,7 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
  * @route   PUT /api/firm-settings/:id
  * @desc    Update global firm settings by ID
  * @access  Private (Root, Admin only)
- * @body    FormData with optional 'firmLogo' file field and other fields
+ * @body    FormData with optional 'firmLogo'/'signInBackground' file fields and other fields
  */
 router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) => {
   const { userRole } = getUserContext(req);
@@ -337,22 +358,23 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
     'firmAddress',
     'firmPhone',
     'firmEmail',
+    'signInBackground',
     'themeConfig'
   ];
 
-  // Handle file upload if present
-  if (req.file) {
+  // Handle file uploads if present
+  const firmLogoFile = req.files?.firmLogo?.[0];
+  const signInBgFile = req.files?.signInBackground?.[0];
+
+  if (firmLogoFile) {
     try {
-      // Upload to Supabase storage
       const uploadResult = await uploadToSupabase(
-        req.file.buffer,
-        req.file.originalname,
-        req.file.mimetype,
+        firmLogoFile.buffer,
+        firmLogoFile.originalname,
+        firmLogoFile.mimetype,
         'firm-logos',
         'firm-logos'
       );
-
-      // Set the public URL as firmLogo
       updateData.firmLogo = uploadResult.publicUrl;
     } catch (error) {
       return res.status(500).json({
@@ -362,10 +384,28 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
     }
   }
 
+  if (signInBgFile) {
+    try {
+      const uploadResult = await uploadToSupabase(
+        signInBgFile.buffer,
+        signInBgFile.originalname,
+        signInBgFile.mimetype,
+        'firm-logos',
+        'sign-in-backgrounds'
+      );
+      updateData.signInBackground = uploadResult.publicUrl;
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Error uploading sign-in background: ${error.message}`
+      });
+    }
+  }
+
   // Process other fields from request body
   for (const field of allowedFields) {
-    // Skip firmLogo if it was already set from file upload
-    if (field === 'firmLogo' && req.file) continue;
+    if (field === 'firmLogo' && firmLogoFile) continue;
+    if (field === 'signInBackground' && signInBgFile) continue;
 
     if (req.body[field] !== undefined) {
       if (field === 'themeConfig') {
