@@ -418,19 +418,24 @@ router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAcc
     const { getSupabase } = require('../config/database');
     const supabase = getSupabase();
 
-    const dbAllocations = customAllocations.map(a => ({
-      distribution_id: id,
-      user_id: a.investorId || a.userId || a.user_id,
-      allocated_amount: a.baseAllocation || a.allocatedAmount || a.allocated_amount || 0,
-      paid_amount: 0,
-      status: 'Pending',
-      payment_date: distribution.distributionDate,
-      reinvestment_amount: a.reinvestmentAmount || a.reinvestment_amount || 0,
-      income_portion: a.incomeAmount || a.income_portion || 0,
-      roc_portion: a.returnOfCapitalAmount || a.roc_portion || 0,
-      withholding_tax_amount: a.withholdingTaxAmount || a.withholding_tax_amount || 0,
-      net_to_investor: a.netToInvestor || a.net_to_investor || 0,
-    }));
+    const dbAllocations = customAllocations.map(a => {
+      const userId = a.investorId || a.userId || a.user_id;
+      return {
+        distribution_id: id,
+        user_id: userId,
+        investor_id: userId, // backward compat: some DBs still have this column
+        allocated_amount: a.baseAllocation || a.allocatedAmount || a.allocated_amount || 0,
+        ownership_percent: a.ownershipPercent || a.ownership_percent || 0,
+        paid_amount: 0,
+        status: 'Pending',
+        payment_date: distribution.distributionDate,
+        reinvestment_amount: a.reinvestmentAmount || a.reinvestment_amount || 0,
+        income_portion: a.incomeAmount || a.income_portion || 0,
+        roc_portion: a.returnOfCapitalAmount || a.roc_portion || 0,
+        withholding_tax_amount: a.withholdingTaxAmount || a.withholding_tax_amount || 0,
+        net_to_investor: a.netToInvestor || a.net_to_investor || 0,
+      };
+    });
 
     const { data, error } = await supabase
       .from('distribution_allocations')

@@ -321,25 +321,49 @@ class Distribution {
   static async findWithAllocations(distributionId) {
     const supabase = getSupabase();
 
-    const { data, error } = await supabase
+    // Try joining via user_id FK first
+    let data, error;
+    ({ data, error } = await supabase
       .from('distributions')
       .select(`
         *,
         distribution_allocations (
           *,
-          user:users (*)
+          user:users!distribution_allocations_user_id_fkey (
+            id, email, first_name, last_name, role, investor_type
+          )
         )
       `)
       .eq('id', distributionId)
-      .single();
+      .single());
+
+    // If FK join fails, fall back to simple query without user join
+    if (error && error.message && error.message.includes('relationship')) {
+      ({ data, error } = await supabase
+        .from('distributions')
+        .select(`*, distribution_allocations (*)`)
+        .eq('id', distributionId)
+        .single());
+    }
 
     if (error) {
       throw new Error(`Error finding distribution with allocations: ${error.message}`);
     }
 
     const model = this._toModel(data);
-    // Preserve raw allocations from join (not mapped by _toModel)
-    model.distribution_allocations = data.distribution_allocations || [];
+    // Preserve raw allocations and build display name from user fields
+    model.distribution_allocations = (data.distribution_allocations || []).map(alloc => {
+      const user = alloc.user || {};
+      const displayName = user.first_name && user.last_name
+        ? `${user.first_name} ${user.last_name}`
+        : user.email || null;
+      return {
+        ...alloc,
+        user: displayName ? { ...user, name: displayName } : user,
+        investorName: displayName || 'Unknown',
+        investorType: user.investor_type || 'Individual',
+      };
+    });
     return model;
   }
 
