@@ -425,6 +425,7 @@ router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAcc
         user_id: userId,
         allocated_amount: a.baseAllocation || a.allocatedAmount || a.allocated_amount || 0,
         ownership_percent: a.ownershipPercent || a.ownership_percent || 0,
+        commitment: a.commitment || 0,
         paid_amount: 0,
         status: 'Pending',
         payment_date: distribution.distributionDate,
