@@ -524,6 +524,7 @@ router.get('/structure/:structureId/summary', authenticate, requireInvestmentMan
 router.get('/structure/:structureId/history', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { structureId } = req.params;
+  const { excludeCallId } = req.query;
 
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
@@ -532,8 +533,8 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
   // Get historical capital calls with allocations
   const history = await CapitalCall.getHistoryByStructure(structureId);
 
-  // Get cumulative called amounts per investor
-  const cumulativeCalled = await CapitalCall.getCumulativeCalledByStructure(structureId);
+  // Get cumulative called amounts per investor (optionally exclude a specific call)
+  const cumulativeCalled = await CapitalCall.getCumulativeCalledByStructure(structureId, excludeCallId || null);
 
   // Get cumulative recallable distribution amounts if enabled
   let cumulativeRecallable = {};
