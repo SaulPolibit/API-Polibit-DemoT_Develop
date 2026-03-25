@@ -806,7 +806,7 @@ router.put('/:id', authenticate, requireInvestmentManagerAccess, handleStructure
     'additionalCommunications', 'limitedLiability', 'exceptionsLiability',
     'maximumExposure', 'indemnifiesPartnership', 'lpIndemnifiesPartnership',
     'indemnifiesProcedures', 'amendments', 'dissolution', 'disputesResolution',
-    'governingLaw', 'additionalProvisions', 'minimumTicket', 'maximumTicket',
+    'governingLaw', 'additionalProvisions', 'confidentiality', 'minimumTicket', 'maximumTicket',
     'strategyInstrumentType', 'localBankName', 'localAccountBank', 'localRoutingBank',
     'localAccountHolder', 'localBankAddress', 'localTaxId', 'internationalBankName',
     'internationalAccountBank', 'internationalSwift', 'internationalHolderName',
