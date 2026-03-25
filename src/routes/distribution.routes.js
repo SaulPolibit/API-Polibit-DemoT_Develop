@@ -489,6 +489,7 @@ router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAcc
         roc_portion: a.returnOfCapitalAmount || a.roc_portion || 0,
         withholding_tax_amount: a.withholdingTaxAmount || a.withholding_tax_amount || 0,
         net_to_investor: a.netToInvestor || a.net_to_investor || 0,
+        prior_distributions: a.priorDistributions || a.prior_distributions || 0,
       };
     });
 

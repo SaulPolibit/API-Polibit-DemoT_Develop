@@ -317,6 +317,9 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
       status: 'active'
     });
     console.log('[Investor Route] Structure investor record created/updated for userId:', userId, 'structureId:', structureId);
+
+    // Recalculate ownership percentages for all investors in this structure
+    await StructureInvestor.recalculateOwnership(structureId);
   } catch (siError) {
     console.error('[Investor Route] Failed to create structure_investor record:', siError.message);
     // Don't fail the request - the legacy investor record was still created

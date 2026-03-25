@@ -1257,7 +1257,7 @@ function addDistLPSectionD(doc, distribution, allocation, currency) {
 
   const commitment = allocation.commitment || 0;
   const distributionAmount = allocation.allocated_amount || allocation.distributionAmount || allocation.finalAllocation || 0;
-  const priorDistributions = allocation.prior_distributions || allocation.distributionsToDate || 0;
+  const priorDistributions = allocation.prior_distributions != null ? Number(allocation.prior_distributions) : 0;
   const totalDistributions = priorDistributions + distributionAmount;
   const calledCapital = allocation.calledCapitalToDate || allocation.called_capital || 0;
   const netAccountValue = calledCapital - totalDistributions;
