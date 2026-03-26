@@ -73,13 +73,10 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   validate(callNumber, 'Call number is required');
   validate(totalCallAmount !== undefined && totalCallAmount > 0, 'Total call amount must be positive');
 
-  // Validate structure exists and user has edit access
+  // Validate structure exists and user has access (Root and Admin can create capital calls for any structure)
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  if (userRole !== ROLES.ROOT) {
-    const canEdit = await canEditStructure(structure, userRole, userId, StructureAdmin);
-    validate(canEdit, 'Unauthorized access to structure');
-  }
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Unauthorized: Only Root and Admin roles can create capital calls');
 
   // Create capital call
   const capitalCallData = {
