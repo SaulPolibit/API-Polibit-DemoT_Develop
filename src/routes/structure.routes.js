@@ -745,6 +745,7 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
         uncalledCapital: (si.commitment || 0) - calledCapital,
         feeDiscount: si.feeDiscount || 0,
         vatExempt: si.vatExempt || false,
+        customTerms: si.customTerms,
       }]
     };
   });
