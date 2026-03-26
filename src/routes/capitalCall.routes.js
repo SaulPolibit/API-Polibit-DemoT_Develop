@@ -76,7 +76,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   // Validate structure exists and user has access (Root and Admin can create capital calls for any structure)
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Unauthorized: Only Root and Admin roles can create capital calls');
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN || userRole === ROLES.SUPPORT, 'Unauthorized: Only Root, Admin, and Operations roles can create capital calls');
 
   // Create capital call
   const capitalCallData = {

@@ -81,7 +81,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
   // Validate structure exists and user has access (Root and Admin can create distributions for any structure)
   const structure = await Structure.findById(structureId);
   validate(structure, 'Structure not found');
-  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Unauthorized: Only Root and Admin roles can create distributions');
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN || userRole === ROLES.SUPPORT, 'Unauthorized: Only Root, Admin, and Operations roles can create distributions');
 
   // Check for duplicate distribution number within this structure
   const trimmedNumber = typeof distributionNumber === 'string' ? distributionNumber.trim() : String(distributionNumber);
