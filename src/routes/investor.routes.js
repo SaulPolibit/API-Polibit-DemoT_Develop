@@ -639,8 +639,12 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  // Find investor record by ID
-  const investor = await Investor.findById(id);
+  // Find investor record by ID, fallback to userId lookup
+  let investor = await Investor.findById(id);
+  if (!investor) {
+    const investorsByUser = await Investor.find({ userId: id });
+    investor = investorsByUser.length > 0 ? investorsByUser[0] : null;
+  }
   validate(investor, 'Investor not found');
 
   // Fetch associated user data (optional — investor may not have a linked user)
@@ -1446,13 +1450,16 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  // Find investor record by ID
-  const investor = await Investor.findById(id);
+  // Find investor record by ID, fallback to userId lookup
+  let investor = await Investor.findById(id);
+  if (!investor) {
+    const investorsByUser = await Investor.find({ userId: id });
+    investor = investorsByUser.length > 0 ? investorsByUser[0] : null;
+  }
   validate(investor, 'Investor not found');
 
-  // Fetch associated user for access control
+  // Fetch associated user for access control (optional — investor may not have a linked user)
   const user = investor.userId ? await User.findById(investor.userId) : null;
-  validate(user, 'Associated user not found');
 
   // Check access: Root/Admin can update any, Investors can only update their own
   const hasAccess =
