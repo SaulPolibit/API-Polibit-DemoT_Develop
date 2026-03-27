@@ -2608,13 +2608,13 @@ router.post('/password/reset', catchAsync(async (req, res) => {
 
 /**
  * @route   POST /api/custom/accept-terms
- * @desc    Accept Terms of Service and Privacy Policy (investors only)
- * @access  Private (role 3)
+ * @desc    Accept Terms of Service and Privacy Policy (all roles except root)
+ * @access  Private (roles 1-4)
  */
 router.post('/accept-terms', authenticate, catchAsync(async (req, res) => {
   const user = req.user;
 
-  if (user.role !== 3) {
+  if (user.role === 0) {
     return res.status(403).json({ success: false, message: 'Forbidden' });
   }
 
