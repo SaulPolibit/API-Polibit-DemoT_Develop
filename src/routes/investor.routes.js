@@ -639,12 +639,78 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   validate(uuidRegex.test(id), 'Invalid investor ID format');
 
-  // Find investor record by ID, fallback to userId lookup
+  // Find investor record by ID, fallback to userId lookup, then users table
   let investor = await Investor.findById(id);
   if (!investor) {
     const investorsByUser = await Investor.find({ userId: id });
     investor = investorsByUser.length > 0 ? investorsByUser[0] : null;
   }
+
+  // Fallback: if no investor record exists, try the users table directly
+  // (investor data may have been migrated to the users table)
+  if (!investor) {
+    const user = await User.findById(id);
+    if (user && user.role === ROLES.INVESTOR) {
+      // Build investor-like response from user data
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: user.id,
+          userId: user.id,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          country: user.country,
+          taxId: user.taxId,
+          kycStatus: user.kycStatus,
+          accreditedInvestor: user.accreditedInvestor,
+          riskTolerance: user.riskTolerance,
+          investmentPreferences: user.investmentPreferences,
+          investorType: user.investorType,
+          // Individual fields
+          firstName: user.firstName,
+          lastName: user.lastName,
+          fullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          dateOfBirth: user.dateOfBirth,
+          nationality: user.nationality,
+          passportNumber: user.passportNumber,
+          addressLine1: user.addressLine1,
+          addressLine2: user.addressLine2,
+          city: user.city,
+          state: user.state,
+          postalCode: user.postalCode,
+          // Institution fields
+          institutionName: user.institutionName,
+          institutionType: user.institutionType,
+          registrationNumber: user.registrationNumber,
+          legalRepresentative: user.legalRepresentative,
+          // Fund of Funds fields
+          fundName: user.fundName,
+          fundManager: user.fundManager,
+          aum: user.aum,
+          // Family Office fields
+          officeName: user.officeName,
+          familyName: user.familyName,
+          principalContact: user.principalContact,
+          assetsUnderManagement: user.assetsUnderManagement,
+          // ILPA Fee Settings
+          feeDiscount: user.feeDiscount,
+          vatExempt: user.vatExempt,
+          // Fund ownerships from user
+          fundOwnerships: user.fundOwnerships || [],
+          structureId: user.fundOwnerships?.[0]?.fundId || null,
+          user: {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            role: user.role,
+            isActive: user.isActive
+          }
+        }
+      });
+    }
+  }
+
   validate(investor, 'Investor not found');
 
   // Fetch associated user data (optional — investor may not have a linked user)
@@ -1456,24 +1522,36 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
     const investorsByUser = await Investor.find({ userId: id });
     investor = investorsByUser.length > 0 ? investorsByUser[0] : null;
   }
-  validate(investor, 'Investor not found');
 
-  // Fetch associated user for access control (optional — investor may not have a linked user)
-  const user = investor.userId ? await User.findById(investor.userId) : null;
+  // Fallback: if no investor record, update the users table directly
+  let userOnlyMode = false;
+  let userRecord = null;
+  if (!investor) {
+    userRecord = await User.findById(id);
+    if (userRecord && userRecord.role === ROLES.INVESTOR) {
+      userOnlyMode = true;
+    } else {
+      validate(false, 'Investor not found');
+    }
+  }
+
+  // Fetch associated user for access control
+  const user = userOnlyMode ? userRecord : (investor.userId ? await User.findById(investor.userId) : null);
+  const investorUserId = userOnlyMode ? id : investor.userId;
 
   // Check access: Root/Admin can update any, Investors can only update their own
   const hasAccess =
     requestingUserRole === ROLES.ROOT ||
     requestingUserRole === ROLES.ADMIN ||
-    (requestingUserRole === ROLES.INVESTOR && requestingUserId === investor.userId);
+    (requestingUserRole === ROLES.INVESTOR && requestingUserId === investorUserId);
 
   validate(hasAccess, 'Unauthorized access to investor data');
 
   const isAdmin = requestingUserRole === ROLES.ROOT || requestingUserRole === ROLES.ADMIN;
 
-  // Check if email is being updated (investor's email in investor table)
-  if (req.body.email && req.body.email !== investor.email) {
-    // Validate email format
+  // Check if email is being updated
+  const currentEmail = userOnlyMode ? userRecord.email : investor.email;
+  if (req.body.email && req.body.email !== currentEmail) {
     const emailRegex = /^\S+@\S+\.\S+$/;
     validate(emailRegex.test(req.body.email), 'Invalid email format');
   }
@@ -1543,6 +1621,39 @@ router.put('/:id', authenticate, catchAsync(async (req, res) => {
   }
 
   validate(Object.keys(updateData).length > 0, 'No valid fields provided for update');
+
+  if (userOnlyMode) {
+    // Update the users table directly (no investor record exists)
+    await User.findByIdAndUpdate(id, updateData);
+
+    // Sync fee settings to structure_investors if structureId provided
+    const structureId = req.body.structureId || userRecord.fundOwnerships?.[0]?.fundId;
+    if (structureId && (updateData.feeDiscount !== undefined || updateData.vatExempt !== undefined)) {
+      try {
+        const siRecord = await StructureInvestor.findByUserAndStructure(id, structureId);
+        if (siRecord) {
+          const ilpaSync = {};
+          if (updateData.feeDiscount !== undefined) ilpaSync.feeDiscount = updateData.feeDiscount;
+          if (updateData.vatExempt !== undefined) ilpaSync.vatExempt = updateData.vatExempt;
+          await StructureInvestor.findByIdAndUpdate(siRecord.id, ilpaSync);
+        }
+      } catch (siError) {
+        console.error('[Investor Route] Failed to sync ILPA fields to structure_investors:', siError.message);
+      }
+    }
+
+    const updatedUser = await User.findById(id);
+    return res.status(200).json({
+      success: true,
+      message: 'Investor updated successfully',
+      data: {
+        id: updatedUser.id,
+        userId: updatedUser.id,
+        ...updatedUser,
+        user: { id: updatedUser.id, firstName: updatedUser.firstName, lastName: updatedUser.lastName, email: updatedUser.email, role: updatedUser.role, isActive: updatedUser.isActive }
+      }
+    });
+  }
 
   // Extract ILPA fields for User update (these are stored in users table, not investors)
   const userIlpaFields = {};
