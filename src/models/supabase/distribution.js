@@ -172,7 +172,8 @@ class Distribution {
     const supabase = getSupabase();
     const dbFilter = this._toDbFields(filter);
 
-    let query = supabase.from('distributions').select('*');
+    // DD1: Include distribution_allocations to get investor count and basic allocation data
+    let query = supabase.from('distributions').select('*, distribution_allocations(id, user_id, investor_name, allocated_amount)');
 
     // Apply filters
     for (const [key, value] of Object.entries(dbFilter)) {
@@ -186,10 +187,31 @@ class Distribution {
     const { data, error } = await query;
 
     if (error) {
-      throw new Error(`Error finding distributions: ${error.message}`);
+      // Fallback: if join fails, query without allocations
+      let fallbackQuery = supabase.from('distributions').select('*');
+      for (const [key, value] of Object.entries(dbFilter)) {
+        if (value !== undefined) {
+          fallbackQuery = fallbackQuery.eq(key, value);
+        }
+      }
+      fallbackQuery = fallbackQuery.order('distribution_date', { ascending: false });
+      const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+      if (fallbackError) {
+        throw new Error(`Error finding distributions: ${fallbackError.message}`);
+      }
+      return fallbackData.map(item => this._toModel(item));
     }
 
-    return data.map(item => this._toModel(item));
+    return data.map(item => {
+      const model = this._toModel(item);
+      // Attach allocations array for investor count display
+      model.allocations = (item.distribution_allocations || []).map(alloc => ({
+        userId: alloc.user_id,
+        investorName: alloc.investor_name,
+        allocatedAmount: parseFloat(alloc.allocated_amount) || 0,
+      }));
+      return model;
+    });
   }
 
   /**

@@ -263,6 +263,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     withholdingTaxNaturalNonResidents,
     withholdingTaxLegalResidents,
     withholdingTaxLegalNonResidents,
+    sameTaxTreatment,
     bankTransferLocalEnabled,
     bankTransferInternationalEnabled
   } = req.body;
@@ -447,6 +448,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, handleStructureBa
     withholdingTaxNaturalNonResidents: sanitizeNumber(withholdingTaxNaturalNonResidents, null),
     withholdingTaxLegalResidents: sanitizeNumber(withholdingTaxLegalResidents, null),
     withholdingTaxLegalNonResidents: sanitizeNumber(withholdingTaxLegalNonResidents, null),
+    sameTaxTreatment: sameTaxTreatment === true || sameTaxTreatment === 'true',
     bankTransferLocalEnabled: bankTransferLocalEnabled === true || bankTransferLocalEnabled === 'true',
     bankTransferInternationalEnabled: bankTransferInternationalEnabled === true || bankTransferInternationalEnabled === 'true',
     createdBy: userId
