@@ -643,9 +643,8 @@ router.get('/:id', authenticate, catchAsync(async (req, res) => {
   const investor = await Investor.findById(id);
   validate(investor, 'Investor not found');
 
-  // Fetch associated user data
+  // Fetch associated user data (optional — investor may not have a linked user)
   const user = investor.userId ? await User.findById(investor.userId) : null;
-  validate(user, 'Associated user not found');
 
   // Build response with investor and user data
   const investorWithUser = {
