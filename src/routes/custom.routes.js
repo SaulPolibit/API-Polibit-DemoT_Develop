@@ -1259,9 +1259,9 @@ router.post('/mfa/verify', authenticate, mfaVerifyLimiter, catchAsync(async (req
  * @desc    Create a new DiDit KYC verification session or retrieve existing one
  * @access  Private (requires authentication)
  * @body    {
- *            callback?: string (optional, default: from env or https://cdmxhomes.polibit.io/marketplace),
+ *            callback?: string (always empty — KYC runs in iframe, no redirect),
  *            workflowId?: string (optional, default: from env DIDIT_WORKFLOW_ID),
- *            vendorData?: string (optional, default: from env or "CDMXHomes")
+ *            vendorData?: string (optional, default: from env or project name)
  *          }
  */
 router.post('/didit/session', authenticate, catchAsync(async (req, res) => {

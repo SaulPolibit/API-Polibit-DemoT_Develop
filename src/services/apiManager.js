@@ -1128,9 +1128,9 @@ class ApiManager {
     const { callback, workflowId, vendorData } = variables;
 
     const body = JSON.stringify({
-      callback: callback || process.env.DIDIT_CALLBACK_URL || 'https://cdmxhomes.polibit.io/marketplace',
+      callback: '',
       workflow_id: workflowId || process.env.DIDIT_WORKFLOW_ID,
-      vendor_data: vendorData || process.env.DIDIT_VENDOR_DATA || 'CDMXHomes',
+      vendor_data: vendorData || process.env.DIDIT_VENDOR_DATA || 'Polibit',
     });
 
     return httpClient.makeApiRequest({
