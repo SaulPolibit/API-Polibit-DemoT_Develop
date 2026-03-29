@@ -1297,25 +1297,20 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
   // Get user details for history
   const user = await User.findById(userId);
 
-  // Update approval status
-  const updatedCapitalCall = await CapitalCall.findByIdAndUpdate(id, {
-    approvalStatus: 'rejected'
-  });
-
-  // Log approval action
+  // Log rejection in approval history before deleting
   await ApprovalHistory.logAction({
     entityType: 'capital_call',
     entityId: id,
     action: 'rejected',
     fromStatus: capitalCall.approvalStatus,
-    toStatus: 'rejected',
+    toStatus: 'deleted',
     userId,
     userName: user ? (`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.fullName || user.email) : 'Unknown',
     notes: reason,
     metadata: { callNumber: capitalCall.callNumber }
   });
 
-  // Send email notification to submitter
+  // Send email notification to submitter before deleting
   try {
     const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
@@ -1332,7 +1327,7 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
               <h2 style="margin: 0; color: #721c24;">Capital Call Rejected</h2>
             </div>
             <p>Dear ${creator.name},</p>
-            <p>Unfortunately, your capital call has been rejected and cannot proceed at this time.</p>
+            <p>Unfortunately, your capital call has been rejected and has been removed. Please create a new capital call with the necessary corrections.</p>
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
               <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
@@ -1353,10 +1348,16 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
     console.warn('Failed to send rejection notification:', emailError.message);
   }
 
+  // Delete allocations and capital call (cascade handles allocations, but explicit for safety)
+  const { getSupabase } = require('../config/database');
+  const supabase = getSupabase();
+  await supabase.from('capital_call_allocations').delete().eq('capital_call_id', id);
+  await CapitalCall.findByIdAndDelete(id);
+
   res.status(200).json({
     success: true,
-    message: 'Capital call rejected',
-    data: updatedCapitalCall
+    message: 'Capital call rejected and deleted',
+    data: { id, callNumber: capitalCall.callNumber, deleted: true }
   });
 }));
 

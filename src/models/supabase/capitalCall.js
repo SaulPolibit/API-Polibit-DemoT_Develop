@@ -1199,6 +1199,7 @@ class CapitalCall {
         )
       `)
       .eq('structure_id', structureId)
+      .eq('approval_status', 'approved')
       .in('status', ['Sent', 'Paid', 'Fully Paid', 'Partially Paid'])
       .order('call_date', { ascending: true });
 
@@ -1260,11 +1261,12 @@ class CapitalCall {
   static async getCumulativeCalledByStructure(structureId, excludeCallId = null) {
     const supabase = getSupabase();
 
-    // Get all capital calls for this structure that are not drafts
+    // Get all approved capital calls for this structure that are not drafts
     let query = supabase
       .from('capital_calls')
       .select('id')
       .eq('structure_id', structureId)
+      .eq('approval_status', 'approved')
       .in('status', ['Sent', 'Paid', 'Fully Paid', 'Partially Paid']);
 
     if (excludeCallId) {
@@ -1316,11 +1318,12 @@ class CapitalCall {
   static async getCumulativeRecallableByStructure(structureId) {
     const supabase = getSupabase();
 
-    // Get all non-draft distributions for this structure that are marked recallable
+    // Get all approved recallable distributions for this structure
     const { data: distributions, error: distError } = await supabase
       .from('distributions')
       .select('id')
       .eq('structure_id', structureId)
+      .eq('approval_status', 'approved')
       .eq('recallable', true)
       .not('status', 'in', '("Draft","Cancelled")');
 
