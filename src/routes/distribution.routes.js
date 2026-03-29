@@ -682,8 +682,8 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
     'Distribution must be pending CFO approval'
   );
 
-  // Only Root (CFO) can approve
-  validate(userRole === ROLES.ROOT, 'Only CFO can approve distributions');
+  // Root (CFO) or Admin can approve
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can approve distributions');
 
   // Get user details for history
   const user = await User.findById(userId);
@@ -768,8 +768,8 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
   const { id } = req.params;
   const { notes } = req.body;
 
-  // Only Root (CFO) can do final approval
-  validate(userRole === ROLES.ROOT, 'Only CFO can provide final approval');
+  // Root (CFO) or Admin can do final approval
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can provide final approval');
 
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
@@ -869,8 +869,8 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
     'Distribution must be pending CFO approval to reject'
   );
 
-  // Only Root (CFO) can reject
-  validate(userRole === ROLES.ROOT, 'Only CFO can reject distributions');
+  // Root (CFO) or Admin can reject
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can reject distributions');
 
   // Get user details for history
   const user = await User.findById(userId);

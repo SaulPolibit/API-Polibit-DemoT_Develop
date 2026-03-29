@@ -1124,8 +1124,8 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
     'Capital call must be pending CFO approval'
   );
 
-  // Only Root (CFO) can approve
-  validate(userRole === ROLES.ROOT, 'Only CFO can approve capital calls');
+  // Root (CFO) or Admin can approve
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can approve capital calls');
 
   // Get user details for history
   const user = await User.findById(userId);
@@ -1199,8 +1199,8 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
   const { id } = req.params;
   const { notes } = req.body;
 
-  // Only Root (CFO) can do final approval
-  validate(userRole === ROLES.ROOT, 'Only CFO can provide final approval');
+  // Root (CFO) or Admin can do final approval
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can provide final approval');
 
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
@@ -1291,8 +1291,8 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
     'Capital call must be pending CFO approval to reject'
   );
 
-  // Only Root (CFO) can reject
-  validate(userRole === ROLES.ROOT, 'Only CFO can reject capital calls');
+  // Root (CFO) or Admin can reject
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can reject capital calls');
 
   // Get user details for history
   const user = await User.findById(userId);
@@ -1380,8 +1380,8 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
     'Capital call must be pending CFO approval to request changes'
   );
 
-  // Only Root (CFO) can request changes
-  validate(userRole === ROLES.ROOT, 'Only CFO can request changes on capital calls');
+  // Root (CFO) or Admin can request changes
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can request changes on capital calls');
 
   // Get user details for history
   const user = await User.findById(userId);
