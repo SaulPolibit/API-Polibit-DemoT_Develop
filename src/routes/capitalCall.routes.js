@@ -566,6 +566,10 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
   // Get cumulative called amounts per investor (optionally exclude a specific call)
   const cumulativeCalled = await CapitalCall.getCumulativeCalledByStructure(structureId, excludeCallId || null);
 
+  // Get cumulative NIC (investments + expenses + reserves only, excludes fees + VAT)
+  const cumulativeNIC = await CapitalCall.getCumulativeNICByStructure(structureId, excludeCallId || null);
+  const totalNIC = Object.values(cumulativeNIC).reduce((sum, val) => sum + val, 0);
+
   // Get cumulative recallable distribution amounts if enabled
   let cumulativeRecallable = {};
   let totalRecallable = 0;
@@ -589,10 +593,12 @@ router.get('/structure/:structureId/history', authenticate, requireInvestmentMan
     data: {
       history,
       cumulativeCalled,
+      cumulativeNIC,
       cumulativeRecallable,
       summary: {
         totalCalls: history.length,
         totalCalled,
+        totalNIC,
         totalPaid,
         totalUnpaid: totalCalled - totalPaid,
         totalRecallable,

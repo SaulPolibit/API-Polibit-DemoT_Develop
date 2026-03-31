@@ -1310,6 +1310,57 @@ class CapitalCall {
 
     return cumulativeMap;
   }
+
+  /**
+   * Get cumulative Net Invested Capital (NIC) for all investors in a structure.
+   * NIC = investments + expenses + reserves only (excludes fees + VAT).
+   * Used as the fee base for NIC management fees.
+   * @param {string} structureId - The structure ID
+   * @param {string} excludeCallId - Optional capital call ID to exclude
+   * @returns {Object} Map of userId -> cumulativeNIC
+   */
+  static async getCumulativeNICByStructure(structureId, excludeCallId = null) {
+    const supabase = getSupabase();
+
+    let query = supabase.from('capital_calls').select('id')
+      .eq('structure_id', structureId)
+      .eq('approval_status', 'approved')
+      .in('status', ['Sent', 'Paid', 'Fully Paid', 'Partially Paid']);
+    if (excludeCallId) query = query.neq('id', excludeCallId);
+    const { data: calls, error: callsError } = await query;
+
+    if (callsError) {
+      throw new Error(`Error fetching capital calls: ${callsError.message}`);
+    }
+
+    if (!calls || calls.length === 0) {
+      return {};
+    }
+
+    const callIds = calls.map(c => c.id);
+
+    const { data: allocations, error: allocError } = await supabase
+      .from('capital_call_allocations')
+      .select('user_id, investments_amount, fund_expenses_amount, reserves_amount, principal_amount')
+      .in('capital_call_id', callIds);
+
+    if (allocError) {
+      throw new Error(`Error fetching allocations: ${allocError.message}`);
+    }
+
+    const nicMap = {};
+    allocations?.forEach(a => {
+      const userId = a.user_id;
+      if (!nicMap[userId]) nicMap[userId] = 0;
+      // NIC = investments + expenses + reserves (excludes fees + VAT)
+      const nic = (a.investments_amount || 0) + (a.fund_expenses_amount || 0) + (a.reserves_amount || 0);
+      // Fallback: if breakdown fields are all 0/null, use principal_amount as approximation
+      nicMap[userId] += nic > 0 ? nic : (a.principal_amount || 0);
+    });
+
+    return nicMap;
+  }
+
   /**
    * Get cumulative recallable distribution amounts for all investors in a structure
    * @param {string} structureId - The structure ID
