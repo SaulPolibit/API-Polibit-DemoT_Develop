@@ -11,6 +11,7 @@ const { requireInvestmentManagerAccess, getUserContext, ROLES, canEditStructure 
 const { generateCapitalCallNoticePDF, generateIndividualLPNoticePDF } = require('../services/documentGenerator');
 const { sendEmail } = require('../utils/emailSender');
 const { sendCapitalCallNotice } = require('../utils/notificationHelper');
+const Notification = require('../models/supabase/notification');
 
 /**
  * Helper to get firm name for whitelabeling
@@ -1096,6 +1097,27 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
             </div>
           `
         });
+
+        // Create portal notification for approver
+        await Notification.create({
+          userId: approver.id,
+          notificationType: 'approval_required',
+          channel: 'portal',
+          title: `Approval Required: Capital Call #${capitalCall.callNumber}`,
+          message: `Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} ($${capitalCall.totalCallAmount.toLocaleString()}) has been submitted for your approval by ${user?.name || 'Unknown'}.`,
+          priority: 'high',
+          relatedEntityType: 'CapitalCall',
+          relatedEntityId: id,
+          actionUrl: `/investment-manager/operations/capital-calls/${id}`,
+          senderId: userId,
+          senderName: user?.name || 'Unknown',
+          metadata: {
+            structureId: capitalCall.structureId,
+            structureName: structure?.name,
+            callNumber: capitalCall.callNumber,
+            totalAmount: capitalCall.totalCallAmount
+          }
+        });
       }
     }
   } catch (emailError) {
@@ -1184,6 +1206,30 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
         `
       });
     }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_completed',
+        channel: 'portal',
+        title: `Capital Call #${capitalCall.callNumber} Approved`,
+        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} ($${capitalCall.totalCallAmount.toLocaleString()}) has been approved by ${user?.name || 'Unknown'}. You can now send notices to investors.`,
+        priority: 'high',
+        relatedEntityType: 'CapitalCall',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/capital-calls/${id}`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: capitalCall.structureId,
+          structureName: structure?.name,
+          callNumber: capitalCall.callNumber,
+          totalAmount: capitalCall.totalCallAmount,
+          action: 'approved'
+        }
+      });
+    }
   } catch (emailError) {
     console.warn('Failed to send approval notification:', emailError.message);
   }
@@ -1264,6 +1310,30 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
             <p>Best regards,<br/>${firmName}</p>
           </div>
         `
+      });
+    }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_completed',
+        channel: 'portal',
+        title: `Capital Call #${capitalCall.callNumber} — CFO Approved`,
+        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} ($${capitalCall.totalCallAmount.toLocaleString()}) has received final CFO approval by ${user?.name || 'Unknown'}. You can now send notices to investors.`,
+        priority: 'high',
+        relatedEntityType: 'CapitalCall',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/capital-calls/${id}`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: capitalCall.structureId,
+          structureName: structure?.name,
+          callNumber: capitalCall.callNumber,
+          totalAmount: capitalCall.totalCallAmount,
+          action: 'cfo_approved'
+        }
       });
     }
   } catch (emailError) {
@@ -1350,6 +1420,31 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
         `
       });
     }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_completed',
+        channel: 'portal',
+        title: `Capital Call #${capitalCall.callNumber} Rejected`,
+        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} has been rejected by ${user?.name || 'Unknown'}. Reason: ${reason}`,
+        priority: 'high',
+        relatedEntityType: 'CapitalCall',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/capital-calls`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: capitalCall.structureId,
+          structureName: structure?.name,
+          callNumber: capitalCall.callNumber,
+          totalAmount: capitalCall.totalCallAmount,
+          action: 'rejected',
+          reason
+        }
+      });
+    }
   } catch (emailError) {
     console.warn('Failed to send rejection notification:', emailError.message);
   }
@@ -1427,6 +1522,29 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
           <p>Please review and resubmit.</p>
           <p>Best regards,<br/>${firmName}</p>
         `
+      });
+    }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_required',
+        channel: 'portal',
+        title: `Changes Requested: Capital Call #${capitalCall.callNumber}`,
+        message: `Changes have been requested on your Capital Call #${capitalCall.callNumber} by ${user?.name || 'Unknown'}. Notes: ${notes}`,
+        priority: 'high',
+        relatedEntityType: 'CapitalCall',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/capital-calls/${id}`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: capitalCall.structureId,
+          callNumber: capitalCall.callNumber,
+          action: 'changes_requested',
+          notes
+        }
       });
     }
   } catch (emailError) {

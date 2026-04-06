@@ -11,6 +11,7 @@ const { requireInvestmentManagerAccess, getUserContext, ROLES, canEditStructure 
 const { generateDistributionNoticePDF, generateIndividualDistributionNoticePDF } = require('../services/documentGenerator');
 const { sendEmail } = require('../utils/emailSender');
 const { sendDistributionNotice } = require('../utils/notificationHelper');
+const Notification = require('../models/supabase/notification');
 
 /**
  * Helper to get firm name for whitelabeling
@@ -648,6 +649,27 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
             </div>
           `
         });
+
+        // Create portal notification for approver
+        await Notification.create({
+          userId: approver.id,
+          notificationType: 'approval_required',
+          channel: 'portal',
+          title: `Approval Required: Distribution #${distribution.distributionNumber}`,
+          message: `Distribution #${distribution.distributionNumber} for ${structure?.name || 'Fund'} ($${distribution.totalAmount?.toLocaleString() || 'N/A'}) has been submitted for your approval by ${user?.name || 'Unknown'}.`,
+          priority: 'high',
+          relatedEntityType: 'Distribution',
+          relatedEntityId: id,
+          actionUrl: `/investment-manager/operations/distributions/${id}`,
+          senderId: userId,
+          senderName: user?.name || 'Unknown',
+          metadata: {
+            structureId: distribution.structureId,
+            structureName: structure?.name,
+            distributionNumber: distribution.distributionNumber,
+            totalAmount: distribution.totalAmount
+          }
+        });
       }
     }
   } catch (emailError) {
@@ -747,6 +769,30 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
         `
       });
     }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_completed',
+        channel: 'portal',
+        title: `Distribution #${distribution.distributionNumber} Approved`,
+        message: `Your Distribution #${distribution.distributionNumber} for ${structure?.name || 'Fund'} ($${distribution.totalAmount?.toLocaleString() || 'N/A'}) has been approved by ${user?.name || 'Unknown'}. You can now process it.`,
+        priority: 'high',
+        relatedEntityType: 'Distribution',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/distributions/${id}`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: distribution.structureId,
+          structureName: structure?.name,
+          distributionNumber: distribution.distributionNumber,
+          totalAmount: distribution.totalAmount,
+          action: 'approved'
+        }
+      });
+    }
   } catch (emailError) {
     console.warn('Failed to send approval notification:', emailError.message);
   }
@@ -838,6 +884,30 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
         `
       });
     }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_completed',
+        channel: 'portal',
+        title: `Distribution #${distribution.distributionNumber} — CFO Approved`,
+        message: `Your Distribution #${distribution.distributionNumber} for ${structure?.name || 'Fund'} ($${distribution.totalAmount?.toLocaleString() || 'N/A'}) has received final CFO approval by ${user?.name || 'Unknown'}. You can now process it.`,
+        priority: 'high',
+        relatedEntityType: 'Distribution',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/distributions/${id}`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: distribution.structureId,
+          structureName: structure?.name,
+          distributionNumber: distribution.distributionNumber,
+          totalAmount: distribution.totalAmount,
+          action: 'cfo_approved'
+        }
+      });
+    }
   } catch (emailError) {
     console.warn('Failed to send CFO approval notification:', emailError.message);
   }
@@ -920,6 +990,31 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
             <p>Best regards,<br/>${firmName}</p>
           </div>
         `
+      });
+    }
+
+    // Create portal notification for creator
+    if (creator?.id) {
+      await Notification.create({
+        userId: creator.id,
+        notificationType: 'approval_completed',
+        channel: 'portal',
+        title: `Distribution #${distribution.distributionNumber} Rejected`,
+        message: `Your Distribution #${distribution.distributionNumber} for ${structure?.name || 'Fund'} has been rejected by ${user?.name || 'Unknown'}. Reason: ${reason}`,
+        priority: 'high',
+        relatedEntityType: 'Distribution',
+        relatedEntityId: id,
+        actionUrl: `/investment-manager/operations/distributions`,
+        senderId: userId,
+        senderName: user?.name || 'Unknown',
+        metadata: {
+          structureId: distribution.structureId,
+          structureName: structure?.name,
+          distributionNumber: distribution.distributionNumber,
+          totalAmount: distribution.totalAmount,
+          action: 'rejected',
+          reason
+        }
       });
     }
   } catch (emailError) {
