@@ -1127,11 +1127,12 @@ class ApiManager {
   async createDiditSession(context, variables) {
     const { callback, workflowId, vendorData } = variables;
 
-    const body = JSON.stringify({
-      callback: '',
+    const bodyObj = {
       workflow_id: workflowId || process.env.DIDIT_WORKFLOW_ID,
       vendor_data: vendorData || process.env.DIDIT_VENDOR_DATA || 'Polibit',
-    });
+    };
+    if (callback) bodyObj.callback = callback;
+    const body = JSON.stringify(bodyObj);
 
     return httpClient.makeApiRequest({
       method: 'post',
