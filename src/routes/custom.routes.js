@@ -2534,7 +2534,7 @@ router.get('/health', (req, res) => {
 /**
  * POST /password/request-reset
  * Request a password reset link (public, no auth)
- * Only processes for active investors (role 3) — generic response regardless
+ * Processes for any active user — generic response regardless
  */
 router.post('/password/request-reset', catchAsync(async (req, res) => {
   await ensureBodyParsed(req);
@@ -2543,8 +2543,8 @@ router.post('/password/request-reset', catchAsync(async (req, res) => {
 
   const user = await User.findByEmail(email);
 
-  // Only process for active investors (role 3) — generic response regardless
-  if (user && user.role === 3 && user.isActive) {
+  // Process for any active user — generic response regardless
+  if (user && user.isActive && process.env.FRONTEND_URL) {
     const crypto = require('crypto');
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 3600000); // 1 hour
@@ -2554,7 +2554,7 @@ router.post('/password/request-reset', catchAsync(async (req, res) => {
       passwordResetExpires: expires,
     });
 
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/reset-password/${token}`;
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${token}`;
 
     const { sendEmail } = require('../utils/emailSender');
     await sendEmail(user.id, {
