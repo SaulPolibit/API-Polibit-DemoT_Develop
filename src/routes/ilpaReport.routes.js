@@ -44,7 +44,7 @@ router.get('/:structureId/performance', authenticate, requireInvestmentManagerAc
   if (format === 'pdf') {
     const pdfBuffer = await generatePerformanceReportPDF(reportData, structure, { firmName });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="ILPA_Performance_${structure.name?.replace(/\s+/g, '_')}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Performance_${structure.name?.replace(/\s+/g, '_')}.pdf"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.send(pdfBuffer);
   }
@@ -52,7 +52,7 @@ router.get('/:structureId/performance', authenticate, requireInvestmentManagerAc
   if (format === 'excel') {
     const excelBuffer = await generatePerformanceReportExcel(reportData, structure, { firmName });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="ILPA_Performance_${structure.name?.replace(/\s+/g, '_')}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Performance_${structure.name?.replace(/\s+/g, '_')}.xlsx"`);
     res.setHeader('Content-Length', excelBuffer.length);
     return res.send(excelBuffer);
   }
@@ -94,7 +94,7 @@ router.get('/:structureId/quarterly', authenticate, requireInvestmentManagerAcce
   if (format === 'pdf') {
     const pdfBuffer = await generateQuarterlyReportPDF(reportData, structure, { firmName });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="ILPA_Quarterly_${structure.name?.replace(/\s+/g, '_')}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Quarterly_${structure.name?.replace(/\s+/g, '_')}.pdf"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.send(pdfBuffer);
   }
@@ -102,7 +102,7 @@ router.get('/:structureId/quarterly', authenticate, requireInvestmentManagerAcce
   if (format === 'excel') {
     const excelBuffer = await generateQuarterlyReportExcel(reportData, structure, { firmName });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="ILPA_Quarterly_${structure.name?.replace(/\s+/g, '_')}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Quarterly_${structure.name?.replace(/\s+/g, '_')}.xlsx"`);
     res.setHeader('Content-Length', excelBuffer.length);
     return res.send(excelBuffer);
   }
@@ -134,7 +134,7 @@ router.get('/:structureId/ccd', authenticate, requireInvestmentManagerAccess, ca
   if (format === 'pdf') {
     const pdfBuffer = await generateCCDReportPDF(reportData, structure, { firmName });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="ILPA_CCD_${structure.name?.replace(/\s+/g, '_')}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="CCD_${structure.name?.replace(/\s+/g, '_')}.pdf"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.send(pdfBuffer);
   }
@@ -142,7 +142,7 @@ router.get('/:structureId/ccd', authenticate, requireInvestmentManagerAccess, ca
   if (format === 'excel') {
     const excelBuffer = await generateCCDReportExcel(reportData, structure, { firmName });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="ILPA_CCD_${structure.name?.replace(/\s+/g, '_')}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="CCD_${structure.name?.replace(/\s+/g, '_')}.xlsx"`);
     res.setHeader('Content-Length', excelBuffer.length);
     return res.send(excelBuffer);
   }
@@ -196,7 +196,7 @@ router.get('/:structureId/all', authenticate, requireInvestmentManagerAccess, ca
  */
 router.get('/health', (_req, res) => {
   res.json({
-    service: 'ILPA Report API',
+    service: 'Report API',
     status: 'operational',
     timestamp: new Date().toISOString()
   });

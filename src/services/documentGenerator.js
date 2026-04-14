@@ -339,7 +339,7 @@ function addSectionB(doc, capitalCall, structure, currency) {
   doc.fontSize(12)
      .fillColor(COLORS.primary)
      .font('Helvetica-Bold')
-     .text('SECTION B: FEE BREAKDOWN (ILPA)', 60, startY + 7);
+     .text('SECTION B: FEE BREAKDOWN', 60, startY + 7);
 
   doc.y = startY + 35;
   doc.font('Helvetica');
@@ -389,7 +389,7 @@ function addLPSectionB(doc, capitalCall, allocation, structure, investor, curren
   doc.fontSize(12)
      .fillColor(COLORS.primary)
      .font('Helvetica-Bold')
-     .text('SECTION B: YOUR FEE BREAKDOWN (ILPA)', 60, startY + 7);
+     .text('SECTION B: YOUR FEE BREAKDOWN', 60, startY + 7);
 
   doc.y = startY + 35;
   doc.font('Helvetica');
@@ -709,7 +709,7 @@ function addDistributionSourceBreakdown(doc, distribution, currency) {
   doc.fontSize(12)
      .fillColor(COLORS.primary)
      .font('Helvetica-Bold')
-     .text('SECTION B: SOURCE BREAKDOWN (ILPA)', 60, startY + 7);
+     .text('SECTION B: SOURCE BREAKDOWN', 60, startY + 7);
 
   doc.y = startY + 35;
   doc.font('Helvetica');
@@ -903,7 +903,7 @@ function addNoticeFooter(doc, firmName) {
     doc.fontSize(8)
        .fillColor(COLORS.muted)
        .text(
-         'This notice is compliant with ILPA Capital Call & Distribution Template v2.0 standards.',
+         'This notice is compliant with Capital Call & Distribution Template v2.0 standards.',
          50,
          740
        );
@@ -964,7 +964,7 @@ function formatFeeBase(base) {
     case 'invested':
       return 'Invested Capital';
     case 'nic_plus_unfunded':
-      return 'NIC + Unfunded (ILPA)';
+      return 'NIC + Unfunded';
     default:
       return String(base);
   }
@@ -1095,7 +1095,7 @@ function addDistLPSectionB(doc, distribution, allocation, currency) {
   doc.fontSize(12)
      .fillColor(COLORS.primary)
      .font('Helvetica-Bold')
-     .text('SECTION B: SOURCE BREAKDOWN (ILPA)', 60, startY + 7);
+     .text('SECTION B: SOURCE BREAKDOWN', 60, startY + 7);
 
   doc.y = startY + 35;
   doc.font('Helvetica');

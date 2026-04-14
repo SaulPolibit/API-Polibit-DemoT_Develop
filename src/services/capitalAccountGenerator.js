@@ -529,7 +529,7 @@ function addStatementFooter(doc, firmName) {
     doc.fontSize(8)
        .fillColor(COLORS.muted)
        .text(
-         'Capital Account Statement generated in accordance with ILPA reporting standards.',
+         'Capital Account Statement generated in accordance with industry reporting standards.',
          50, 740
        );
 

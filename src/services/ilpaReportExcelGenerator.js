@@ -228,7 +228,7 @@ async function generateCCDReportExcel(reportData, structure, options = {}) {
 // CSV fallbacks
 function generatePerformanceCSV(reportData) {
   const rows = [];
-  rows.push('ILPA Performance Report');
+  rows.push('Performance Report');
   rows.push(`Fund,${reportData.fundInfo.name}`);
   rows.push(`As of,${reportData.asOfDate}`);
   rows.push('');
@@ -248,7 +248,7 @@ function generatePerformanceCSV(reportData) {
 }
 
 function generateQuarterlyCSV(reportData) {
-  const rows = ['ILPA Quarterly Report'];
+  const rows = ['Quarterly Report'];
   if (reportData.quarterlyActivity) {
     rows.push(`Period,${reportData.quarterlyActivity.period.startDate} to ${reportData.quarterlyActivity.period.endDate}`);
     rows.push(`Net Cash Flow,${reportData.quarterlyActivity.netCashFlow}`);

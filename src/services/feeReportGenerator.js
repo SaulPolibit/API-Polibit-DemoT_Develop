@@ -408,7 +408,7 @@ function addFeeReportFooter(doc, firmName) {
     doc.fontSize(8)
        .fillColor(COLORS.muted)
        .text(
-         'Fee & Expense Report generated in accordance with ILPA Fee Transparency Initiative.',
+         'Fee & Expense Report generated in accordance with Fee Transparency Initiative standards.',
          50, 740
        );
 

@@ -41,7 +41,7 @@ async function generatePerformanceReportPDF(reportData, structure, options = {})
       // Header
       addReportHeader(doc, {
         firmName,
-        title: 'ILPA PERFORMANCE REPORT',
+        title: 'PERFORMANCE REPORT',
         fundName: structure?.name || 'Fund',
         date: reportData.asOfDate
       });
@@ -59,7 +59,7 @@ async function generatePerformanceReportPDF(reportData, structure, options = {})
       addCashFlowSummary(doc, reportData.cashFlowSummary, currency);
 
       // Footer
-      addReportFooter(doc, firmName, 'ILPA Performance Report');
+      addReportFooter(doc, firmName, 'Performance Report');
 
       doc.end();
     } catch (error) {
@@ -92,7 +92,7 @@ async function generateQuarterlyReportPDF(reportData, structure, options = {}) {
       // Header
       addReportHeader(doc, {
         firmName,
-        title: 'ILPA QUARTERLY REPORT',
+        title: 'QUARTERLY REPORT',
         fundName: structure?.name || 'Fund',
         date: reportData.performance?.asOfDate || reportData.quarterlyActivity?.period?.endDate
       });
@@ -109,7 +109,7 @@ async function generateQuarterlyReportPDF(reportData, structure, options = {}) {
       }
 
       // Footer
-      addReportFooter(doc, firmName, 'ILPA Quarterly Report');
+      addReportFooter(doc, firmName, 'Quarterly Report');
 
       doc.end();
     } catch (error) {
@@ -157,7 +157,7 @@ async function generateCCDReportPDF(reportData, structure, options = {}) {
       addNetPosition(doc, reportData, currency);
 
       // Footer
-      addReportFooter(doc, firmName, 'ILPA CC&D Report');
+      addReportFooter(doc, firmName, 'CC&D Report');
 
       doc.end();
     } catch (error) {
@@ -668,7 +668,7 @@ function addReportFooter(doc, firmName, reportType) {
     doc.fontSize(8)
        .fillColor(COLORS.muted)
        .text(
-         `${reportType} generated in accordance with ILPA reporting standards.`,
+         `${reportType} generated in accordance with industry reporting standards.`,
          50, 740
        );
 

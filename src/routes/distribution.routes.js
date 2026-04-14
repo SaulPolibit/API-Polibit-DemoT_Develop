@@ -1072,7 +1072,7 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
 
   // Set response headers for PDF download
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="ILPA_Distribution_${distribution.distributionNumber}.pdf"`);
+  res.setHeader('Content-Disposition', `attachment; filename="Distribution_${distribution.distributionNumber}.pdf"`);
   res.setHeader('Content-Length', pdfBuffer.length);
 
   res.send(pdfBuffer);
@@ -1119,7 +1119,7 @@ router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmen
   // Set response headers for PDF download
   const investorNameClean = (investor.name || 'Investor').replace(/\s+/g, '_');
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="ILPA_Distribution_${distribution.distributionNumber}_${investorNameClean}.pdf"`);
+  res.setHeader('Content-Disposition', `attachment; filename="Distribution_${distribution.distributionNumber}_${investorNameClean}.pdf"`);
   res.setHeader('Content-Length', pdfBuffer.length);
 
   res.send(pdfBuffer);
@@ -1195,7 +1195,7 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
         bodyText: bodyText || defaultBodyText,
         bodyHtml: bodyHtml || defaultBodyHtml,
         attachments: [{
-          filename: `ILPA_Distribution_${distribution.distributionNumber}_${investor.name.replace(/\s+/g, '_')}.pdf`,
+          filename: `Distribution_${distribution.distributionNumber}_${investor.name.replace(/\s+/g, '_')}.pdf`,
           content: pdfBuffer.toString('base64'),
           encoding: 'base64',
           contentType: 'application/pdf'
