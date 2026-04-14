@@ -768,15 +768,63 @@ router.patch('/:id/update-payment', authenticate, requireInvestmentManagerAccess
 router.post('/:id/create-allocations', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
+  const { source, allocations: frontendAllocations } = req.body;
 
   const capitalCall = await CapitalCall.findById(id);
   validate(capitalCall, 'Capital call not found');
 
-
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
 
-  const allocations = await CapitalCall.createAllocationsForStructure(id, capitalCall.structureId);
+  let allocations;
+
+  if (source === 'frontend' && Array.isArray(frontendAllocations) && frontendAllocations.length > 0) {
+    // Frontend-computed allocations — store directly, no recalculation
+    const { getSupabase } = require('../config/database');
+    const supabase = getSupabase();
+
+    const dbAllocations = frontendAllocations.map(a => ({
+      capital_call_id: id,
+      user_id: a.investorId,
+      allocated_amount: a.totalDue || 0,
+      paid_amount: 0,
+      remaining_amount: a.totalDue || 0,
+      status: 'Pending',
+      due_date: capitalCall.dueDate,
+      principal_amount: a.principalAmount || a.callAmount || 0,
+      management_fee_gross: a.managementFeeGross || 0,
+      management_fee_discount: a.managementFeeDiscount || 0,
+      management_fee_net: a.managementFeeNet || 0,
+      nic_fee_amount: a.nicFeeAmount || 0,
+      unfunded_fee_amount: a.unfundedFeeAmount || 0,
+      fee_offset_amount: a.feeOffsetAmount || 0,
+      deemed_gp_contribution: a.deemedGpContribution || 0,
+      vat_amount: a.vatAmount || 0,
+      vat_on_investments_amount: a.vatOnInvestmentsAmount || 0,
+      vat_on_fund_expenses_amount: a.vatOnFundExpensesAmount || 0,
+      total_due: a.totalDue || 0,
+      total_drawdown: a.totalDrawdown || a.totalDue || 0,
+      capital_paid: 0,
+      fees_paid: 0,
+      vat_paid: 0,
+      investments_amount: a.investmentsAmount || 0,
+      fund_expenses_amount: a.fundExpensesAmount || 0,
+      reserves_amount: a.reservesAmount || 0,
+    }));
+
+    const { data, error } = await supabase
+      .from('capital_call_allocations')
+      .insert(dbAllocations)
+      .select();
+
+    if (error) {
+      throw new Error(`Failed to insert frontend allocations: ${error.message}`);
+    }
+    allocations = data;
+  } else {
+    // FALLBACK: backend computes (existing logic, unchanged)
+    allocations = await CapitalCall.createAllocationsForStructure(id, capitalCall.structureId);
+  }
 
   res.status(201).json({
     success: true,

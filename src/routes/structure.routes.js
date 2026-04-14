@@ -712,7 +712,7 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
         if (allocs) {
           const allocation = allocs.find(a => a.investorId === si.userId || a.userId === si.userId);
           if (allocation && call.status !== 'draft') {
-            calledCapital += allocation.callAmount || 0;
+            calledCapital += allocation.totalDrawdown || allocation.totalDue || allocation.callAmount || 0;
           }
         }
       });
