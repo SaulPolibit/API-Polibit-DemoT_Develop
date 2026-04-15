@@ -335,6 +335,7 @@ const handleFirmLogoUpload = (req, res, next) => {
   const upload = uploadFirmLogo.fields([
     { name: 'firmLogo', maxCount: 1 },
     { name: 'signInBackground', maxCount: 1 },
+    { name: 'legalRepresentativeSignature', maxCount: 1 },
   ]);
 
   upload(req, res, (err) => {

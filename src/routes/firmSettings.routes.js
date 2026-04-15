@@ -95,6 +95,9 @@ router.get('/', authenticate, catchAsync(async (req, res) => {
       signInBackground: null,
       themeConfig: null,
       navVisibilityConfig: null,
+      companyName: null,
+      legalRepresentativeName: null,
+      legalRepresentativeSignature: null,
     }
   });
 }));
@@ -248,12 +251,16 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
     'firmPhone',
     'firmEmail',
     'signInBackground',
-    'themeConfig'
+    'themeConfig',
+    'companyName',
+    'legalRepresentativeName',
+    'legalRepresentativeSignature'
   ];
 
-  // Handle file uploads if present (firmLogo and/or signInBackground)
+  // Handle file uploads if present (firmLogo, signInBackground, legalRepresentativeSignature)
   const firmLogoFile = req.files?.firmLogo?.[0];
   const signInBgFile = req.files?.signInBackground?.[0];
+  const signatureFile = req.files?.legalRepresentativeSignature?.[0];
 
   if (firmLogoFile) {
     try {
@@ -291,11 +298,30 @@ router.put('/', authenticate, handleFirmLogoUpload, catchAsync(async (req, res) 
     }
   }
 
+  if (signatureFile) {
+    try {
+      const uploadResult = await uploadToSupabase(
+        signatureFile.buffer,
+        signatureFile.originalname,
+        signatureFile.mimetype,
+        'legal-signatures',
+        'firm-logos'
+      );
+      updateData.legalRepresentativeSignature = uploadResult.publicUrl;
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Error uploading signature: ${error.message}`
+      });
+    }
+  }
+
   // Process other fields from request body
   for (const field of allowedFields) {
     // Skip file fields if already set from upload
     if (field === 'firmLogo' && firmLogoFile) continue;
     if (field === 'signInBackground' && signInBgFile) continue;
+    if (field === 'legalRepresentativeSignature' && signatureFile) continue;
 
     if (req.body[field] !== undefined) {
       if (field === 'themeConfig') {
@@ -359,12 +385,16 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
     'firmPhone',
     'firmEmail',
     'signInBackground',
-    'themeConfig'
+    'themeConfig',
+    'companyName',
+    'legalRepresentativeName',
+    'legalRepresentativeSignature'
   ];
 
   // Handle file uploads if present
   const firmLogoFile = req.files?.firmLogo?.[0];
   const signInBgFile = req.files?.signInBackground?.[0];
+  const signatureFile = req.files?.legalRepresentativeSignature?.[0];
 
   if (firmLogoFile) {
     try {
@@ -402,10 +432,29 @@ router.put('/:id', authenticate, handleFirmLogoUpload, catchAsync(async (req, re
     }
   }
 
+  if (signatureFile) {
+    try {
+      const uploadResult = await uploadToSupabase(
+        signatureFile.buffer,
+        signatureFile.originalname,
+        signatureFile.mimetype,
+        'legal-signatures',
+        'firm-logos'
+      );
+      updateData.legalRepresentativeSignature = uploadResult.publicUrl;
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Error uploading signature: ${error.message}`
+      });
+    }
+  }
+
   // Process other fields from request body
   for (const field of allowedFields) {
     if (field === 'firmLogo' && firmLogoFile) continue;
     if (field === 'signInBackground' && signInBgFile) continue;
+    if (field === 'legalRepresentativeSignature' && signatureFile) continue;
 
     if (req.body[field] !== undefined) {
       if (field === 'themeConfig') {

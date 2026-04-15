@@ -23,6 +23,9 @@ class FirmSettings {
       signInBackground: 'sign_in_background',
       themeConfig: 'theme_config',
       navVisibilityConfig: 'nav_visibility_config',
+      companyName: 'company_name',
+      legalRepresentativeName: 'legal_representative_name',
+      legalRepresentativeSignature: 'legal_representative_signature',
       userId: 'user_id',
       createdAt: 'created_at',
       updatedAt: 'updated_at'
@@ -55,6 +58,9 @@ class FirmSettings {
       signInBackground: dbData.sign_in_background,
       themeConfig: dbData.theme_config,
       navVisibilityConfig: dbData.nav_visibility_config,
+      companyName: dbData.company_name,
+      legalRepresentativeName: dbData.legal_representative_name,
+      legalRepresentativeSignature: dbData.legal_representative_signature,
       userId: dbData.user_id,
       createdAt: dbData.created_at,
       updatedAt: dbData.updated_at
