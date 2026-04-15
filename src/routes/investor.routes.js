@@ -342,7 +342,7 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
       const structure = await Structure.findById(structureId);
       const structureName = structure?.name || 'a fund structure';
 
-      const loginUrl = process.env.LP_PORTAL_URL || process.env.FRONTEND_URL || 'https://app.polibit.com';
+      const loginUrl = process.env.FRONTEND_URL;
 
       await sendEmail(requestingUserId, {
         to: [investorData.email],
@@ -356,11 +356,11 @@ router.post('/', authenticate, requireInvestmentManagerAccess, catchAsync(async 
               <p style="margin: 4px 0;"><strong>Email:</strong> ${investorData.email}</p>
               <p style="margin: 4px 0;"><strong>Password:</strong> ${plainPassword}</p>
             </div>
-            <p><a href="${loginUrl}/lp-portal/login" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Login to LP Portal</a></p>
+            <p><a href="${loginUrl}/sign-in" style="display: inline-block; background: #4f46e5; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Login to LP Portal</a></p>
             <p style="color: #666; font-size: 12px; margin-top: 24px;">For security, we recommend changing your password after your first login.</p>
           </div>
         `,
-        bodyText: `Welcome to ${firmName}\n\nYour investor account has been created. You have been assigned to ${structureName}.\n\nEmail: ${investorData.email}\nPassword: ${plainPassword}\n\nLogin at: ${loginUrl}/lp-portal/login\n\nFor security, we recommend changing your password after your first login.`
+        bodyText: `Welcome to ${firmName}\n\nYour investor account has been created. You have been assigned to ${structureName}.\n\nEmail: ${investorData.email}\nPassword: ${plainPassword}\n\nLogin at: ${loginUrl}/sign-in\n\nFor security, we recommend changing your password after your first login.`
       });
       emailSent = true;
       console.log('[Investor Route] Welcome email sent successfully');

@@ -72,7 +72,7 @@ class ProsperapOAuthService {
 
       // Create OAuth client with multiple redirect URIs
       const redirectUris = [
-        `${process.env.FRONTEND_URL}/lp-portal/login`,
+        `${process.env.FRONTEND_URL}/sign-in`,
         `${process.env.FRONTEND_URL}/investment-manager/account`
       ];
       console.log(`[Prospera OAuth] Creating client with redirect URIs:`, redirectUris);
@@ -167,7 +167,7 @@ class ProsperapOAuthService {
       console.log('[Prospera OAuth] Exchanging authorization code for tokens...');
 
       // Use the provided redirectUri or fallback to LP Portal login
-      const callbackUri = redirectUri || `${process.env.FRONTEND_URL}/lp-portal/login`;
+      const callbackUri = redirectUri || `${process.env.FRONTEND_URL}/sign-in`;
 
       // Exchange code for tokens
       const tokenSet = await this.client.callback(
