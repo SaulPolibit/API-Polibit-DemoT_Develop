@@ -703,15 +703,19 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
     // Get user data from the joined users table
     const user = si.user || {};
 
-    // Calculate called capital for this investor from all capital calls
+    // Calculate called capital for this investor from approved/sent/paid capital calls
     let calledCapital = 0;
     if (capitalCalls && capitalCalls.length > 0) {
       capitalCalls.forEach(call => {
-        // CapitalCall model returns investorAllocations (not allocations)
+        // Include CC if approved (any status) or sent/paid (lifecycle progressed)
+        const isApproved = call.approvalStatus === 'approved';
+        const isSentOrPaid = ['Sent', 'Paid', 'sent', 'paid'].includes(call.status);
+        if (!isApproved && !isSentOrPaid) return;
+
         const allocs = call.investorAllocations || call.allocations;
         if (allocs) {
           const allocation = allocs.find(a => a.investorId === si.userId || a.userId === si.userId);
-          if (allocation && call.status !== 'draft') {
+          if (allocation) {
             calledCapital += allocation.totalDrawdown || allocation.totalDue || allocation.callAmount || 0;
           }
         }
