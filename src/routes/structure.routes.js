@@ -68,15 +68,20 @@ async function enrichStructureWithCapitalCallSummary(structure) {
     // Get all capital calls for this structure
     const capitalCalls = await CapitalCall.findByStructureId(structure.id);
 
+    // Filter to only approved/sent/paid CCs for financial summaries (pending CCs can be rejected)
+    const approvedCalls = capitalCalls.filter(cc =>
+      cc.approvalStatus === 'approved' || ['Sent', 'Paid', 'sent', 'paid'].includes(cc.status)
+    );
+
     // Calculate summary metrics using total_drawdown from allocations (includes fees + VAT for ProximityParks methodology)
-    const totalCalled = capitalCalls.reduce((sum, cc) => {
+    const totalCalled = approvedCalls.reduce((sum, cc) => {
       // Sum total_drawdown from all allocations, fallback to total_due, then totalCallAmount
       const callDrawdown = (cc.allocations || []).reduce((allocSum, alloc) => {
         return allocSum + (alloc.total_drawdown || alloc.totalDrawdown || alloc.total_due || alloc.totalDue || 0);
       }, 0);
       return sum + (callDrawdown || cc.totalCallAmount || 0);
     }, 0);
-    const totalPaid = capitalCalls.reduce((sum, cc) => sum + (cc.totalPaidAmount || 0), 0);
+    const totalPaid = approvedCalls.reduce((sum, cc) => sum + (cc.totalPaidAmount || 0), 0);
     const callCount = capitalCalls.length;
     const lastCall = capitalCalls[0]; // Already sorted by date desc from findByStructureId
 
@@ -703,8 +708,9 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
     // Get user data from the joined users table
     const user = si.user || {};
 
-    // Calculate called capital for this investor from approved/sent/paid capital calls
+    // Calculate called capital and paid-in for this investor from approved/sent/paid capital calls
     let calledCapital = 0;
+    let paidIn = 0;
     if (capitalCalls && capitalCalls.length > 0) {
       capitalCalls.forEach(call => {
         // Include CC if approved (any status) or sent/paid (lifecycle progressed)
@@ -717,6 +723,7 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
           const allocation = allocs.find(a => a.investorId === si.userId || a.userId === si.userId);
           if (allocation) {
             calledCapital += allocation.totalDrawdown || allocation.totalDue || allocation.callAmount || 0;
+            paidIn += allocation.paidAmount || allocation.amountPaid || allocation.paid_amount || 0;
           }
         }
       });
@@ -737,7 +744,10 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
       commitment: si.commitment || 0,
       ownershipPercent: si.ownershipPercent || 0,
       calledCapital: calledCapital,
-      uncalledCapital: (si.commitment || 0) - calledCapital,
+      paidIn: paidIn,
+      outstanding: calledCapital - paidIn,
+      unfunded: (si.commitment || 0) - calledCapital,
+      uncalledCapital: (si.commitment || 0) - calledCapital, // backwards compat alias
       feeDiscount: si.feeDiscount || 0,
       vatExempt: si.vatExempt || false,
       customTerms: si.customTerms,
@@ -748,7 +758,10 @@ router.get('/:id/investors', authenticate, catchAsync(async (req, res) => {
         commitment: si.commitment || 0,
         ownershipPercent: si.ownershipPercent || 0,
         calledCapital: calledCapital,
-        uncalledCapital: (si.commitment || 0) - calledCapital,
+        paidIn: paidIn,
+        outstanding: calledCapital - paidIn,
+        unfunded: (si.commitment || 0) - calledCapital,
+        uncalledCapital: (si.commitment || 0) - calledCapital, // backwards compat alias
         feeDiscount: si.feeDiscount || 0,
         vatExempt: si.vatExempt || false,
         customTerms: si.customTerms,

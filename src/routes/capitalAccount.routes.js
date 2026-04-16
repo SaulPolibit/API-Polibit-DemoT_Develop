@@ -150,6 +150,13 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
   const allCalls = callAllocations || [];
   const allDists = distAllocations || [];
 
+  // Filter to only approved/sent/paid CCs for financial summaries (pending CCs can be rejected)
+  const approvedCalls = allCalls.filter(a => {
+    const cc = a.capital_call;
+    if (!cc) return false;
+    return cc.approval_status === 'approved' || ['Sent', 'Paid', 'sent', 'paid'].includes(cc.status);
+  });
+
   // Filter by period if dates provided
   const filterByPeriod = (items, dateField, parentKey) => {
     if (!startDate || !endDate) return items;
@@ -171,10 +178,11 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
     return d < startDate;
   }) : [];
 
-  const totalCalled = allCalls.reduce((sum, a) => sum + (a.total_due || 0), 0);
+  const totalCalled = approvedCalls.reduce((sum, a) => sum + (a.total_due || 0), 0);
   const totalDistributed = allDists.reduce((sum, a) => sum + (a.allocated_amount || 0), 0);
-  const totalFees = allCalls.reduce((sum, a) => sum + (a.management_fee_net || 0), 0);
-  const totalVAT = allCalls.reduce((sum, a) => sum + (a.vat_amount || 0), 0);
+  const totalFees = approvedCalls.reduce((sum, a) => sum + (a.management_fee_net || 0), 0);
+  const totalVAT = approvedCalls.reduce((sum, a) => sum + (a.vat_amount || 0), 0);
+  const totalPaidIn = approvedCalls.reduce((sum, a) => sum + (parseFloat(a.paid_amount) || 0), 0);
 
   const priorCalledTotal = priorCalls.reduce((sum, a) => sum + (a.total_due || 0), 0);
   const priorDistTotal = priorDists.reduce((sum, a) => sum + (a.allocated_amount || 0), 0);
@@ -199,7 +207,10 @@ router.get('/:investorId/data', authenticate, catchAsync(async (req, res) => {
         totalDistributed,
         totalFees,
         totalVAT,
-        uncalled: commitment - totalCalled,
+        paidIn: totalPaidIn,
+        outstanding: totalCalled - totalPaidIn,
+        unfunded: commitment - totalCalled,
+        uncalled: commitment - totalCalled, // backwards compat alias
         netAccountValue: totalCalled - totalDistributed,
         openingBalance: priorCalledTotal - priorDistTotal,
         closingBalance: totalCalled - totalDistributed,

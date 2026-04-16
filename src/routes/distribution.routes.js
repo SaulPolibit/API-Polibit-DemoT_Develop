@@ -215,7 +215,7 @@ router.get('/pending/approval', authenticate, requireInvestmentManagerAccess, ca
   if (status) {
     filter.approvalStatus = status;
   } else {
-    // Get all pending CFO approval items (simplified workflow)
+    // Get all pending Admin approval items (simplified workflow)
     filter.approvalStatusIn = ['pending_cfo'];
   }
 
@@ -585,7 +585,7 @@ router.get('/:id/approval-history', authenticate, requireInvestmentManagerAccess
 
 /**
  * @route   PATCH /api/distributions/:id/submit-for-review
- * @desc    Submit distribution for CFO approval (draft -> pending_cfo)
+ * @desc    Submit distribution for Admin approval (draft -> pending_cfo)
  * @access  Private (requires authentication, Root/Admin only)
  */
 router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
@@ -619,7 +619,7 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
     metadata: { distributionNumber: distribution.distributionNumber }
   });
 
-  // Send email notification to CFO/approvers (Root users)
+  // Send email notification to Admin/approvers (Root users)
   try {
     const rootUsers = await User.findByRole(0);
     const firmName = await getFirmNameForUser(userId);
@@ -629,12 +629,12 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
       if (approver?.email && approver.id !== userId) {
         await sendEmail(userId, {
           to: [approver.email],
-          subject: `CFO Approval Required: Distribution #${distribution.distributionNumber} - ${structure?.name || 'Fund'}`,
+          subject: `Admin Approval Required: Distribution #${distribution.distributionNumber} - ${structure?.name || 'Fund'}`,
           bodyText: `Dear ${approver.name},\n\nA distribution has been submitted for your approval.\n\nDistribution #${distribution.distributionNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${distribution.totalAmount?.toLocaleString() || 'N/A'}\nSubmitted by: ${user?.name || 'Unknown'}\n\nPlease log in to review and approve.\n\nBest regards,\n${firmName}`,
           bodyHtml: `
             <div style="font-family: Arial, sans-serif; max-width: 600px;">
               <div style="background-color: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #0c5460;">CFO Approval Required</h2>
+                <h2 style="margin: 0; color: #0c5460;">Admin Approval Required</h2>
               </div>
               <p>Dear ${approver.name},</p>
               <p>A distribution has been submitted for your review and approval.</p>
@@ -678,14 +678,14 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
 
   res.status(200).json({
     success: true,
-    message: 'Distribution submitted for CFO approval',
+    message: 'Distribution submitted for Admin approval',
     data: updatedDistribution
   });
 }));
 
 /**
  * @route   PATCH /api/distributions/:id/approve
- * @desc    Approve distribution (legacy endpoint - redirects to cfo-approve for simplified workflow)
+ * @desc    Approve distribution (legacy endpoint - redirects to Admin approve for simplified workflow)
  * @access  Private (requires authentication, Root/Admin only)
  * @deprecated Use cfo-approve endpoint instead. This is kept for backwards compatibility.
  */
@@ -701,11 +701,11 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
   // With simplified workflow, this endpoint now handles pending_cfo status
   validate(
     distribution.approvalStatus === 'pending_cfo',
-    'Distribution must be pending CFO approval'
+    'Distribution must be pending Admin approval'
   );
 
-  // Root (CFO) or Admin can approve
-  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can approve distributions');
+  // Root (Admin) or Admin can approve
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only Admin can approve distributions');
 
   // Get user details for history
   const user = await User.findById(userId);
@@ -806,22 +806,22 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
 
 /**
  * @route   PATCH /api/distributions/:id/cfo-approve
- * @desc    CFO final approval (pending_cfo -> approved)
- * @access  Private (requires authentication, Root only - CFO)
+ * @desc    Admin final approval (pending_cfo -> approved)
+ * @access  Private (requires authentication, Root only - Admin)
  */
 router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, catchAsync(async (req, res) => {
   const { userId, userRole } = getUserContext(req);
   const { id } = req.params;
   const { notes } = req.body;
 
-  // Root (CFO) or Admin can do final approval
-  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can provide final approval');
+  // Root (Admin) or Admin can do final approval
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only Admin can provide final approval');
 
   const distribution = await Distribution.findById(id);
   validate(distribution, 'Distribution not found');
   validate(
     distribution.approvalStatus === 'pending_cfo',
-    'Distribution must be pending CFO approval'
+    'Distribution must be pending Admin approval'
   );
 
   // Get user details for history
@@ -863,20 +863,20 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
     if (creator?.email) {
       await sendEmail(userId, {
         to: [creator.email],
-        subject: `CFO Approved: Distribution #${distribution.distributionNumber} - ${structure?.name || 'Fund'}`,
-        bodyText: `Dear ${creator.name},\n\nGreat news! Your distribution has received final CFO approval.\n\nDistribution #${distribution.distributionNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${distribution.totalAmount?.toLocaleString() || 'N/A'}\nCFO Approved by: ${user?.name || 'Unknown'}\n\nYou can now proceed to process the distribution.\n\nBest regards,\n${firmName}`,
+        subject: `Admin Approved: Distribution #${distribution.distributionNumber} - ${structure?.name || 'Fund'}`,
+        bodyText: `Dear ${creator.name},\n\nGreat news! Your distribution has received final Admin approval.\n\nDistribution #${distribution.distributionNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${distribution.totalAmount?.toLocaleString() || 'N/A'}\nAdmin Approved by: ${user?.name || 'Unknown'}\n\nYou can now proceed to process the distribution.\n\nBest regards,\n${firmName}`,
         bodyHtml: `
           <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 20px;">
-              <h2 style="margin: 0; color: #155724;">CFO Approval Confirmed</h2>
+              <h2 style="margin: 0; color: #155724;">Admin Approval Confirmed</h2>
             </div>
             <p>Dear ${creator.name},</p>
-            <p>Great news! Your distribution has received final CFO approval and is now ready to be processed.</p>
+            <p>Great news! Your distribution has received final Admin approval and is now ready to be processed.</p>
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Distribution:</strong> #${distribution.distributionNumber}</p>
               <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
               <p style="margin: 5px 0;"><strong>Amount:</strong> $${distribution.totalAmount?.toLocaleString() || 'N/A'}</p>
-              <p style="margin: 5px 0;"><strong>CFO Approved by:</strong> ${user?.name || 'Unknown'}</p>
+              <p style="margin: 5px 0;"><strong>Admin Approved by:</strong> ${user?.name || 'Unknown'}</p>
             </div>
             <p><strong>Next Steps:</strong> You can now process the distribution to all investors.</p>
             <p>Best regards,<br/>${firmName}</p>
@@ -891,8 +891,8 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
         userId: creator.id,
         notificationType: 'approval_completed',
         channel: 'portal',
-        title: `Distribution #${distribution.distributionNumber} — CFO Approved`,
-        message: `Your Distribution #${distribution.distributionNumber} for ${structure?.name || 'Fund'} ($${distribution.totalAmount?.toLocaleString() || 'N/A'}) has received final CFO approval by ${user?.name || 'Unknown'}. You can now process it.`,
+        title: `Distribution #${distribution.distributionNumber} — Admin Approved`,
+        message: `Your Distribution #${distribution.distributionNumber} for ${structure?.name || 'Fund'} ($${distribution.totalAmount?.toLocaleString() || 'N/A'}) has received final Admin approval by ${user?.name || 'Unknown'}. You can now process it.`,
         priority: 'high',
         relatedEntityType: 'Distribution',
         relatedEntityId: id,
@@ -909,12 +909,12 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
       });
     }
   } catch (emailError) {
-    console.warn('Failed to send CFO approval notification:', emailError.message);
+    console.warn('Failed to send Admin approval notification:', emailError.message);
   }
 
   res.status(200).json({
     success: true,
-    message: 'Distribution approved by CFO',
+    message: 'Distribution approved by Admin',
     data: updatedDistribution
   });
 }));
@@ -936,11 +936,11 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
 
   validate(
     distribution.approvalStatus === 'pending_cfo',
-    'Distribution must be pending CFO approval to reject'
+    'Distribution must be pending Admin approval to reject'
   );
 
-  // Root (CFO) or Admin can reject
-  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only CFO or Admin can reject distributions');
+  // Root (Admin) or Admin can reject
+  validate(userRole === ROLES.ROOT || userRole === ROLES.ADMIN, 'Only Admin can reject distributions');
 
   // Get user details for history
   const user = await User.findById(userId);

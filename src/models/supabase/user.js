@@ -706,6 +706,7 @@ class User {
           call_date,
           due_date,
           status,
+          approval_status,
           purpose
         )
       `)
@@ -762,19 +763,25 @@ class User {
           vatOutstanding: vatAmount - vatPaid,
           // Status
           status: alloc.status || alloc.capital_call.status,
+          approvalStatus: alloc.capital_call.approval_status,
           purpose: alloc.capital_call.purpose
         };
       });
 
-    // Calculate summary - use capital amounts for commitment tracking
-    const totalCalled = capitalCalls.reduce((sum, call) => sum + call.totalDue, 0);
-    const totalPaid = capitalCalls.reduce((sum, call) => sum + call.paidAmount, 0);
+    // Filter to only approved/sent/paid CCs for financial summaries (pending CCs can be rejected)
+    const approvedCapitalCalls = capitalCalls.filter(call =>
+      call.approvalStatus === 'approved' || ['Sent', 'Paid', 'sent', 'paid'].includes(call.status)
+    );
+
+    // Calculate summary - use capital amounts for commitment tracking (approved CCs only)
+    const totalCalled = approvedCapitalCalls.reduce((sum, call) => sum + call.totalDue, 0);
+    const totalPaid = approvedCapitalCalls.reduce((sum, call) => sum + call.paidAmount, 0);
     const outstanding = totalCalled - totalPaid;
-    const totalCalls = capitalCalls.length;
+    const totalCalls = capitalCalls.length; // total count includes all statuses for informational purposes
 
     // Capital-only summary (for commitment tracking - excludes fees/VAT)
-    const capitalCalled = capitalCalls.reduce((sum, call) => sum + call.principalAmount, 0);
-    const capitalPaidTotal = capitalCalls.reduce((sum, call) => sum + call.capitalPaid, 0);
+    const capitalCalled = approvedCapitalCalls.reduce((sum, call) => sum + call.principalAmount, 0);
+    const capitalPaidTotal = approvedCapitalCalls.reduce((sum, call) => sum + call.capitalPaid, 0);
     const capitalOutstanding = capitalCalled - capitalPaidTotal;
 
     return {
