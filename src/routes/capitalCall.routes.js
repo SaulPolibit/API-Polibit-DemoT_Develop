@@ -15,16 +15,35 @@ const Notification = require('../models/supabase/notification');
 
 /**
  * Helper to get firm name for whitelabeling
- * Uses firm settings from database, falls back to default
+ * Uses firm settings from database, falls back to structure name or default
  */
-async function getFirmNameForUser(userId) {
+async function getFirmNameForUser(userId, structureName) {
   try {
     const firmSettings = await FirmSettings.findByUserId(userId);
-    return firmSettings?.firmName || 'Investment Manager';
+    return firmSettings?.firmName || structureName || 'Fund Manager';
   } catch (error) {
     console.warn('Could not fetch firm settings:', error.message);
-    return 'Investment Manager';
+    return structureName || 'Fund Manager';
   }
+}
+
+/**
+ * Helper to get user display name from firstName/lastName fields
+ */
+function getUserDisplayName(user) {
+  if (!user) return 'Unknown';
+  const full = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  return full || user.fullName || user.email || 'Unknown';
+}
+
+/**
+ * Helper to get currency symbol from structure's baseCurrency
+ */
+function getCurrencySymbol(structure) {
+  const currency = structure?.baseCurrency;
+  if (currency === 'MXN' || currency === 'MX') return 'MX$';
+  if (currency === 'USD' || currency === 'US') return 'US$';
+  return '$';
 }
 
 const router = express.Router();
@@ -1118,27 +1137,31 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
   // Send email notification to Admin/approvers (Root users)
   try {
     const rootUsers = await User.findByRole(0); // Root users are Admin/approvers
-    const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
+    const firmName = await getFirmNameForUser(userId, structure?.name);
+    const currencySymbol = getCurrencySymbol(structure);
+    const submitterName = getUserDisplayName(user);
+    const displayAmount = (capitalCall.totalDrawdown || capitalCall.totalCallAmount).toLocaleString();
 
     for (const approver of rootUsers) {
       if (approver?.email && approver.id !== userId) {
+        const approverName = getUserDisplayName(approver);
         await sendEmail(userId, {
           to: [approver.email],
           subject: `Admin Approval Required: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
-          bodyText: `Dear ${approver.name},\n\nA capital call has been submitted for your approval.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nSubmitted by: ${user?.name || 'Unknown'}\n\nPlease log in to review and approve.\n\nBest regards,\n${firmName}`,
+          bodyText: `Dear ${approverName},\n\nA capital call has been submitted for your approval.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: ${currencySymbol}${displayAmount}\nSubmitted by: ${submitterName}\n\nPlease log in to review and approve.\n\nBest regards,\n${firmName}`,
           bodyHtml: `
             <div style="font-family: Arial, sans-serif; max-width: 600px;">
               <div style="background-color: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin-bottom: 20px;">
                 <h2 style="margin: 0; color: #0c5460;">Admin Approval Required</h2>
               </div>
-              <p>Dear ${approver.name},</p>
+              <p>Dear ${approverName},</p>
               <p>A capital call has been submitted for your review and approval.</p>
               <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
                 <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
                 <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
-                <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
-                <p style="margin: 5px 0;"><strong>Submitted by:</strong> ${user?.name || 'Unknown'}</p>
+                <p style="margin: 5px 0;"><strong>Amount:</strong> ${currencySymbol}${displayAmount}</p>
+                <p style="margin: 5px 0;"><strong>Submitted by:</strong> ${submitterName}</p>
               </div>
               <p>Please log in to the portal to review and approve this capital call.</p>
               <p>Best regards,<br/>${firmName}</p>
@@ -1152,18 +1175,18 @@ router.patch('/:id/submit-for-review', authenticate, requireInvestmentManagerAcc
           notificationType: 'approval_required',
           channel: 'portal',
           title: `Approval Required: Capital Call #${capitalCall.callNumber}`,
-          message: `Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} ($${capitalCall.totalCallAmount.toLocaleString()}) has been submitted for your approval by ${user?.name || 'Unknown'}.`,
+          message: `Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} (${currencySymbol}${displayAmount}) has been submitted for your approval by ${submitterName}.`,
           priority: 'high',
           relatedEntityType: 'CapitalCall',
           relatedEntityId: id,
           actionUrl: `/investment-manager/operations/capital-calls/${id}`,
           senderId: userId,
-          senderName: user?.name || 'Unknown',
+          senderName: submitterName,
           metadata: {
             structureId: capitalCall.structureId,
             structureName: structure?.name,
             callNumber: capitalCall.callNumber,
-            totalAmount: capitalCall.totalCallAmount
+            totalAmount: capitalCall.totalDrawdown || capitalCall.totalCallAmount
           }
         });
       }
@@ -1226,27 +1249,31 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
 
   // Send email notification to submitter
   try {
-    const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
+    const firmName = await getFirmNameForUser(userId, structure?.name);
+    const currencySymbol = getCurrencySymbol(structure);
     const creator = await User.findById(capitalCall.createdBy);
+    const creatorName = getUserDisplayName(creator);
+    const approverName = getUserDisplayName(user);
+    const displayAmount = (capitalCall.totalDrawdown || capitalCall.totalCallAmount).toLocaleString();
 
     if (creator?.email) {
       await sendEmail(userId, {
         to: [creator.email],
         subject: `Approved: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
-        bodyText: `Dear ${creator.name},\n\nGreat news! Your capital call has been approved.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nApproved by: ${user?.name || 'Unknown'}\n\nYou can now proceed to send notices to investors.\n\nBest regards,\n${firmName}`,
+        bodyText: `Dear ${creatorName},\n\nGreat news! Your capital call has been approved.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: ${currencySymbol}${displayAmount}\nApproved by: ${approverName}\n\nYou can now proceed to send notices to investors.\n\nBest regards,\n${firmName}`,
         bodyHtml: `
           <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 20px;">
               <h2 style="margin: 0; color: #155724;">Capital Call Approved</h2>
             </div>
-            <p>Dear ${creator.name},</p>
+            <p>Dear ${creatorName},</p>
             <p>Great news! Your capital call has been approved and is ready for the next step.</p>
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
               <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
-              <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
-              <p style="margin: 5px 0;"><strong>Approved by:</strong> ${user?.name || 'Unknown'}</p>
+              <p style="margin: 5px 0;"><strong>Amount:</strong> ${currencySymbol}${displayAmount}</p>
+              <p style="margin: 5px 0;"><strong>Approved by:</strong> ${approverName}</p>
             </div>
             <p><strong>Next Steps:</strong> You can now send capital call notices to investors.</p>
             <p>Best regards,<br/>${firmName}</p>
@@ -1262,18 +1289,18 @@ router.patch('/:id/approve', authenticate, requireInvestmentManagerAccess, catch
         notificationType: 'approval_completed',
         channel: 'portal',
         title: `Capital Call #${capitalCall.callNumber} Approved`,
-        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} ($${capitalCall.totalCallAmount.toLocaleString()}) has been approved by ${user?.name || 'Unknown'}. You can now send notices to investors.`,
+        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} (${currencySymbol}${displayAmount}) has been approved by ${approverName}. You can now send notices to investors.`,
         priority: 'high',
         relatedEntityType: 'CapitalCall',
         relatedEntityId: id,
         actionUrl: `/investment-manager/operations/capital-calls/${id}`,
         senderId: userId,
-        senderName: user?.name || 'Unknown',
+        senderName: approverName,
         metadata: {
           structureId: capitalCall.structureId,
           structureName: structure?.name,
           callNumber: capitalCall.callNumber,
-          totalAmount: capitalCall.totalCallAmount,
+          totalAmount: capitalCall.totalDrawdown || capitalCall.totalCallAmount,
           action: 'approved'
         }
       });
@@ -1332,27 +1359,31 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
 
   // Send email notification to submitter
   try {
-    const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
+    const firmName = await getFirmNameForUser(userId, structure?.name);
+    const currencySymbol = getCurrencySymbol(structure);
     const creator = await User.findById(capitalCall.createdBy);
+    const creatorName = getUserDisplayName(creator);
+    const approverName = getUserDisplayName(user);
+    const displayAmount = (capitalCall.totalDrawdown || capitalCall.totalCallAmount).toLocaleString();
 
     if (creator?.email) {
       await sendEmail(userId, {
         to: [creator.email],
         subject: `Admin Approved: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
-        bodyText: `Dear ${creator.name},\n\nGreat news! Your capital call has received final Admin approval.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nAdmin Approved by: ${user?.name || 'Unknown'}\n\nYou can now proceed to send notices to investors.\n\nBest regards,\n${firmName}`,
+        bodyText: `Dear ${creatorName},\n\nGreat news! Your capital call has received final Admin approval.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: ${currencySymbol}${displayAmount}\nAdmin Approved by: ${approverName}\n\nYou can now proceed to send notices to investors.\n\nBest regards,\n${firmName}`,
         bodyHtml: `
           <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <div style="background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 20px;">
               <h2 style="margin: 0; color: #155724;">Admin Approval Confirmed</h2>
             </div>
-            <p>Dear ${creator.name},</p>
+            <p>Dear ${creatorName},</p>
             <p>Great news! Your capital call has received final Admin approval and is now ready to be sent to investors.</p>
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
               <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
-              <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
-              <p style="margin: 5px 0;"><strong>Admin Approved by:</strong> ${user?.name || 'Unknown'}</p>
+              <p style="margin: 5px 0;"><strong>Amount:</strong> ${currencySymbol}${displayAmount}</p>
+              <p style="margin: 5px 0;"><strong>Admin Approved by:</strong> ${approverName}</p>
             </div>
             <p><strong>Next Steps:</strong> You can now send capital call notices to all investors.</p>
             <p>Best regards,<br/>${firmName}</p>
@@ -1368,18 +1399,18 @@ router.patch('/:id/cfo-approve', authenticate, requireInvestmentManagerAccess, c
         notificationType: 'approval_completed',
         channel: 'portal',
         title: `Capital Call #${capitalCall.callNumber} — Admin Approved`,
-        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} ($${capitalCall.totalCallAmount.toLocaleString()}) has received final Admin approval by ${user?.name || 'Unknown'}. You can now send notices to investors.`,
+        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} (${currencySymbol}${displayAmount}) has received final Admin approval by ${approverName}. You can now send notices to investors.`,
         priority: 'high',
         relatedEntityType: 'CapitalCall',
         relatedEntityId: id,
         actionUrl: `/investment-manager/operations/capital-calls/${id}`,
         senderId: userId,
-        senderName: user?.name || 'Unknown',
+        senderName: approverName,
         metadata: {
           structureId: capitalCall.structureId,
           structureName: structure?.name,
           callNumber: capitalCall.callNumber,
-          totalAmount: capitalCall.totalCallAmount,
+          totalAmount: capitalCall.totalDrawdown || capitalCall.totalCallAmount,
           action: 'cfo_approved'
         }
       });
@@ -1436,27 +1467,31 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
 
   // Send email notification to submitter before deleting
   try {
-    const firmName = await getFirmNameForUser(userId);
     const structure = await Structure.findById(capitalCall.structureId);
+    const firmName = await getFirmNameForUser(userId, structure?.name);
+    const currencySymbol = getCurrencySymbol(structure);
     const creator = await User.findById(capitalCall.createdBy);
+    const creatorName = getUserDisplayName(creator);
+    const rejectorName = getUserDisplayName(user);
+    const displayAmount = (capitalCall.totalDrawdown || capitalCall.totalCallAmount).toLocaleString();
 
     if (creator?.email) {
       await sendEmail(userId, {
         to: [creator.email],
         subject: `Rejected: Capital Call #${capitalCall.callNumber} - ${structure?.name || 'Fund'}`,
-        bodyText: `Dear ${creator.name},\n\nUnfortunately, your capital call has been rejected.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: $${capitalCall.totalCallAmount.toLocaleString()}\nRejected by: ${user?.name || 'Unknown'}\n\nReason for Rejection:\n${reason}\n\nPlease review the feedback and create a new capital call with the necessary corrections.\n\nBest regards,\n${firmName}`,
+        bodyText: `Dear ${creatorName},\n\nUnfortunately, your capital call has been rejected.\n\nCapital Call #${capitalCall.callNumber}\nFund: ${structure?.name || 'N/A'}\nAmount: ${currencySymbol}${displayAmount}\nRejected by: ${rejectorName}\n\nReason for Rejection:\n${reason}\n\nPlease review the feedback and create a new capital call with the necessary corrections.\n\nBest regards,\n${firmName}`,
         bodyHtml: `
           <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <div style="background-color: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin-bottom: 20px;">
               <h2 style="margin: 0; color: #721c24;">Capital Call Rejected</h2>
             </div>
-            <p>Dear ${creator.name},</p>
+            <p>Dear ${creatorName},</p>
             <p>Unfortunately, your capital call has been rejected and has been removed. Please create a new capital call with the necessary corrections.</p>
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Capital Call:</strong> #${capitalCall.callNumber}</p>
               <p style="margin: 5px 0;"><strong>Fund:</strong> ${structure?.name || 'N/A'}</p>
-              <p style="margin: 5px 0;"><strong>Amount:</strong> $${capitalCall.totalCallAmount.toLocaleString()}</p>
-              <p style="margin: 5px 0;"><strong>Rejected by:</strong> ${user?.name || 'Unknown'}</p>
+              <p style="margin: 5px 0;"><strong>Amount:</strong> ${currencySymbol}${displayAmount}</p>
+              <p style="margin: 5px 0;"><strong>Rejected by:</strong> ${rejectorName}</p>
             </div>
             <div style="background-color: #fff3cd; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <h4 style="margin: 0 0 10px 0; color: #856404;">Reason for Rejection</h4>
@@ -1476,18 +1511,18 @@ router.patch('/:id/reject', authenticate, requireInvestmentManagerAccess, catchA
         notificationType: 'approval_completed',
         channel: 'portal',
         title: `Capital Call #${capitalCall.callNumber} Rejected`,
-        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} has been rejected by ${user?.name || 'Unknown'}. Reason: ${reason}`,
+        message: `Your Capital Call #${capitalCall.callNumber} for ${structure?.name || 'Fund'} has been rejected by ${rejectorName}. Reason: ${reason}`,
         priority: 'high',
         relatedEntityType: 'CapitalCall',
         relatedEntityId: id,
         actionUrl: `/investment-manager/operations/capital-calls`,
         senderId: userId,
-        senderName: user?.name || 'Unknown',
+        senderName: rejectorName,
         metadata: {
           structureId: capitalCall.structureId,
           structureName: structure?.name,
           callNumber: capitalCall.callNumber,
-          totalAmount: capitalCall.totalCallAmount,
+          totalAmount: capitalCall.totalDrawdown || capitalCall.totalCallAmount,
           action: 'rejected',
           reason
         }
