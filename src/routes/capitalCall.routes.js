@@ -29,11 +29,14 @@ async function getFirmNameForUser(userId, structureName) {
 
 /**
  * Helper to get user display name from firstName/lastName fields
+ * Handles both camelCase (User model) and snake_case (raw Supabase join) fields
  */
 function getUserDisplayName(user) {
   if (!user) return 'Unknown';
-  const full = `${user.firstName || ''} ${user.lastName || ''}`.trim();
-  return full || user.fullName || user.email || 'Unknown';
+  const first = user.firstName || user.first_name || '';
+  const last = user.lastName || user.last_name || '';
+  const full = `${first} ${last}`.trim();
+  return full || user.fullName || user.full_name || user.email || 'Unknown';
 }
 
 /**
@@ -997,11 +1000,12 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
     try {
       const investorId = allocation.user_id;
       const investor = allocation.user || await User.findById(investorId);
+      const investorName = getUserDisplayName(investor);
 
       if (!investor?.email) {
         errors.push({
           investorId,
-          investorName: investor?.name || 'Unknown',
+          investorName,
           error: 'No email address found'
         });
         continue;
@@ -1019,9 +1023,9 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
 
       // Prepare email content
       const defaultSubject = `Capital Call Notice #${capitalCall.callNumber} - ${structure.name}`;
-      const defaultBodyText = `Dear ${investor.name},\n\nPlease find attached your Capital Call Notice #${capitalCall.callNumber} for ${structure.name}.\n\nPayment Due Date: ${new Date(capitalCall.dueDate).toLocaleDateString()}\n\nPlease review the attached notice for payment instructions.\n\nBest regards,\n${firmName}`;
+      const defaultBodyText = `Dear ${investorName},\n\nPlease find attached your Capital Call Notice #${capitalCall.callNumber} for ${structure.name}.\n\nPayment Due Date: ${new Date(capitalCall.dueDate).toLocaleDateString()}\n\nPlease review the attached notice for payment instructions.\n\nBest regards,\n${firmName}`;
       const defaultBodyHtml = `
-        <p>Dear ${investor.name},</p>
+        <p>Dear ${investorName},</p>
         <p>Please find attached your Capital Call Notice #${capitalCall.callNumber} for <strong>${structure.name}</strong>.</p>
         <p><strong>Payment Due Date:</strong> ${new Date(capitalCall.dueDate).toLocaleDateString()}</p>
         <p>Please review the attached notice for payment instructions.</p>
@@ -1035,7 +1039,7 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
         bodyText: bodyText || defaultBodyText,
         bodyHtml: bodyHtml || defaultBodyHtml,
         attachments: [{
-          filename: `Capital_Call_${capitalCall.callNumber}_${investor.name.replace(/\s+/g, '_')}.pdf`,
+          filename: `Capital_Call_${capitalCall.callNumber}_${investorName.replace(/\s+/g, '_')}.pdf`,
           content: pdfBuffer.toString('base64'),
           encoding: 'base64',
           contentType: 'application/pdf'
@@ -1044,14 +1048,14 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
 
       results.push({
         investorId,
-        investorName: investor.name,
+        investorName,
         email: investor.email,
         status: 'sent'
       });
     } catch (error) {
       errors.push({
         investorId: allocation.user_id,
-        investorName: allocation.user?.name || 'Unknown',
+        investorName: getUserDisplayName(allocation.user),
         error: error.message
       });
     }
@@ -1610,18 +1614,19 @@ router.patch('/:id/request-changes', authenticate, requireInvestmentManagerAcces
 
     // Create portal notification for creator
     if (creator?.id) {
+      const requesterName = getUserDisplayName(user);
       await Notification.create({
         userId: creator.id,
         notificationType: 'approval_required',
         channel: 'portal',
         title: `Changes Requested: Capital Call #${capitalCall.callNumber}`,
-        message: `Changes have been requested on your Capital Call #${capitalCall.callNumber} by ${user?.name || 'Unknown'}. Notes: ${notes}`,
+        message: `Changes have been requested on your Capital Call #${capitalCall.callNumber} by ${requesterName}. Notes: ${notes}`,
         priority: 'high',
         relatedEntityType: 'CapitalCall',
         relatedEntityId: id,
         actionUrl: `/investment-manager/operations/capital-calls/${id}`,
         senderId: userId,
-        senderName: user?.name || 'Unknown',
+        senderName: requesterName,
         metadata: {
           structureId: capitalCall.structureId,
           callNumber: capitalCall.callNumber,
