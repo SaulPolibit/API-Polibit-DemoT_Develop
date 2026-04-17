@@ -99,12 +99,14 @@ app.use(cors(corsOptions));
 
 // ===== ADDITIONAL CORS HEADERS =====
 // Manual CORS headers for additional control
+// Note: cors() middleware above already validates the origin against the whitelist,
+// so any request reaching here has an approved origin. Reflect it back instead of
+// hardcoding FRONTEND_URL, which breaks when multiple domains access the API.
 app.use((req, res, next) => {
-  // In development, allow the requesting origin or default to localhost:3000
   const requestOrigin = req.headers.origin;
   const allowedOrigin = isDevelopment()
     ? (requestOrigin || 'http://localhost:3000')
-    : (process.env.FRONTEND_URL || requestOrigin);
+    : (requestOrigin || process.env.FRONTEND_URL);
 
   if (allowedOrigin) {
     res.header('Access-Control-Allow-Origin', allowedOrigin);
@@ -117,11 +119,10 @@ app.use((req, res, next) => {
 // ===== STATIC FILES MIDDLEWARE =====
 // Serve uploaded files with CORS headers
 app.use('/uploads', (req, res, next) => {
-  // In development, allow the requesting origin or default to localhost:3000
   const requestOrigin = req.headers.origin;
   const allowedOrigin = isDevelopment()
     ? (requestOrigin || 'http://localhost:3000')
-    : (process.env.FRONTEND_URL || requestOrigin);
+    : (requestOrigin || process.env.FRONTEND_URL);
 
   if (allowedOrigin) {
     res.header('Access-Control-Allow-Origin', allowedOrigin);
