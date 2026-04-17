@@ -454,8 +454,7 @@ class CapitalCall {
             id,
             email,
             first_name,
-            last_name,
-            type
+            last_name
           )
         )
       `)

@@ -49,6 +49,37 @@ function getCurrencySymbol(structure) {
   return '$';
 }
 
+/**
+ * Enrich allocations with cumulative commitment data for PDF Balance Summary.
+ * Adds commitment, calledCapitalToDate, and uncalledCapital to each allocation
+ * so addLPSectionD renders correct "Previously Called" and "Remaining Unfunded".
+ */
+async function enrichAllocationsForPDF(allocations, structureId, capitalCallId) {
+  const [structureInvestors, cumulativeCalledMap] = await Promise.all([
+    StructureInvestor.findByStructureId(structureId),
+    CapitalCall.getCumulativeCalledByStructure(structureId, capitalCallId)
+  ]);
+
+  const commitmentMap = {};
+  structureInvestors.forEach(si => {
+    commitmentMap[si.userId] = si.commitment || 0;
+  });
+
+  return allocations.map(alloc => {
+    const userId = alloc.user_id;
+    const commitment = commitmentMap[userId] || 0;
+    const previouslyCalled = cumulativeCalledMap[userId] || 0;
+    const callAmount = alloc.total_drawdown || alloc.total_due || 0;
+    const calledCapitalToDate = previouslyCalled + callAmount;
+    return {
+      ...alloc,
+      commitment,
+      calledCapitalToDate,
+      uncalledCapital: Math.max(0, commitment - calledCapitalToDate),
+    };
+  });
+}
+
 const router = express.Router();
 
 /**
@@ -894,14 +925,16 @@ router.get('/:id/generate-notice', authenticate, requireInvestmentManagerAccess,
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
 
-  // Get allocations
+  // Get allocations and enrich with cumulative commitment data for Balance Summary
   const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
+  const rawAllocations = capitalCallWithAllocations?.capital_call_allocations || [];
+  const enrichedAllocations = await enrichAllocationsForPDF(rawAllocations, capitalCall.structureId, id);
 
   // Inject currency from structure (capital_calls table has no currency column)
   const enrichedCapitalCall = {
     ...capitalCall,
     currency: structure.baseCurrency || 'USD',
-    allocations: capitalCallWithAllocations?.capital_call_allocations || [],
+    allocations: enrichedAllocations,
   };
 
   // Generate PDF
@@ -937,12 +970,13 @@ router.get('/:id/generate-lp-notice/:investorId', authenticate, requireInvestmen
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
 
-  // Get allocations
+  // Get allocations and enrich with cumulative commitment data for Balance Summary
   const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
-  const allocations = capitalCallWithAllocations?.capital_call_allocations || [];
+  const rawAllocations = capitalCallWithAllocations?.capital_call_allocations || [];
+  const enrichedAllocations = await enrichAllocationsForPDF(rawAllocations, capitalCall.structureId, id);
 
   // Find the specific investor's allocation
-  const allocation = allocations.find(a => a.user_id === investorId);
+  const allocation = enrichedAllocations.find(a => a.user_id === investorId);
   validate(allocation, 'Investor allocation not found');
 
   // Get investor details
@@ -986,9 +1020,10 @@ router.post('/:id/send-notices', authenticate, requireInvestmentManagerAccess, c
   const structure = await Structure.findById(capitalCall.structureId);
   validate(structure, 'Structure not found');
 
-  // Get allocations with investor details
+  // Get allocations with investor details, enriched with cumulative commitment data
   const capitalCallWithAllocations = await CapitalCall.findWithAllocations(id);
-  const allocations = capitalCallWithAllocations?.capital_call_allocations || [];
+  const rawAllocations = capitalCallWithAllocations?.capital_call_allocations || [];
+  const allocations = await enrichAllocationsForPDF(rawAllocations, capitalCall.structureId, id);
 
   validate(allocations.length > 0, 'No investor allocations found');
 
