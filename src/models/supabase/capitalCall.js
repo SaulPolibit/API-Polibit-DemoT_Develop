@@ -749,10 +749,12 @@ class CapitalCall {
         const unfundedFeeGross = unfundedCommitment * periodFraction * (unfundedRate / 100);
         const managementFeeGross = nicFeeGross + unfundedFeeGross;
 
-        // Apply fee discount as multiplicative percentage: netFees = grossFees × (1 - discount/100)
-        const investorDiscountAmount = managementFeeGross * (feeDiscount / 100);
-        const nicFee = nicFeeGross * (1 - feeDiscount / 100);
-        const unfundedFee = unfundedFeeGross * (1 - feeDiscount / 100);
+        // Model B: subtract discount pp from each annual rate, recompute net fees
+        const effectiveNicRate = Math.max(0, nicRate - feeDiscount);
+        const effectiveUnfundedRate = Math.max(0, unfundedRate - feeDiscount);
+        const nicFee = nicBase * periodFraction * (effectiveNicRate / 100);
+        const unfundedFee = unfundedCommitment * periodFraction * (effectiveUnfundedRate / 100);
+        const investorDiscountAmount = managementFeeGross - (nicFee + unfundedFee);
 
         return {
           si,
@@ -762,7 +764,9 @@ class CapitalCall {
           vatExempt,
           nicFee,
           unfundedFee,
-          managementFeeGross
+          managementFeeGross,
+          nicBase,
+          unfundedCommitment
         };
       });
 
@@ -832,6 +836,8 @@ class CapitalCall {
           // Dual-rate breakdown columns
           nic_fee_amount: f.nicFee,
           unfunded_fee_amount: f.unfundedFee,
+          adjusted_nic: f.nicBase,
+          unfunded_base: f.unfundedCommitment,
           fee_offset_amount: feeOffset,
           deemed_gp_contribution: deemedGpContribution,
           // VAT on use-of-proceeds
@@ -860,18 +866,19 @@ class CapitalCall {
         let vatAmount = 0;
 
         if (capitalCall.managementFeeRate) {
-          // Calculate based on fee period
-          let periodRate = capitalCall.managementFeeRate;
+          // Calculate period fraction
+          let periodFractionSingle = 1.0;
           if (capitalCall.feePeriod === 'quarterly') {
-            periodRate = capitalCall.managementFeeRate / 4;
+            periodFractionSingle = 0.25;
           } else if (capitalCall.feePeriod === 'semi-annual') {
-            periodRate = capitalCall.managementFeeRate / 2;
+            periodFractionSingle = 0.5;
           }
 
-          // Fee base is the principal amount for this investor
-          managementFeeGross = principalAmount * (periodRate / 100);
-          managementFeeDiscountAmount = managementFeeGross * (feeDiscount / 100);
-          managementFeeNet = managementFeeGross - managementFeeDiscountAmount;
+          // Model B: subtract discount pp from annual rate BEFORE period-dividing
+          managementFeeGross = principalAmount * (capitalCall.managementFeeRate / 100) * periodFractionSingle;
+          const effectiveAnnualRate = Math.max(0, capitalCall.managementFeeRate - feeDiscount);
+          managementFeeNet = principalAmount * (effectiveAnnualRate / 100) * periodFractionSingle;
+          managementFeeDiscountAmount = managementFeeGross - managementFeeNet;
 
           // Calculate VAT if applicable
           if (capitalCall.vatApplicable && !vatExempt && capitalCall.vatRate) {

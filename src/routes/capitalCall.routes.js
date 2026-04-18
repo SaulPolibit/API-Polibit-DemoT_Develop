@@ -61,8 +61,10 @@ async function enrichAllocationsForPDF(allocations, structureId, capitalCallId) 
   ]);
 
   const commitmentMap = {};
+  const feeDiscountMap = {};
   structureInvestors.forEach(si => {
     commitmentMap[si.userId] = si.commitment || 0;
+    feeDiscountMap[si.userId] = si.feeDiscount || 0;
   });
 
   return allocations.map(alloc => {
@@ -76,6 +78,7 @@ async function enrichAllocationsForPDF(allocations, structureId, capitalCallId) 
       commitment,
       calledCapitalToDate,
       uncalledCapital: Math.max(0, commitment - calledCapitalToDate),
+      fee_discount_pp: feeDiscountMap[userId] || 0,
     };
   });
 }

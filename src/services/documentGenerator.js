@@ -401,20 +401,67 @@ function addLPSectionB(doc, capitalCall, allocation, structure, investor, curren
   const managementFeeNet = allocation.management_fee_net || 0;
   const vatAmount = allocation.vat_amount || 0;
   const totalDue = allocation.total_due || allocation.allocatedAmount || 0;
+  const feeOffset = allocation.fee_offset_amount || 0;
+
+  // Rates and discount (percentage points)
+  const nicRate = capitalCall.feeRateOnNic || 0;
+  const unfundedRate = capitalCall.feeRateOnUnfunded || 0;
+  const feeDiscountPp = allocation.fee_discount_pp || investor?.feeDiscount || 0;
+  const nicFeeNet = allocation.nic_fee_amount || 0;
+  const unfundedFeeNet = allocation.unfunded_fee_amount || 0;
 
   const feeData = [
     ['Principal (Capital Call)', formatCurrency(principalAmount, currency)],
   ];
 
   if (managementFeeGross > 0) {
-    feeData.push(['Management Fee (Gross)', formatCurrency(managementFeeGross, currency)]);
-
-    if (managementFeeDiscount > 0) {
-      const discountPercent = investor?.feeDiscount || 0;
-      feeData.push([`Fee Discount (${discountPercent}%)`, `-${formatCurrency(managementFeeDiscount, currency)}`]);
+    // Rate decomposition for NIC component
+    if (nicRate > 0) {
+      feeData.push([`Management Fee over NIC % (annual)`, `${nicRate.toFixed(2)}%`]);
+      if (feeDiscountPp > 0) {
+        const effectiveNicRate = Math.max(0, nicRate - feeDiscountPp);
+        feeData.push([`Less: Fee Discount (per Side Letter)`, `(${feeDiscountPp.toFixed(2)}%)`]);
+        feeData.push([`Effective Rate`, `${effectiveNicRate.toFixed(2)}%`]);
+      }
+      const adjustedNic = allocation.adjusted_nic || 0;
+      if (adjustedNic > 0) {
+        feeData.push([`Investor's Adjusted NIC`, formatCurrency(adjustedNic, currency)]);
+      }
+      feeData.push([`Subtotal Mgt Fee over NIC`, formatCurrency(nicFeeNet, currency)]);
+      feeData.push(['', '']); // Spacer
     }
 
-    feeData.push(['Management Fee (Net)', formatCurrency(managementFeeNet, currency)]);
+    // Rate decomposition for Unfunded component
+    if (unfundedRate > 0) {
+      feeData.push([`Management Fee over Unfunded % (annual)`, `${unfundedRate.toFixed(2)}%`]);
+      if (feeDiscountPp > 0) {
+        const effectiveUnfundedRate = Math.max(0, unfundedRate - feeDiscountPp);
+        feeData.push([`Less: Fee Discount (per Side Letter)`, `(${feeDiscountPp.toFixed(2)}%)`]);
+        feeData.push([`Effective Rate`, `${effectiveUnfundedRate.toFixed(2)}%`]);
+      }
+      const unfundedBase = allocation.unfunded_base || 0;
+      if (unfundedBase > 0) {
+        feeData.push([`Investor's Unfunded Balance`, formatCurrency(unfundedBase, currency)]);
+      }
+      feeData.push([`Subtotal Mgt Fee over Unfunded`, formatCurrency(unfundedFeeNet, currency)]);
+      feeData.push(['', '']); // Spacer
+    }
+
+    // If neither dual-rate, fall back to simple display
+    if (nicRate === 0 && unfundedRate === 0) {
+      feeData.push(['Management Fee (Gross)', formatCurrency(managementFeeGross, currency)]);
+      if (managementFeeDiscount > 0) {
+        feeData.push([`Fee Discount (${feeDiscountPp}pp)`, `-${formatCurrency(managementFeeDiscount, currency)}`]);
+      }
+      feeData.push(['Management Fee (Net)', formatCurrency(managementFeeNet, currency)]);
+    } else {
+      feeData.push(['Total Management Fees', formatCurrency(nicFeeNet + unfundedFeeNet, currency)]);
+    }
+
+    if (feeOffset > 0) {
+      feeData.push(['Fee Offset', `-${formatCurrency(feeOffset, currency)}`]);
+    }
+    feeData.push(['Net Management Fees', formatCurrency(managementFeeNet, currency)]);
   }
 
   if (vatAmount > 0) {
