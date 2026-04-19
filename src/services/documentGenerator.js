@@ -418,11 +418,9 @@ function addLPSectionB(doc, capitalCall, allocation, structure, investor, curren
     // Rate decomposition for NIC component
     if (nicRate > 0) {
       feeData.push([`Management Fee over NIC % (annual)`, `${nicRate.toFixed(2)}%`]);
-      if (feeDiscountPp > 0) {
-        const effectiveNicRate = Math.max(0, nicRate - feeDiscountPp);
-        feeData.push([`Less: Fee Discount (per Side Letter)`, `(${feeDiscountPp.toFixed(2)}%)`]);
-        feeData.push([`Effective Rate`, `${effectiveNicRate.toFixed(2)}%`]);
-      }
+      const effectiveNicRate = Math.max(0, nicRate - feeDiscountPp);
+      feeData.push([`Less: Fee Discount (per Side Letter)`, `(${feeDiscountPp.toFixed(2)}%)`]);
+      feeData.push([`Effective Rate`, `${effectiveNicRate.toFixed(2)}%`]);
       const adjustedNic = allocation.adjusted_nic || 0;
       if (adjustedNic > 0) {
         feeData.push([`Investor's Adjusted NIC`, formatCurrency(adjustedNic, currency)]);
@@ -434,11 +432,9 @@ function addLPSectionB(doc, capitalCall, allocation, structure, investor, curren
     // Rate decomposition for Unfunded component
     if (unfundedRate > 0) {
       feeData.push([`Management Fee over Unfunded % (annual)`, `${unfundedRate.toFixed(2)}%`]);
-      if (feeDiscountPp > 0) {
-        const effectiveUnfundedRate = Math.max(0, unfundedRate - feeDiscountPp);
-        feeData.push([`Less: Fee Discount (per Side Letter)`, `(${feeDiscountPp.toFixed(2)}%)`]);
-        feeData.push([`Effective Rate`, `${effectiveUnfundedRate.toFixed(2)}%`]);
-      }
+      const effectiveUnfundedRate = Math.max(0, unfundedRate - feeDiscountPp);
+      feeData.push([`Less: Fee Discount (per Side Letter)`, `(${feeDiscountPp.toFixed(2)}%)`]);
+      feeData.push([`Effective Rate`, `${effectiveUnfundedRate.toFixed(2)}%`]);
       const unfundedBase = allocation.unfunded_base || 0;
       if (unfundedBase > 0) {
         feeData.push([`Investor's Unfunded Balance`, formatCurrency(unfundedBase, currency)]);
