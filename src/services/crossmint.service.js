@@ -208,7 +208,11 @@ class CrossmintWalletService {
 
       return response.data || [];
     } catch (error) {
-      console.error('[Crossmint] Failed to fetch balances:', error.response?.data || error.message);
+      console.error('[Crossmint] Failed to fetch balances:', error.response?.status, error.response?.data || error.message);
+      // Non-5xx errors (400, 401, 404, etc.) — return empty array instead of crashing
+      if (error.response && error.response.status < 500) {
+        return [];
+      }
       throw new Error(`Failed to fetch wallet balances: ${error.response?.data?.message || error.message}`);
     }
   }
